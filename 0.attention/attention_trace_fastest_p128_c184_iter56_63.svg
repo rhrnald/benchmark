@@ -1,0 +1,840 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="6412" height="1380" viewBox="0 0 6412 1380">
+<rect width="100%" height="100%" fill="white"/>
+<text x="24" y="26" font-family="Arial, sans-serif" font-size="17" fill="#222">Fastest p128/c184 cycle trace, iter 56-63</text>
+<line x1="132.0" y1="42" x2="132.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="132.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">0</text>
+<line x1="372.0" y1="42" x2="372.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="372.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">1000</text>
+<line x1="612.0" y1="42" x2="612.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="612.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">2000</text>
+<line x1="852.0" y1="42" x2="852.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="852.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">3000</text>
+<line x1="1092.0" y1="42" x2="1092.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1092.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">4000</text>
+<line x1="1332.0" y1="42" x2="1332.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1332.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">5000</text>
+<line x1="1572.0" y1="42" x2="1572.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1572.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">6000</text>
+<line x1="1812.0" y1="42" x2="1812.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1812.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">7000</text>
+<line x1="2052.0" y1="42" x2="2052.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2052.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">8000</text>
+<line x1="2292.0" y1="42" x2="2292.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2292.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">9000</text>
+<line x1="2532.0" y1="42" x2="2532.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2532.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">10000</text>
+<line x1="2772.0" y1="42" x2="2772.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2772.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">11000</text>
+<line x1="3012.0" y1="42" x2="3012.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3012.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">12000</text>
+<line x1="3252.0" y1="42" x2="3252.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3252.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">13000</text>
+<line x1="3492.0" y1="42" x2="3492.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3492.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">14000</text>
+<line x1="3732.0" y1="42" x2="3732.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3732.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">15000</text>
+<line x1="3972.0" y1="42" x2="3972.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3972.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">16000</text>
+<line x1="4212.0" y1="42" x2="4212.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4212.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">17000</text>
+<line x1="4452.0" y1="42" x2="4452.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4452.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">18000</text>
+<line x1="4692.0" y1="42" x2="4692.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4692.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">19000</text>
+<line x1="4932.0" y1="42" x2="4932.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4932.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">20000</text>
+<line x1="5172.0" y1="42" x2="5172.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="5172.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">21000</text>
+<line x1="5412.0" y1="42" x2="5412.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="5412.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">22000</text>
+<line x1="5652.0" y1="42" x2="5652.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="5652.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">23000</text>
+<line x1="5892.0" y1="42" x2="5892.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="5892.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">24000</text>
+<line x1="6132.0" y1="42" x2="6132.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="6132.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">25000</text>
+<line x1="6372.0" y1="42" x2="6372.0" y2="1358" stroke="#e3e8ef" stroke-width="1"/>
+<text x="6372.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">26000</text>
+<text x="24" y="82" font-family="Arial, sans-serif" font-size="13" fill="#333">K+QK warp0</text>
+<line x1="132" y1="114" x2="6372.0" y2="114" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="146" font-family="Arial, sans-serif" font-size="13" fill="#333">K+QK warp1</text>
+<line x1="132" y1="178" x2="6372.0" y2="178" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="210" font-family="Arial, sans-serif" font-size="13" fill="#333">V+PV warp2</text>
+<line x1="132" y1="242" x2="6372.0" y2="242" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="274" font-family="Arial, sans-serif" font-size="13" fill="#333">V+PV warp3</text>
+<line x1="132" y1="306" x2="6372.0" y2="306" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="338" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp4.h0</text>
+<line x1="132" y1="370" x2="6372.0" y2="370" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="402" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp4.h1</text>
+<line x1="132" y1="434" x2="6372.0" y2="434" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="466" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp5.h0</text>
+<line x1="132" y1="498" x2="6372.0" y2="498" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="530" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp5.h1</text>
+<line x1="132" y1="562" x2="6372.0" y2="562" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="594" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp6.h0</text>
+<line x1="132" y1="626" x2="6372.0" y2="626" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="658" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp6.h1</text>
+<line x1="132" y1="690" x2="6372.0" y2="690" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="722" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp7.h0</text>
+<line x1="132" y1="754" x2="6372.0" y2="754" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="786" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp7.h1</text>
+<line x1="132" y1="818" x2="6372.0" y2="818" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="850" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp8.h0</text>
+<line x1="132" y1="882" x2="6372.0" y2="882" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="914" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp8.h1</text>
+<line x1="132" y1="946" x2="6372.0" y2="946" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="978" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp9.h0</text>
+<line x1="132" y1="1010" x2="6372.0" y2="1010" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="1042" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp9.h1</text>
+<line x1="132" y1="1074" x2="6372.0" y2="1074" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="1106" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp10.h0</text>
+<line x1="132" y1="1138" x2="6372.0" y2="1138" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="1170" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp10.h1</text>
+<line x1="132" y1="1202" x2="6372.0" y2="1202" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="1234" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp11.h0</text>
+<line x1="132" y1="1266" x2="6372.0" y2="1266" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="1298" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp11.h1</text>
+<line x1="132" y1="1330" x2="6372.0" y2="1330" stroke="#ccd5e0" stroke-width="1"/>
+<rect x="132.0" y="64" width="292.1" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="278.0" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i56 p0</text>
+<text x="278.0" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1217 cyc</text>
+<text x="278.0" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.603 TB/s</text>
+<rect x="503.0" y="128" width="192.2" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="599.2" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i57 p1</text>
+<text x="599.2" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">801 cyc</text>
+<text x="599.2" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.993 TB/s</text>
+<rect x="896.9" y="64" width="184.8" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="989.3" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i56 p0</text>
+<text x="989.3" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">770 cyc</text>
+<text x="989.3" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">931.1 TFLOP/s</text>
+<rect x="1261.9" y="128" width="208.3" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="1366.1" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i57 p1</text>
+<text x="1366.1" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">868 cyc</text>
+<text x="1366.1" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">826.0 TFLOP/s</text>
+<rect x="1281.1" y="64" width="229.4" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="1395.8" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i58 p0</text>
+<text x="1395.8" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">956 cyc</text>
+<text x="1395.8" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.859 TB/s</text>
+<rect x="1510.8" y="128" width="213.1" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="1617.4" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i59 p1</text>
+<text x="1617.4" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">888 cyc</text>
+<text x="1617.4" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.308 TB/s</text>
+<rect x="1660.1" y="704" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1662.6" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1661.5" y="320" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1664.0" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1662.0" y="448" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1664.5" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1665.6" y="704" width="162.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1746.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="1746.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">675 cyc</text>
+<text x="1746.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1667.0" y="320" width="152.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1743.1" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="1743.1" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">634 cyc</text>
+<text x="1743.1" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1667.5" y="448" width="151.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1743.4" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="1743.4" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">632 cyc</text>
+<text x="1743.4" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1736.6" y="576" width="7.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1740.1" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1741.2" y="192" width="211.7" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="1847.0" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i56 p0</text>
+<text x="1847.0" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">882 cyc</text>
+<text x="1847.0" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.351 TB/s</text>
+<rect x="1744.3" y="576" width="186.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1837.7" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="1837.7" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">778 cyc</text>
+<text x="1837.7" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1819.7" y="320" width="50.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1844.9" y="338" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="1844.9" y="353" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i56 p0</text>
+<rect x="1819.7" y="448" width="50.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1845.0" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="1845.0" y="481" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i56 p0</text>
+<rect x="1828.1" y="704" width="68.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1862.2" y="722" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="1862.2" y="737" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i56 p0</text>
+<rect x="1863.8" y="1088" width="5.5" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1866.6" y="1113" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1870.6" y="1088" width="224.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1982.8" y="1104" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="1982.8" y="1118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">935 cyc</text>
+<text x="1982.8" y="1128" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1873.4" y="384" width="21.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1884.0" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1873.7" y="512" width="21.6" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1884.5" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1884.2" y="1216" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1886.8" y="1241" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1885.9" y="832" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1888.4" y="857" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1886.6" y="960" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1889.2" y="985" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1889.8" y="1216" width="274.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2026.9" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2026.9" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1143 cyc</text>
+<text x="2026.9" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1891.4" y="832" width="272.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2027.8" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2027.8" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1136 cyc</text>
+<text x="2027.8" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1892.2" y="960" width="266.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2025.2" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2025.2" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1109 cyc</text>
+<text x="2025.2" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1899.8" y="768" width="8.6" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1904.2" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1909.2" y="384" width="258.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2038.6" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="2038.6" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1078 cyc</text>
+<text x="2038.6" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1909.9" y="512" width="258.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2039.2" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="2039.2" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1077 cyc</text>
+<text x="2039.2" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1920.2" y="768" width="258.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2049.2" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="2049.2" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1075 cyc</text>
+<text x="2049.2" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1931.5" y="576" width="31.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1947.1" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">ST</text>
+<rect x="1964.2" y="256" width="218.9" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="2073.6" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i57 p1</text>
+<text x="2073.6" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">912 cyc</text>
+<text x="2073.6" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.142 TB/s</text>
+<rect x="1967.8" y="640" width="7.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1971.2" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="1986.0" y="640" width="189.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2080.7" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i56 p0</text>
+<text x="2080.7" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">789 cyc</text>
+<text x="2080.7" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2003.3" y="64" width="183.6" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="2095.1" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i58 p0</text>
+<text x="2095.1" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">765 cyc</text>
+<text x="2095.1" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">937.2 TFLOP/s</text>
+<rect x="2095.4" y="1088" width="71.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2131.0" y="1106" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="2131.0" y="1121" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i57 p1</text>
+<rect x="2158.8" y="960" width="177.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2247.6" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i57 p1</text>
+<text x="2247.6" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">740 cyc</text>
+<text x="2247.6" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.946 TB/s</text>
+<rect x="2164.6" y="832" width="202.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2265.8" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i57 p1</text>
+<text x="2265.8" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">844 cyc</text>
+<text x="2265.8" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.830 TB/s</text>
+<rect x="2164.6" y="1216" width="162.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2245.7" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i57 p1</text>
+<text x="2245.7" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">676 cyc</text>
+<text x="2245.7" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.036 TB/s</text>
+<rect x="2168.4" y="384" width="237.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2287.0" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i56 p0</text>
+<text x="2287.0" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">988 cyc</text>
+<text x="2287.0" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.709 TB/s</text>
+<rect x="2168.9" y="512" width="214.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2276.3" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i56 p0</text>
+<text x="2276.3" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">895 cyc</text>
+<text x="2276.3" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.782 TB/s</text>
+<rect x="2170.3" y="1152" width="48.5" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2194.6" y="1170" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">LD</text>
+<text x="2194.6" y="1185" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i57 p1</text>
+<rect x="2175.8" y="640" width="133.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2242.3" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i56 p0</text>
+<text x="2242.3" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">554 cyc</text>
+<text x="2242.3" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.264 TB/s</text>
+<rect x="2178.7" y="768" width="214.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2285.9" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i56 p0</text>
+<text x="2285.9" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">893 cyc</text>
+<text x="2285.9" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.784 TB/s</text>
+<rect x="2228.9" y="1152" width="133.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2295.6" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2295.6" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">556 cyc</text>
+<text x="2295.6" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2317.0" y="64" width="296.9" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="2465.4" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i60 p0</text>
+<text x="2465.4" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1237 cyc</text>
+<text x="2465.4" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.528 TB/s</text>
+<rect x="2329.9" y="1280" width="31.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2345.9" y="1305" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2339.5" y="1024" width="30.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2354.5" y="1049" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2362.8" y="1152" width="92.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2409.2" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i57 p1</text>
+<text x="2409.2" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">387 cyc</text>
+<text x="2409.2" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.809 TB/s</text>
+<rect x="2370.2" y="896" width="39.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2390.2" y="921" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2371.9" y="1280" width="142.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2443.1" y="1296" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2443.1" y="1310" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">593 cyc</text>
+<text x="2443.1" y="1320" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2379.6" y="1024" width="152.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2456.0" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2456.0" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">637 cyc</text>
+<text x="2456.0" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2420.4" y="896" width="148.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2494.8" y="912" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i57 p1</text>
+<text x="2494.8" y="926" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">620 cyc</text>
+<text x="2494.8" y="936" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2438.9" y="128" width="202.3" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="2540.0" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i59 p1</text>
+<text x="2540.0" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">843 cyc</text>
+<text x="2540.0" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">850.5 TFLOP/s</text>
+<rect x="2514.7" y="1280" width="30.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2529.8" y="1305" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">ST</text>
+<rect x="2533.0" y="1024" width="77.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2571.6" y="1042" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="2571.6" y="1057" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i57 p1</text>
+<rect x="2567.0" y="192" width="243.6" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="2688.8" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i56 p0</text>
+<text x="2688.8" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1015 cyc</text>
+<text x="2688.8" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">706.4 TFLOP/s</text>
+<rect x="2569.7" y="896" width="79.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2609.6" y="914" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="2609.6" y="929" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i57 p1</text>
+<rect x="2701.0" y="128" width="192.7" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="2797.3" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i61 p1</text>
+<text x="2797.3" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">803 cyc</text>
+<text x="2797.3" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.976 TB/s</text>
+<rect x="2789.3" y="576" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2791.3" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2790.0" y="320" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2792.0" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2790.5" y="448" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2792.5" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2791.4" y="704" width="4.6" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2793.7" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2793.8" y="256" width="192.2" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="2890.0" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i57 p1</text>
+<text x="2890.0" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">801 cyc</text>
+<text x="2890.0" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">895.1 TFLOP/s</text>
+<rect x="2793.8" y="576" width="175.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2881.8" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="2881.8" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">733 cyc</text>
+<text x="2881.8" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2794.6" y="320" width="165.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2877.1" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="2877.1" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">688 cyc</text>
+<text x="2877.1" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2795.0" y="448" width="162.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2876.2" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="2876.2" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">676 cyc</text>
+<text x="2876.2" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2796.5" y="704" width="169.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2881.1" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="2881.1" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">705 cyc</text>
+<text x="2881.1" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2856.7" y="192" width="211.9" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="2962.7" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i58 p0</text>
+<text x="2962.7" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">883 cyc</text>
+<text x="2962.7" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.344 TB/s</text>
+<rect x="2957.8" y="448" width="47.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2981.6" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="2981.6" y="481" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i58 p0</text>
+<rect x="2960.2" y="320" width="55.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2987.8" y="338" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="2987.8" y="353" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i58 p0</text>
+<rect x="2966.2" y="704" width="80.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3006.5" y="722" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="3006.5" y="737" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i58 p0</text>
+<rect x="2970.2" y="576" width="92.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3016.7" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i58 p0</text>
+<text x="3016.7" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">387 cyc</text>
+<text x="3016.7" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.809 TB/s</text>
+<rect x="2978.9" y="960" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2980.9" y="985" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2979.4" y="1088" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2981.4" y="1113" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2979.6" y="1216" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2981.6" y="1241" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2980.3" y="832" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2982.4" y="857" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="2983.4" y="960" width="229.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3098.0" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3098.0" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">955 cyc</text>
+<text x="3098.0" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2983.9" y="1088" width="192.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3080.0" y="1104" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3080.0" y="1118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">801 cyc</text>
+<text x="3080.0" y="1128" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2984.2" y="1216" width="209.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3088.8" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3088.8" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">872 cyc</text>
+<text x="3088.8" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2984.9" y="832" width="218.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3094.2" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3094.2" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">911 cyc</text>
+<text x="3094.2" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3044.4" y="512" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3046.4" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3060.0" y="512" width="206.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3163.2" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="3163.2" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">860 cyc</text>
+<text x="3163.2" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3060.5" y="384" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3062.5" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3075.8" y="384" width="196.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3174.2" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="3174.2" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">820 cyc</text>
+<text x="3174.2" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3076.6" y="768" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3078.6" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3081.1" y="256" width="222.2" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="3192.2" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i59 p1</text>
+<text x="3192.2" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">926 cyc</text>
+<text x="3192.2" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.049 TB/s</text>
+<rect x="3082.1" y="640" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3084.1" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3092.6" y="768" width="183.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3184.4" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="3184.4" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">765 cyc</text>
+<text x="3184.4" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3097.7" y="640" width="170.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3183.0" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i58 p0</text>
+<text x="3183.0" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">711 cyc</text>
+<text x="3183.0" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3114.5" y="64" width="186.5" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="3207.7" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i60 p0</text>
+<text x="3207.7" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">777 cyc</text>
+<text x="3207.7" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">922.7 TFLOP/s</text>
+<rect x="3176.6" y="1088" width="30.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3191.8" y="1113" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">ST</text>
+<rect x="3193.9" y="1216" width="125.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3256.8" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3256.8" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">524 cyc</text>
+<text x="3256.8" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.336 TB/s</text>
+<rect x="3204.0" y="832" width="175.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3291.8" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3291.8" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">732 cyc</text>
+<text x="3291.8" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.957 TB/s</text>
+<rect x="3213.1" y="960" width="176.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3301.2" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3301.2" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">734 cyc</text>
+<text x="3301.2" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.954 TB/s</text>
+<rect x="3266.9" y="512" width="232.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3383.0" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i58 p0</text>
+<text x="3383.0" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">968 cyc</text>
+<text x="3383.0" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.723 TB/s</text>
+<rect x="3268.8" y="640" width="151.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3344.3" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i58 p0</text>
+<text x="3344.3" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">629 cyc</text>
+<text x="3344.3" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.113 TB/s</text>
+<rect x="3273.1" y="384" width="222.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3384.2" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i58 p0</text>
+<text x="3384.2" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">926 cyc</text>
+<text x="3384.2" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.756 TB/s</text>
+<rect x="3276.7" y="768" width="187.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3370.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i58 p0</text>
+<text x="3370.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">782 cyc</text>
+<text x="3370.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.895 TB/s</text>
+<rect x="3302.4" y="1152" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3304.4" y="1177" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3316.6" y="1152" width="134.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3383.6" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3383.6" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">559 cyc</text>
+<text x="3383.6" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3359.8" y="1280" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3361.8" y="1305" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3373.9" y="1280" width="142.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3445.0" y="1296" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3445.0" y="1310" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">592 cyc</text>
+<text x="3445.0" y="1320" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3415.4" y="896" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3417.5" y="921" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3425.8" y="1024" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3427.8" y="1049" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3429.6" y="896" width="153.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3506.3" y="912" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3506.3" y="926" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">639 cyc</text>
+<text x="3506.3" y="936" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3439.9" y="1024" width="140.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3510.4" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i59 p1</text>
+<text x="3510.4" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">587 cyc</text>
+<text x="3510.4" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3442.6" y="64" width="239.5" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="3562.3" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i62 p0</text>
+<text x="3562.3" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">998 cyc</text>
+<text x="3562.3" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.613 TB/s</text>
+<rect x="3451.2" y="1152" width="89.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3496.0" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3496.0" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">373 cyc</text>
+<text x="3496.0" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.877 TB/s</text>
+<rect x="3456.7" y="128" width="232.3" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="3572.9" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i61 p1</text>
+<text x="3572.9" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">968 cyc</text>
+<text x="3572.9" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">740.7 TFLOP/s</text>
+<rect x="3516.5" y="1280" width="157.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3595.4" y="1296" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3595.4" y="1310" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">658 cyc</text>
+<text x="3595.4" y="1320" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.064 TB/s</text>
+<rect x="3581.3" y="1024" width="134.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3648.7" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3648.7" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">562 cyc</text>
+<text x="3648.7" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.246 TB/s</text>
+<rect x="3583.4" y="896" width="133.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3650.0" y="912" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i59 p1</text>
+<text x="3650.0" y="926" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">555 cyc</text>
+<text x="3650.0" y="936" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.262 TB/s</text>
+<rect x="3751.7" y="128" width="212.6" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="3858.0" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i63 p1</text>
+<text x="3858.0" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">886 cyc</text>
+<text x="3858.0" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.322 TB/s</text>
+<rect x="3781.0" y="192" width="204.2" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="3883.1" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i58 p0</text>
+<text x="3883.1" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">851 cyc</text>
+<text x="3883.1" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">842.5 TFLOP/s</text>
+<rect x="3959.8" y="576" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3962.3" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3960.2" y="320" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3962.8" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3961.4" y="704" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3964.0" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3961.9" y="448" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3964.4" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="3963.8" y="256" width="184.6" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="4056.1" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i59 p1</text>
+<text x="4056.1" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">769 cyc</text>
+<text x="4056.1" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">932.3 TFLOP/s</text>
+<rect x="3965.3" y="576" width="158.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4044.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4044.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">661 cyc</text>
+<text x="4044.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3965.8" y="320" width="152.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4042.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4042.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">635 cyc</text>
+<text x="4042.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3967.0" y="704" width="161.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4047.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4047.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">672 cyc</text>
+<text x="4047.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3967.4" y="448" width="152.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4043.8" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4043.8" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">636 cyc</text>
+<text x="4043.8" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4015.7" y="192" width="203.5" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="4117.4" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i60 p0</text>
+<text x="4117.4" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">848 cyc</text>
+<text x="4117.4" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.605 TB/s</text>
+<rect x="4118.6" y="320" width="64.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4151.0" y="338" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4151.0" y="353" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i60 p0</text>
+<rect x="4120.6" y="448" width="68.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4154.9" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4154.9" y="481" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i60 p0</text>
+<rect x="4124.4" y="576" width="76.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4162.7" y="594" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4162.7" y="609" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i60 p0</text>
+<rect x="4128.7" y="704" width="98.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4177.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i60 p0</text>
+<text x="4177.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">410 cyc</text>
+<text x="4177.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.708 TB/s</text>
+<rect x="4186.6" y="384" width="33.4" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4203.2" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4192.3" y="512" width="31.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4208.3" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4203.8" y="832" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4206.4" y="857" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4204.1" y="640" width="29.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4219.0" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4207.0" y="1216" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4209.5" y="1241" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4207.7" y="960" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4210.2" y="985" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4208.2" y="1088" width="5.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4210.7" y="1113" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4209.4" y="832" width="278.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4348.6" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4348.6" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1160 cyc</text>
+<text x="4348.6" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4212.5" y="1216" width="258.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4341.5" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4341.5" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1075 cyc</text>
+<text x="4341.5" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4213.2" y="960" width="266.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4346.5" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4346.5" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1111 cyc</text>
+<text x="4346.5" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4213.7" y="1088" width="264.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4345.8" y="1104" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4345.8" y="1118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1101 cyc</text>
+<text x="4345.8" y="1128" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4231.0" y="384" width="254.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4358.2" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4358.2" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1060 cyc</text>
+<text x="4358.2" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4231.7" y="768" width="13.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4238.3" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4235.3" y="512" width="257.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4363.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4363.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1071 cyc</text>
+<text x="4363.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4245.1" y="640" width="250.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4370.5" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4370.5" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1045 cyc</text>
+<text x="4370.5" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4249.2" y="256" width="218.9" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="4358.6" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i61 p1</text>
+<text x="4358.6" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">912 cyc</text>
+<text x="4358.6" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.142 TB/s</text>
+<rect x="4257.6" y="768" width="243.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4379.3" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i60 p0</text>
+<text x="4379.3" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1014 cyc</text>
+<text x="4379.3" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4274.6" y="64" width="235.0" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="4392.1" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i62 p0</text>
+<text x="4392.1" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">979 cyc</text>
+<text x="4392.1" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">732.4 TFLOP/s</text>
+<rect x="4471.0" y="1216" width="71.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4506.5" y="1234" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4506.5" y="1249" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i61 p1</text>
+<rect x="4478.4" y="1088" width="103.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4530.0" y="1104" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i61 p1</text>
+<text x="4530.0" y="1118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">430 cyc</text>
+<text x="4530.0" y="1128" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.628 TB/s</text>
+<rect x="4480.3" y="960" width="123.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4541.9" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i61 p1</text>
+<text x="4541.9" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">513 cyc</text>
+<text x="4541.9" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.365 TB/s</text>
+<rect x="4485.8" y="384" width="189.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4580.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i60 p0</text>
+<text x="4580.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">788 cyc</text>
+<text x="4580.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.889 TB/s</text>
+<rect x="4488.2" y="832" width="183.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4579.8" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i61 p1</text>
+<text x="4579.8" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">763 cyc</text>
+<text x="4579.8" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.918 TB/s</text>
+<rect x="4492.8" y="512" width="161.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4573.3" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i60 p0</text>
+<text x="4573.3" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">671 cyc</text>
+<text x="4573.3" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.043 TB/s</text>
+<rect x="4496.4" y="640" width="180.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4586.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i60 p0</text>
+<text x="4586.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">752 cyc</text>
+<text x="4586.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.931 TB/s</text>
+<rect x="4501.4" y="768" width="170.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4586.9" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i60 p0</text>
+<text x="4586.9" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">712 cyc</text>
+<text x="4586.9" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.983 TB/s</text>
+<rect x="4545.1" y="1280" width="35.5" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4562.9" y="1305" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4584.7" y="1152" width="28.6" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4599.0" y="1177" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4590.7" y="1280" width="133.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4657.2" y="1296" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4657.2" y="1310" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">554 cyc</text>
+<text x="4657.2" y="1320" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4606.6" y="1024" width="27.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4620.5" y="1049" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4623.4" y="1152" width="136.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4691.6" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4691.6" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">569 cyc</text>
+<text x="4691.6" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4644.5" y="1024" width="144.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4716.5" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4716.5" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">600 cyc</text>
+<text x="4716.5" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4675.7" y="896" width="30.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4690.8" y="921" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="4716.0" y="896" width="146.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4789.3" y="912" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i61 p1</text>
+<text x="4789.3" y="926" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">611 cyc</text>
+<text x="4789.3" y="936" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4724.2" y="1280" width="65.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4756.9" y="1298" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4756.9" y="1313" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i61 p1</text>
+<rect x="4736.4" y="128" width="217.2" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="4845.0" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i63 p1</text>
+<text x="4845.0" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">905 cyc</text>
+<text x="4845.0" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">792.2 TFLOP/s</text>
+<rect x="4760.4" y="1152" width="59.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4789.9" y="1170" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4789.9" y="1185" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i61 p1</text>
+<rect x="4789.0" y="1024" width="114.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4846.0" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i61 p1</text>
+<text x="4846.0" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">475 cyc</text>
+<text x="4846.0" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.474 TB/s</text>
+<rect x="4828.3" y="192" width="255.6" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="4956.1" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i60 p0</text>
+<text x="4956.1" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1065 cyc</text>
+<text x="4956.1" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">673.2 TFLOP/s</text>
+<rect x="4863.1" y="896" width="73.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4900.0" y="914" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="4900.0" y="929" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i61 p1</text>
+<rect x="5081.3" y="448" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5083.3" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5081.8" y="320" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5083.8" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5082.5" y="576" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5084.5" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5083.0" y="704" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5085.0" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5085.8" y="448" width="154.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5162.9" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5162.9" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">642 cyc</text>
+<text x="5162.9" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5086.3" y="320" width="153.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5163.1" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5163.1" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">640 cyc</text>
+<text x="5163.1" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5087.0" y="576" width="163.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5168.5" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5168.5" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">679 cyc</text>
+<text x="5168.5" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5087.5" y="704" width="160.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5167.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5167.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">667 cyc</text>
+<text x="5167.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5093.3" y="256" width="185.3" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="5185.9" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i61 p1</text>
+<text x="5185.9" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">772 cyc</text>
+<text x="5185.9" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">928.7 TFLOP/s</text>
+<rect x="5132.4" y="192" width="203.3" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="5234.0" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i62 p0</text>
+<text x="5234.0" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">847 cyc</text>
+<text x="5234.0" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.613 TB/s</text>
+<rect x="5240.4" y="320" width="55.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5268.2" y="338" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="5268.2" y="353" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="5240.4" y="448" width="53.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5267.3" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="5267.3" y="481" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="5248.1" y="704" width="81.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5289.0" y="722" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="5289.0" y="737" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="5250.5" y="576" width="79.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5290.3" y="594" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="5290.3" y="609" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="5265.8" y="1088" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5267.9" y="1113" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5266.1" y="1216" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5268.1" y="1241" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5266.8" y="832" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5268.8" y="857" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5267.0" y="960" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5269.1" y="985" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5270.4" y="1088" width="194.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5367.6" y="1104" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5367.6" y="1118" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">810 cyc</text>
+<text x="5367.6" y="1128" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5270.6" y="1216" width="197.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5369.4" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5369.4" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">823 cyc</text>
+<text x="5369.4" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5271.4" y="832" width="202.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5372.8" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5372.8" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">845 cyc</text>
+<text x="5372.8" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5271.6" y="960" width="203.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5373.4" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5373.4" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">848 cyc</text>
+<text x="5373.4" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5347.2" y="512" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5349.2" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5350.8" y="384" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5352.8" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5359.2" y="768" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5361.2" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5360.2" y="640" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5362.2" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5362.6" y="512" width="181.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5453.4" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5453.4" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">757 cyc</text>
+<text x="5453.4" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5365.9" y="384" width="176.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5454.0" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5454.0" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">734 cyc</text>
+<text x="5454.0" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5375.0" y="768" width="178.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5464.3" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5464.3" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">744 cyc</text>
+<text x="5464.3" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5375.5" y="256" width="221.5" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="5486.3" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i63 p1</text>
+<text x="5486.3" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">923 cyc</text>
+<text x="5486.3" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.069 TB/s</text>
+<rect x="5375.5" y="640" width="169.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5460.5" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i62 p0</text>
+<text x="5460.5" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">708 cyc</text>
+<text x="5460.5" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5465.3" y="1088" width="63.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5497.0" y="1106" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">ST</text>
+<text x="5497.0" y="1121" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i63 p1</text>
+<rect x="5468.6" y="1216" width="126.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5531.8" y="1232" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5531.8" y="1246" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">526 cyc</text>
+<text x="5531.8" y="1256" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.331 TB/s</text>
+<rect x="5474.6" y="832" width="129.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5539.6" y="848" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5539.6" y="862" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">541 cyc</text>
+<text x="5539.6" y="872" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.294 TB/s</text>
+<rect x="5475.6" y="960" width="167.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5559.5" y="976" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5559.5" y="990" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">699 cyc</text>
+<text x="5559.5" y="1000" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.002 TB/s</text>
+<rect x="5542.6" y="384" width="215.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5650.1" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i62 p0</text>
+<text x="5650.1" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">896 cyc</text>
+<text x="5650.1" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.781 TB/s</text>
+<rect x="5544.7" y="512" width="224.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5656.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i62 p0</text>
+<text x="5656.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">934 cyc</text>
+<text x="5656.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.750 TB/s</text>
+<rect x="5545.9" y="640" width="185.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5638.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i62 p0</text>
+<text x="5638.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">774 cyc</text>
+<text x="5638.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.905 TB/s</text>
+<rect x="5554.1" y="768" width="197.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5652.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i62 p0</text>
+<text x="5652.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">821 cyc</text>
+<text x="5652.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.853 TB/s</text>
+<rect x="5621.8" y="1152" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5623.8" y="1177" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5635.2" y="1280" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5637.2" y="1305" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5635.9" y="1152" width="134.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5703.2" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5703.2" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">561 cyc</text>
+<text x="5703.2" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5646.7" y="896" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5648.8" y="921" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5649.4" y="1280" width="135.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5717.0" y="1296" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5717.0" y="1310" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">564 cyc</text>
+<text x="5717.0" y="1320" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5660.9" y="896" width="135.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5728.4" y="912" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5728.4" y="926" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">563 cyc</text>
+<text x="5728.4" y="936" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5681.5" y="1024" width="4.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="5683.6" y="1049" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD</text>
+<rect x="5695.7" y="1024" width="138.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="5764.8" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK i63 p1</text>
+<text x="5764.8" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">576 cyc</text>
+<text x="5764.8" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="5771.0" y="1152" width="86.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5814.5" y="1168" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5814.5" y="1182" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">362 cyc</text>
+<text x="5814.5" y="1192" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.934 TB/s</text>
+<rect x="5785.2" y="1280" width="102.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5836.3" y="1296" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5836.3" y="1310" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">426 cyc</text>
+<text x="5836.3" y="1320" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.644 TB/s</text>
+<rect x="5796.5" y="896" width="111.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5852.0" y="912" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5852.0" y="926" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">463 cyc</text>
+<text x="5852.0" y="936" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.512 TB/s</text>
+<rect x="5834.4" y="1024" width="99.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="5884.1" y="1040" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST i63 p1</text>
+<text x="5884.1" y="1054" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">414 cyc</text>
+<text x="5884.1" y="1064" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1.691 TB/s</text>
+<rect x="5902.1" y="192" width="189.6" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="5996.9" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i62 p0</text>
+<text x="5996.9" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">790 cyc</text>
+<text x="5996.9" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">907.6 TFLOP/s</text>
+<rect x="6095.5" y="256" width="204.0" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="6197.5" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA i63 p1</text>
+<text x="6197.5" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">850 cyc</text>
+<text x="6197.5" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">843.5 TFLOP/s</text>
+</svg>

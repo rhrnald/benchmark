@@ -1,0 +1,57 @@
+# Build outputs
+/build/
+*.o
+*.so
+*.a
+*.cubin
+*.fatbin
+*.fatbin.c
+*.ptx
+*.sass
+*.elf
+
+# CUDA / profiler reports
+*.ncu-rep
+*.nsys-rep
+*.qdrep
+*.sqlite
+
+# Python environments and caches
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+/flashattention/venv/
+
+# Large generated/debug artifact directories
+/keep_ptx/
+/kernel_candidates/artifacts/
+/kernel_candidates/logs/
+/flashattention/artifacts*/
+/flashattention_custom/artifacts*/
+/flashattention/ptx_stripped/
+/flashattention/ptxas_offline/
+
+# External checkout internals and large bundled assets
+/kernel_candidates/repos/
+/flashattention/fa4-src/.git/
+/flashattention_custom/fa4-src/.git/
+/flashattention/fa4-src/assets/*.pdf
+/flashattention_custom/fa4-src/assets/*.pdf
+/flashattention/fa4-src/assets/*.png
+/flashattention_custom/fa4-src/assets/*.png
+
+# Local benchmark executables emitted outside build/
+/blackwell_pipeline_overlap_bench
+/mma_four_warpgroups_consume_bench
+/qk_two_producer_consume_pipeline
+/qk_two_producer_consume_pipeline.default
+/qk_two_producer_consume_pipeline.r128
+/smem_ld_payload_bench
+/tcgen05_alloc_occupancy_probe
+/tcgen05_fabric_sharing_bench
+/tmem_mma_overlap_bench
+/tmem_scale_accumulate_bench
+/register/a.out
+/register/reg_pressure
+/register/reg_tma_bench
