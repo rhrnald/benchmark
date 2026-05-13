@@ -291,7 +291,7 @@ __host__ __device__ __forceinline__ uint32_t make_qk_idesc() {
 
 __device__ __forceinline__ void setmaxnreg_dec_producer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("setmaxnreg.dec.sync.aligned.u32 104;" ::: "memory");
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 96;" ::: "memory");
 #endif
 }
 
