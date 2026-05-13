@@ -58,6 +58,26 @@ static constexpr double kFlopsPerMma =
     2.0 * static_cast<double>(kTileM) * static_cast<double>(kTileN) *
     static_cast<double>(kMmaK);
 
+template <int kFixedKTiles>
+__device__ __forceinline__ int kv_tile_base_for_block(int block_idx,
+                                                      int loop_k_tiles) {
+  if constexpr (kFixedKTiles == kFixedBenchmarkKTiles) {
+    return block_idx & ~(kFixedBenchmarkKTiles - 1);
+  } else {
+    return (block_idx / loop_k_tiles) * loop_k_tiles;
+  }
+}
+
+template <int kFixedKTiles>
+__device__ __forceinline__ int local_k_tile_for_iter(int iter,
+                                                     int loop_k_tiles) {
+  if constexpr (kFixedKTiles == kFixedBenchmarkKTiles) {
+    return iter;
+  } else {
+    return iter % loop_k_tiles;
+  }
+}
+
 struct Args {
   int blocks = 4096;
   int repeats = 256;
@@ -1350,8 +1370,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
   const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
   const int q_contig_row = static_cast<int>(blockIdx.x) * kTileM;
-  const int kv_tile_set = static_cast<int>(blockIdx.x) / loop_k_tiles;
-  const int kv_tile_base = kv_tile_set * loop_k_tiles;
+  const int kv_tile_base =
+      kv_tile_base_for_block<kFixedKTiles>(static_cast<int>(blockIdx.x),
+                                           loop_k_tiles);
 
   if (warp_id == 0) {
 #if ATTENTION_CLOCK_TRACE
@@ -1392,7 +1413,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     int local = 0;
     if (iter < loop_repeats) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
-      const int k_tile = iter % loop_k_tiles;
+      const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
       const int global_k_tile = kv_tile_base + k_tile;
 #if ATTENTION_CLOCK_TRACE
       const int trace_idx = iter - clock_trace_start;
@@ -1444,7 +1465,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
       const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
-      const int k_tile = iter % loop_k_tiles;
+      const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
       const int global_k_tile = kv_tile_base + k_tile;
 #if ATTENTION_CLOCK_TRACE
       const int trace_idx = iter - clock_trace_start;
@@ -1548,7 +1569,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       }
-      const int global_v_tile = kv_tile_base + (iter % loop_k_tiles);
+      const int global_v_tile =
+          kv_tile_base + local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter && lane0) v_tma_start = clock64();
 #endif
