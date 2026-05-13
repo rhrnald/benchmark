@@ -29,8 +29,13 @@ def rate_text(stage, cycles, clock_mhz, sms, ld_warps):
     if stage == "MMA":
         value = MMA8_FLOPS * hz / cycles / 1.0e12 * sms
         return f"{value:.1f} TFLOP/s"
-    if stage == "PACK":
+    if stage == "MMA4":
+        value = (MMA8_FLOPS / 2) * hz / cycles / 1.0e12 * sms
+        return f"{value:.1f} TFLOP/s"
+    if stage in ("PACK", "SUM"):
         return "reg"
+    if stage == "PVTAIL":
+        return "async"
     bytes_per_stage = K_BYTES if stage == "ST" else (LD_X64X2_BYTES_PER_WARP * ld_warps)
     value = bytes_per_stage * hz / cycles / 1.0e12 * sms
     return f"{value:.3f} TB/s"
@@ -61,6 +66,7 @@ def consumer_stage_items(row, base, clock_mhz, sms, consumer_warp):
         ("LD", f"ld_warp{consumer_warp}_start", f"ld_warp{consumer_warp}_end", "#1f4f7a", ld_bytes),
         ("PACK", f"pack_warp{consumer_warp}_start", f"pack_warp{consumer_warp}_end", "#e19b2e", None),
         ("ST", f"st_warp{consumer_warp}_start", f"st_warp{consumer_warp}_end", "#9a6a2f", st_bytes),
+        ("SUM", f"sum_warp{consumer_warp}_start", f"sum_warp{consumer_warp}_end", "#c04c84", None),
     ]
     out = []
     for name, start_key, end_key, color, bytes_count in specs:
@@ -75,6 +81,21 @@ def consumer_stage_items(row, base, clock_mhz, sms, consumer_warp):
         cycles = end - start
         rate = "reg" if bytes_count is None else byte_rate_text(bytes_count, cycles, clock_mhz, sms)
         out.append((name, start, end, cycles, color, rate))
+    return out
+
+
+def sync_items(row, base):
+    out = []
+    idx = 0
+    while f"sync{idx}_start" in row and f"sync{idx}_end" in row:
+        start_key = f"sync{idx}_start"
+        end_key = f"sync{idx}_end"
+        if row[start_key] not in ("", "0") and row[end_key] not in ("", "0"):
+            start = int(row[start_key]) - base
+            end = int(row[end_key]) - base
+            if end > start:
+                out.append((idx, start, end, end - start))
+        idx += 1
     return out
 
 
@@ -97,10 +118,16 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         ]
     else:
         stages.append(("PACK", "ld_start", "ld_end", "#1f4f7a"))
-    stages += [
-        ("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"),
-        ("PV MMA", "pv_start", "pv_end", "#8c5fbf"),
-    ]
+    stages.append(("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"))
+    has_split_pv = row.get("pv_h0_start", "0") not in ("", "0") and row.get("pv_h1_start", "0") not in ("", "0")
+    if has_split_pv:
+        stages += [
+            ("PV MMA h0", "pv_h0_start", "pv_h0_end", "#8c5fbf"),
+            ("PV MMA h1", "pv_h1_start", "pv_h1_end", "#6f47a3"),
+            ("PV async tail", "pv_h1_end", "pv_end", "#9aa4b2"),
+        ]
+    else:
+        stages.append(("PV MMA", "pv_start", "pv_end", "#8c5fbf"))
     out = []
     prev_split_end = None
     for name, start_key, end_key, color in stages:
@@ -115,13 +142,66 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         if end <= start:
             continue
         cycles = end - start
+        if name.startswith("PV MMA h"):
+            rate_kind = "MMA4"
+        elif name == "PV async tail":
+            rate_kind = "PVTAIL"
+        elif name.endswith("MMA"):
+            rate_kind = "MMA"
+        elif name.endswith("TMA"):
+            rate_kind = "TMA"
+        else:
+            rate_kind = name
         out.append((name, start, end, cycles, color,
-                    rate_text("MMA" if name.endswith("MMA") else
-                              ("TMA" if name.endswith("TMA") else name),
-                              cycles, clock_mhz, sms, ld_warps)))
+                    rate_text(rate_kind, cycles, clock_mhz, sms, ld_warps)))
         if has_split_ld and name in ("LD", "PACK", "ST"):
             prev_split_end = end
     return out
+
+
+def _int_field(row, key, default=None):
+    value = row.get(key, "")
+    if value in ("", None):
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def pv_stage_warp(row, name):
+    pipe = int(row["pipe"])
+    if name == "V TMA":
+        return 2 + pipe
+    if name == "PV MMA h0":
+        return _int_field(row, "pv_h0_warp_id",
+                          _int_field(row, "pv_warp_id", 2 + pipe))
+    if name == "PV MMA h1" or name == "PV async tail":
+        return _int_field(row, "pv_h1_warp_id",
+                          _int_field(row, "pv_warp_id", 2 + pipe))
+    if name.startswith("PV "):
+        return _int_field(row, "pv_warp_id", 2 + pipe)
+    return int(row["warp_id"])
+
+
+def pv_consumer_lane(row, name, consumer_base, consumer_count, consumer_lane_mode):
+    if not name.startswith("PV "):
+        return None
+    pipe = int(row["pipe"])
+    warp = pv_stage_warp(row, name)
+    if consumer_count == 8:
+        first_warp = consumer_base + pipe * 4
+        if first_warp <= warp < first_warp + 4:
+            half = 1 if name in ("PV MMA h1", "PV async tail") else 0
+            lane = (warp - first_warp) * 2 + half
+            if consumer_lane_mode == "warp":
+                lane //= 2
+            return ("ld", (pipe, lane))
+    else:
+        first_warp = consumer_base + pipe * consumer_count
+        if first_warp <= warp < first_warp + consumer_count:
+            return ("ld", (pipe, warp - first_warp))
+    return None
 
 
 def write_summary(path, rows, base, clock_mhz, sms, ld_warps, consumer_lane_mode):
@@ -146,7 +226,7 @@ def write_summary(path, rows, base, clock_mhz, sms, ld_warps, consumer_lane_mode
                     row, base, clock_mhz, sms, ld_warps):
                 if has_consumer_warp_stamps(row) and name in ("LD", "PACK", "ST"):
                     continue
-                warp = 2 + pipe if name in ("V TMA", "PV MMA") else row["warp_id"]
+                warp = pv_stage_warp(row, name) if name == "V TMA" or name.startswith("PV ") else row["warp_id"]
                 w.writerow([row["iter"], warp, row["pipe"], name, start, end, cycles, rate])
             if has_consumer_warp_stamps(row):
                 count = consumer_warp_count(row)
@@ -163,11 +243,16 @@ def write_summary(path, rows, base, clock_mhz, sms, ld_warps, consumer_lane_mode
                     for name, start, end, cycles, _, rate in consumer_stage_items(
                             row, base, clock_mhz, sms, consumer_warp):
                         w.writerow([row["iter"], warp, row["pipe"], name + suffix, start, end, cycles, rate])
+            for sync_idx, start, end, cycles in sync_items(row, base):
+                w.writerow([row["iter"], "CTA", row["pipe"], f"SYNC{sync_idx}", start, end, cycles, "barrier"])
 
 
 def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_mode):
-    max_end = max(end for row in rows
-                  for _, _, end, _, _, _ in stage_items(row, base, clock_mhz, sms, ld_warps))
+    max_end = max(
+        [end for row in rows
+         for _, _, end, _, _, _ in stage_items(row, base, clock_mhz, sms, ld_warps)]
+        + [end for row in rows for _, _, end, _ in sync_items(row, base)]
+    )
     axis_end = ((max_end + 999) // 1000) * 1000
     scale = 0.24
     left = 132
@@ -181,11 +266,11 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
     pipes = sorted({int(row["pipe"]) for row in rows})
     lanes = [("producer", warp, f"K+QK warp{warp}") for warp in producer_warps]
     has_pv = any(row.get("pv_end", "0") not in ("", "0") for row in rows)
-    if has_pv:
-        lanes += [("pv", pipe, f"V+PV warp{2 + pipe}") for pipe in pipes]
     consumer_base = 4 if has_pv else 8
     per_consumer = any(has_consumer_warp_stamps(row) for row in rows)
     consumer_count = max((consumer_warp_count(row) for row in rows), default=4)
+    if has_pv:
+        lanes += [("v_tma", pipe, f"V TMA warp{2 + pipe}") for pipe in pipes]
     if per_consumer:
         for pipe in pipes:
             lane_count = consumer_count // 2 if consumer_count == 8 and consumer_lane_mode == "warp" else consumer_count
@@ -205,6 +290,16 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
             ("ld", pipe, f"LD/PACK/ST warps{consumer_base + pipe * 4}-{consumer_base + pipe * 4 + 3}")
             for pipe in pipes
         ]
+    if has_pv:
+        pv_issue_warps = sorted({
+            pv_stage_warp(row, name)
+            for row in rows
+            for name, _, _, _, _, _ in stage_items(row, base, clock_mhz, sms, ld_warps)
+            if name.startswith("PV ") and not (
+                per_consumer and pv_consumer_lane(
+                    row, name, consumer_base, consumer_count, consumer_lane_mode))
+        })
+        lanes += [("pv_issue", warp, f"PV issue warp{warp}") for warp in pv_issue_warps]
     lane_index = {(kind, ident): idx for idx, (kind, ident, _) in enumerate(lanes)}
 
     width = int(left + axis_end * scale + right)
@@ -247,8 +342,14 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
                 continue
             if name in ("LD", "PACK", "ST"):
                 lane = ("ld", pipe)
-            elif name in ("V TMA", "PV MMA"):
-                lane = ("pv", pipe)
+            elif name == "V TMA":
+                lane = ("v_tma", pipe)
+            elif name.startswith("PV "):
+                lane = pv_consumer_lane(
+                    row, name, consumer_base, consumer_count, consumer_lane_mode
+                ) if per_consumer else None
+                if lane is None:
+                    lane = ("pv_issue", pv_stage_warp(row, name))
             else:
                 lane = ("producer", warp)
             blocks.append((start, lane_index[lane], row, name, end, cycles, color, rate))
@@ -296,6 +397,21 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
             parts.append(
                 f'<text x="{cx:.1f}" y="{y + 25}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">{name}</text>'
             )
+
+    sync_marks = []
+    for row in rows:
+        iteration = int(row["iter"])
+        pipe = int(row["pipe"])
+        for sync_idx, start, end, cycles in sync_items(row, base):
+            sync_marks.append((end, start, sync_idx, iteration, pipe, cycles))
+    for end, start, sync_idx, iteration, pipe, cycles in sorted(sync_marks):
+        ex = x(end)
+        parts.append(
+            f'<line x1="{ex:.1f}" y1="46" x2="{ex:.1f}" y2="{height - 22}" stroke="#d62728" stroke-width="2" stroke-dasharray="4 3"/>'
+        )
+        parts.append(
+            f'<text x="{ex:.1f}" y="{height - 7}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#b32020">S{sync_idx}</text>'
+        )
 
     parts.append("</svg>\n")
     with open(path, "w") as f:

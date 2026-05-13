@@ -5,30 +5,47 @@ GENCODE ?= -gencode=arch=compute_100a,code=sm_100a
 NVCCFLAGS ?= -O3 -std=c++17 $(GENCODE) --expt-relaxed-constexpr
 CUTLASS_INCLUDE ?= -Ikernel_candidates/repos/cutlass/include
 BUILD_DIR ?= build
+ATTENTION_SRC ?= 0.attention/attention_fused_real_attention.cu
+ATTENTION_COMPARE_CSV ?= 0.attention/attention_compare_default_b1_h16_s32k.csv
+ATTENTION_COMPARE_BLOCKS ?= 4096
+ATTENTION_COMPARE_K_TILES ?= 256
+ATTENTION_COMPARE_WARMUP ?= 3
+ATTENTION_COMPARE_ITERS ?= 10
 
-.PHONY: all clean run attention_custom_kernel attention_custom_kernel_fastest attention_custom_kernel_store_output attention_validation attention_validation_fastest tcgen05_ld_pack_toy tcgen05_ld_mma_overlap_toy tma_smem_store_overlap_toy mma_throughput_bench tmem_ldst_bench mma_ld_pipeline_bench mma_ld_pipeline_128kb_case tma_mma_ld_pipeline_bench tma_multicast_bench
+.PHONY: all clean run attention_custom_kernel attention_custom_kernel_fastest attention_custom_kernel_store_output attention_actual_kernel attention_validation attention_validation_fastest attention_validation_actual attention_compare_default tcgen05_ld_pack_toy tcgen05_ld_mma_overlap_toy tma_smem_store_overlap_toy mma_throughput_bench tmem_ldst_bench mma_ld_pipeline_bench mma_ld_pipeline_128kb_case tma_mma_ld_pipeline_bench tma_multicast_bench
 
 all: attention_custom_kernel tmem_ldst_bench blackwell_pipeline_overlap_bench mma_throughput_bench mma_ld_pipeline_bench mma_ld_pipeline_128kb_case tma_mma_ld_pipeline_bench tma_multicast_bench tmem_mma_overlap_bench tcgen05_alloc_occupancy_probe mma_four_warpgroups_consume_bench tcgen05_fabric_sharing_bench qk_two_producer_consume_pipeline tmem_scale_accumulate_bench tma_smem_store_overlap_toy
 
 attention_custom_kernel:
 	@mkdir -p $(BUILD_DIR)/0.attention
-	$(NVCC) $(NVCCFLAGS) 0.attention/attention_custom_kernel.cu -o $(BUILD_DIR)/0.attention/attention_custom_kernel -lcuda
+	$(NVCC) $(NVCCFLAGS) $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_custom_kernel -lcuda
 
 attention_custom_kernel_fastest:
 	@mkdir -p $(BUILD_DIR)/0.attention
-	$(NVCC) $(NVCCFLAGS) -DATTENTION_NVCC_MANAGED_LD_REGS=1 -DATTENTION_PRODUCER_REGS=128 -DATTENTION_CONSUMER_REGS=184 0.attention/attention_custom_kernel.cu -o $(BUILD_DIR)/0.attention/attention_custom_kernel -lcuda
+	$(NVCC) $(NVCCFLAGS) $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_custom_kernel -lcuda
 
 attention_custom_kernel_store_output:
 	@mkdir -p $(BUILD_DIR)/0.attention
-	$(NVCC) $(NVCCFLAGS) -DATTENTION_NVCC_MANAGED_LD_REGS=1 -DATTENTION_STORE_OUTPUT=1 -DATTENTION_PRODUCER_REGS=128 -DATTENTION_CONSUMER_REGS=184 0.attention/attention_custom_kernel.cu -o $(BUILD_DIR)/0.attention/attention_custom_kernel_store_output -lcuda
+	$(NVCC) $(NVCCFLAGS) -DATTENTION_STORE_OUTPUT=1 $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_custom_kernel_store_output -lcuda
+
+attention_actual_kernel:
+	@mkdir -p $(BUILD_DIR)/0.attention
+	$(NVCC) $(NVCCFLAGS) -DATTENTION_STORE_OUTPUT=1 $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_actual_kernel -lcuda
 
 attention_validation:
 	@mkdir -p $(BUILD_DIR)/0.attention
-	$(NVCC) $(NVCCFLAGS) 0.attention/attention_validation.cu -o $(BUILD_DIR)/0.attention/attention_validation -lcuda
+	$(NVCC) $(NVCCFLAGS) -DATTENTION_STORE_OUTPUT=1 $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_validation -lcuda
 
 attention_validation_fastest:
 	@mkdir -p $(BUILD_DIR)/0.attention
-	$(NVCC) $(NVCCFLAGS) -DATTENTION_NVCC_MANAGED_LD_REGS=1 -DATTENTION_STORE_OUTPUT=1 -DATTENTION_PRODUCER_REGS=128 -DATTENTION_CONSUMER_REGS=184 0.attention/attention_validation.cu -o $(BUILD_DIR)/0.attention/attention_validation -lcuda
+	$(NVCC) $(NVCCFLAGS) -DATTENTION_STORE_OUTPUT=1 $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_validation -lcuda
+
+attention_validation_actual:
+	@mkdir -p $(BUILD_DIR)/0.attention
+	$(NVCC) $(NVCCFLAGS) -DATTENTION_STORE_OUTPUT=1 $(ATTENTION_SRC) -o $(BUILD_DIR)/0.attention/attention_validation_actual -lcuda
+
+attention_compare_default: attention_custom_kernel
+	$(BUILD_DIR)/0.attention/attention_custom_kernel --blocks $(ATTENTION_COMPARE_BLOCKS) --k-tiles $(ATTENTION_COMPARE_K_TILES) --warmup $(ATTENTION_COMPARE_WARMUP) --iters $(ATTENTION_COMPARE_ITERS) --csv $(ATTENTION_COMPARE_CSV)
 
 tcgen05_ld_pack_toy:
 	@mkdir -p $(BUILD_DIR)/0-1.TCGEN05_LD_PACK_TOY
