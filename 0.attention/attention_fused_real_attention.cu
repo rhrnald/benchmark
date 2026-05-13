@@ -11,93 +11,8 @@
 #include <string>
 #include <vector>
 
-#ifndef ATTENTION_PRODUCER_REGS
-#define ATTENTION_PRODUCER_REGS 104
-#endif
-#ifndef ATTENTION_CONSUMER_REGS
-#define ATTENTION_CONSUMER_REGS 176
-#endif
-#ifndef ATTENTION_USE_SETMAXNREG
-#define ATTENTION_USE_SETMAXNREG 1
-#endif
-#ifndef ATTENTION_PV_PINGPONG_DEP
-#define ATTENTION_PV_PINGPONG_DEP 1
-#endif
-#ifndef ATTENTION_PV_H0_PINGPONG_DEP
-#define ATTENTION_PV_H0_PINGPONG_DEP 0
-#endif
-#ifndef ATTENTION_QK_PINGPONG_DEP
-#define ATTENTION_QK_PINGPONG_DEP 1
-#endif
-#ifndef ATTENTION_PIPE1_PV_WAIT_PIPE0_VTMA
-#define ATTENTION_PIPE1_PV_WAIT_PIPE0_VTMA 0
-#endif
-#ifndef ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME
-#define ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME 0
-#endif
-#ifndef ATTENTION_SINGLE_PIPE0
-#define ATTENTION_SINGLE_PIPE0 0
-#endif
-#define ATTENTION_SINGLE_PIPE_MODE ATTENTION_SINGLE_PIPE0
-#ifndef ATTENTION_V_TMA_AFTER_S_READY
-#define ATTENTION_V_TMA_AFTER_S_READY 0
-#endif
-#ifndef ATTENTION_SPLIT_S_READY
-#define ATTENTION_SPLIT_S_READY 1
-#endif
-#ifndef ATTENTION_S_SWIZZLE_MODE
-#define ATTENTION_S_SWIZZLE_MODE 0
-#endif
-
-#ifndef ATTENTION_STORE_OUTPUT
-#define ATTENTION_STORE_OUTPUT 1
-#endif
-
-#ifndef ATTENTION_ACCUM_ROW_SUM
-#define ATTENTION_ACCUM_ROW_SUM ATTENTION_STORE_OUTPUT
-#endif
-
-#ifndef ATTENTION_MATERIALIZE_OUTPUT
-#define ATTENTION_MATERIALIZE_OUTPUT ATTENTION_STORE_OUTPUT
-#endif
-
-#ifndef ATTENTION_DRAIN_OUTPUT_TMEM
-#define ATTENTION_DRAIN_OUTPUT_TMEM ATTENTION_MATERIALIZE_OUTPUT
-#endif
-
-#ifndef ATTENTION_PACK_OUTPUT
-#define ATTENTION_PACK_OUTPUT ATTENTION_MATERIALIZE_OUTPUT
-#endif
-
-#ifndef ATTENTION_DIRECT_STORE_OUTPUT
-#define ATTENTION_DIRECT_STORE_OUTPUT ATTENTION_MATERIALIZE_OUTPUT
-#endif
-
 #ifndef ATTENTION_CLOCK_TRACE
 #define ATTENTION_CLOCK_TRACE 0
-#endif
-
-#define ATTENTION_STRINGIFY_IMPL(x) #x
-#define ATTENTION_STRINGIFY(x) ATTENTION_STRINGIFY_IMPL(x)
-
-#if ATTENTION_PV_PINGPONG_DEP
-#define ATTENTION_PV_DEP_NOTE "pv_pingpong_dep"
-#elif ATTENTION_SPLIT_S_READY && ATTENTION_PV_H0_PINGPONG_DEP
-#define ATTENTION_PV_DEP_NOTE "pv_h0_pingpong_dep"
-#else
-#define ATTENTION_PV_DEP_NOTE "pv_no_pingpong_dep"
-#endif
-
-#if ATTENTION_QK_PINGPONG_DEP
-#define ATTENTION_QK_DEP_NOTE "qk_pingpong_dep"
-#else
-#define ATTENTION_QK_DEP_NOTE "qk_no_pingpong_dep"
-#endif
-
-#if ATTENTION_SPLIT_S_READY
-#define ATTENTION_S_READY_NOTE "split_s_ready"
-#else
-#define ATTENTION_S_READY_NOTE "full_s_ready"
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
@@ -116,7 +31,7 @@ static constexpr int kWarpSize = 32;
 static constexpr int kWarps = 16;
 static constexpr int kThreads = kWarps * kWarpSize;
 static constexpr int kPipeCount = 2;
-static constexpr int kActivePipeStride = ATTENTION_SINGLE_PIPE_MODE ? 1 : kPipeCount;
+static constexpr int kActivePipeStride = kPipeCount;
 static constexpr int kConsumerWarpsPerPipe = 4;
 static constexpr int kTraceConsumerLanesPerPipe = kConsumerWarpsPerPipe * 2;
 static constexpr int kClockTraceSyncCount = 4;
@@ -132,37 +47,30 @@ static constexpr int kTileBytes = kTileWords * static_cast<int>(sizeof(uint32_t)
 static constexpr int kKBufferCount = 1;
 static constexpr int kVBufferCount = kPipeCount;
 static constexpr int kSBufferCount = kPipeCount;
+static constexpr int kFixedBenchmarkRepeats = 256;
+static constexpr int kFixedBenchmarkKTiles = 256;
 static constexpr int kDynamicSmemBytes =
     (1 + kPipeCount * kKBufferCount + kVBufferCount + kSBufferCount) * kTileBytes + 1024;
 static constexpr int kTmemAllocCols = 512;
 static constexpr int kTmemUsedCols = 512;
 static constexpr float kLog2E = 1.44269504088896340736f;
-static constexpr int kQkLayoutAtom = 0;
-static constexpr int kQkLayoutContiguousSingle5d = 1;
-static constexpr int kQkLayoutContiguousK16Split4d = 2;
-static constexpr int kQkLayoutContiguousSw128 = 3;
-static constexpr int kFixedQkLayout = kQkLayoutContiguousSw128;
 static constexpr double kFlopsPerMma =
     2.0 * static_cast<double>(kTileM) * static_cast<double>(kTileN) *
     static_cast<double>(kMmaK);
 
 struct Args {
   int blocks = 4096;
-  int repeats = 8192;
-  int k_tiles = 8192;
+  int repeats = 256;
+  int k_tiles = 256;
   bool k_tiles_set = false;
-  int warmup = 2;
-  int iters = 5;
-  bool store_output = true;
-  bool contiguous_qk = true;
-  bool contiguous_qk_single_5d = false;
-  bool contiguous_qk_sw128 = true;
+  int warmup = 3;
+  int iters = 10;
   bool clock_trace = false;
   int clock_trace_start = 0;
   int clock_trace_iters = 8;
   std::string stage = "benchmark";
   std::string pattern = "constant";
-  const char* csv = "0.attention/attention_fused_clean.csv";
+  const char* csv = "0.attention/attention_compare_default_b1_h16_s32k.csv";
 
   // Real attention path.  This is the correctness-oriented implementation:
   // contiguous BF16 Q/K/V/O with shape [B, H, S, D], D fixed to 128.
@@ -222,6 +130,9 @@ struct TraceRecord {
   unsigned long long pv_h0_end = 0;
   unsigned long long pv_h1_start = 0xffffffffffffffffull;
   unsigned long long pv_h1_end = 0;
+  int pv_warp_id = -1;
+  int pv_h0_warp_id = -1;
+  int pv_h1_warp_id = -1;
   unsigned long long sync_start[kClockTraceSyncCount];
   unsigned long long sync_end[kClockTraceSyncCount];
   unsigned int iter = 0;
@@ -316,7 +227,6 @@ __host__ __device__ __forceinline__ uint64_t make_s_smem_desc(uint32_t matrix_st
   const uint32_t matrix_start_aligned = matrix_start_addr & ~0xFu;
   constexpr uint32_t leading_dim_byte_offset = 128;
   constexpr uint32_t stride_dim_byte_offset = 256;
-  constexpr uint32_t swizzle_mode = ATTENTION_S_SWIZZLE_MODE;
   const uint32_t lead_enc = (leading_dim_byte_offset & 0x3ffffu) >> 4;
   const uint32_t stride_enc = (stride_dim_byte_offset & 0x3ffffu) >> 4;
   uint64_t desc = 0;
@@ -325,7 +235,6 @@ __host__ __device__ __forceinline__ uint64_t make_s_smem_desc(uint32_t matrix_st
   desc |= static_cast<uint64_t>(stride_enc) << 32;
   desc |= static_cast<uint64_t>(0x1u) << 46;
   desc |= static_cast<uint64_t>(0xB0u) << 53;
-  desc |= static_cast<uint64_t>(swizzle_mode) << 61;
   return desc;
 }
 
@@ -341,17 +250,7 @@ __host__ __device__ __forceinline__ int atom_major_k_word_offset(int row, int co
 }
 
 __host__ __device__ __forceinline__ uint32_t swizzle_s_byte_offset(uint32_t byte_offset) {
-#if ATTENTION_S_SWIZZLE_MODE == 6
-  return byte_offset ^ ((byte_offset & (0x1u << 5)) >> 1);  // SW32: Swizzle<1,4,1>.
-#elif ATTENTION_S_SWIZZLE_MODE == 4
-  return byte_offset ^ ((byte_offset & (0x3u << 6)) >> 2);  // SW64: Swizzle<2,4,2>.
-#elif ATTENTION_S_SWIZZLE_MODE == 2
-  return byte_offset ^ ((byte_offset & (0x7u << 7)) >> 3);  // SW128: Swizzle<3,4,3>.
-#elif ATTENTION_S_SWIZZLE_MODE == 1
-  return byte_offset ^ ((byte_offset & (0x3u << 7)) >> 2);  // 128B_BASE32B: Swizzle<2,5,2>.
-#else
   return byte_offset;
-#endif
 }
 
 __host__ __device__ __forceinline__ int s_store_word_offset(int row, int col_pair) {
@@ -371,16 +270,14 @@ __host__ __device__ __forceinline__ uint32_t make_qk_idesc() {
 }
 
 __device__ __forceinline__ void setmaxnreg_dec_producer() {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000) && ATTENTION_USE_SETMAXNREG
-  asm volatile("setmaxnreg.dec.sync.aligned.u32 " ATTENTION_STRINGIFY(ATTENTION_PRODUCER_REGS) ";"
-               ::: "memory");
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 104;" ::: "memory");
 #endif
 }
 
 __device__ __forceinline__ void setmaxnreg_inc_consumer() {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000) && ATTENTION_USE_SETMAXNREG
-  asm volatile("setmaxnreg.inc.sync.aligned.u32 " ATTENTION_STRINGIFY(ATTENTION_CONSUMER_REGS) ";"
-               ::: "memory");
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("setmaxnreg.inc.sync.aligned.u32 176;" ::: "memory");
 #endif
 }
 
@@ -439,7 +336,9 @@ __device__ __forceinline__ void mbarrier_arrive(uint64_t* barrier) {
 __device__ __forceinline__ void mbarrier_expect_tx(uint64_t* barrier, uint32_t bytes) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t addr = smem_ptr_u32(barrier);
-  asm volatile("mbarrier.arrive.expect_tx.shared::cta.b64 _, [%0], %1;"
+  asm volatile("{ .reg .pred p; "
+               "elect.sync _|p, -1; "
+               "@p mbarrier.arrive.expect_tx.shared::cta.b64 _, [%0], %1; }"
                :: "r"(addr), "r"(bytes)
                : "memory");
 #else
@@ -842,6 +741,7 @@ __device__ __forceinline__ void end_clock_trace_record(ClockTraceRecord* records
 #endif
 }
 
+#if 0
 __device__ __forceinline__ void tcgen05_ld_x64_wait_pack_store_nvcc(
     uint32_t src_taddr,
     uint32_t* s_smem,
@@ -989,7 +889,6 @@ __device__ __forceinline__ void tcgen05_ld_x64_wait_pack_store_nvcc(
                       exp2_pack_hi16_update(r[60], r[61]),
                       exp2_pack_hi16_update(r[62], r[63]));
 #endif
-#if ATTENTION_ACCUM_ROW_SUM
   if (row_sum_pipe != nullptr) {
 #if ATTENTION_CLOCK_TRACE
     const bool trace_row_sum = trace_lane;
@@ -1015,9 +914,6 @@ __device__ __forceinline__ void tcgen05_ld_x64_wait_pack_store_nvcc(
 #endif
   }
 #else
-  (void)row_sum_pipe;
-#endif
-#else
   (void)src_taddr;
   (void)s_smem;
   (void)consumer_warp;
@@ -1033,6 +929,7 @@ __device__ __forceinline__ void tcgen05_ld_x64_wait_pack_store_nvcc(
   (void)trace_pipe;
 #endif
 }
+#endif
 
 __device__ __forceinline__ float
 tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
@@ -1128,7 +1025,6 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
 #endif
 }
 
-#if ATTENTION_STORE_OUTPUT
 __device__ __forceinline__ float bf16_bits_to_float_device(uint16_t bits) {
   return __uint_as_float(static_cast<uint32_t>(bits) << 16);
 }
@@ -1188,9 +1084,9 @@ __device__ __noinline__ void store_tmem_x64_accum_output_smem(uint32_t src_taddr
   (void)add_to_smem;
 #endif
 }
-#endif
 
 
+#if 0
 #define TCGEN05_LD_X64_WAIT_PACK_STORE(src_taddr, s_smem, consumer_warp, consumer_half, p_done_barrier, arrive_p_done, row_sum_pipe, trace_iter, trace_pipe) \
 do {                                                                        \
   tcgen05_ld_x64_wait_pack_store_nvcc(                                      \
@@ -1199,6 +1095,7 @@ do {                                                                        \
       clock_trace_iters, clock_trace_start, clock_trace_base, (trace_iter), \
       (trace_pipe));                                                       \
 } while (0)
+#endif
 
 __global__ void fill_packed_bf16(uint32_t* ptr, size_t words, uint32_t seed) {
   const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1334,6 +1231,7 @@ void real_attention_bf16_d128_kernel(RealAttentionParams p) {
   p.o[o_base + tid] = real_float_to_bf16_device(out);
 }
 
+template <int kFixedRepeats = 0, int kFixedKTiles = 0>
 __global__ __launch_bounds__(kMainThreads, 1)
 void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                           const __grid_constant__ CUtensorMap k_map,
@@ -1365,7 +1263,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)clock_trace_start;
 #endif
 #else
-  static constexpr int qk_layout = kFixedQkLayout;
+  const int loop_repeats = kFixedRepeats > 0 ? kFixedRepeats : repeats;
+  const int loop_k_tiles = kFixedKTiles > 0 ? kFixedKTiles : k_tiles;
   extern __shared__ uint32_t smem_raw[];
   const uintptr_t smem_addr =
       (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
@@ -1391,22 +1290,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ uint64_t qk_done[kPipeCount];
   __shared__ uint64_t p_done[kPipeCount];
   __shared__ uint64_t v_ready[kPipeCount];
-#if ATTENTION_SPLIT_S_READY
   __shared__ uint64_t s_ready[kPipeCount][2];
-#else
-  __shared__ uint64_t s_ready[kPipeCount];
-#endif
   __shared__ uint64_t pv_done[kPipeCount];
-#if ATTENTION_SPLIT_S_READY && ATTENTION_PV_H0_PINGPONG_DEP && !ATTENTION_PV_PINGPONG_DEP
-  __shared__ uint64_t pv_h0_done[kPipeCount];
-#endif
-  __shared__ volatile int pipe0_vtma_local_shared;
-#if ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME
-  __shared__ int pipe0_consume_phase_count[2];
-#endif
-#if ATTENTION_STORE_OUTPUT
   __shared__ float row_sum_partial[kPipeCount][kTileM];
-#endif
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
 #if ATTENTION_CLOCK_TRACE
@@ -1430,11 +1316,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
 
   if (threadIdx.x == 0) {
-    pipe0_vtma_local_shared = -1;
-#if ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME
-    pipe0_consume_phase_count[0] = 0;
-    pipe0_consume_phase_count[1] = 0;
-#endif
     mbarrier_init(&q_ready, 1);
 #pragma unroll
     for (int p = 0; p < kPipeCount; ++p) {
@@ -1442,24 +1323,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_init(&qk_done[p], 1);
       mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
       mbarrier_init(&v_ready[p], 1);
-#if ATTENTION_SPLIT_S_READY
       mbarrier_init(&s_ready[p][0], kConsumerWarpsPerPipe);
       mbarrier_init(&s_ready[p][1], kConsumerWarpsPerPipe);
-#else
-      mbarrier_init(&s_ready[p], kConsumerWarpsPerPipe);
-#endif
       mbarrier_init(&pv_done[p], 1);
-#if ATTENTION_SPLIT_S_READY && ATTENTION_PV_H0_PINGPONG_DEP && !ATTENTION_PV_PINGPONG_DEP
-      mbarrier_init(&pv_h0_done[p], 1);
-#endif
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
-#if ATTENTION_STORE_OUTPUT
   for (int i = threadIdx.x; i < kPipeCount * kTileM; i += blockDim.x) {
     reinterpret_cast<float*>(row_sum_partial)[i] = 0.0f;
   }
-#endif
   __syncthreads();
 #if ATTENTION_CLOCK_TRACE
   if (threadIdx.x == 0) {
@@ -1468,10 +1340,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __syncthreads();
 #endif
   const unsigned long long clock_trace_base = clock_trace_base_shared;
-#if !ATTENTION_ACCUM_ROW_SUM
-  (void)score_to_exp2_scale;
-#endif
-
   if (warp_id == 0) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
     if (lane == 0) tmem_base_shared = taddr;
@@ -1481,47 +1349,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const uint32_t tmem_base = tmem_base_shared;
   const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
   const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
-  const uint32_t q_tile_row = static_cast<uint32_t>(blockIdx.x * 64);
-  const int q_contig_row_group = static_cast<int>(blockIdx.x) * 16;
   const int q_contig_row = static_cast<int>(blockIdx.x) * kTileM;
+  const int kv_tile_set = static_cast<int>(blockIdx.x) / loop_k_tiles;
+  const int kv_tile_base = kv_tile_set * loop_k_tiles;
 
   if (warp_id == 0) {
-    if (qk_layout == kQkLayoutContiguousSw128) {
 #if ATTENTION_CLOCK_TRACE
-      if (lane0) q_tma_start_shared = clock64();
+    if (lane0) q_tma_start_shared = clock64();
 #endif
-      if (lane0) mbarrier_expect_tx(&q_ready, kTileBytes);
-      __syncwarp();
-      if (lane < 2) {
-        tma_load_2d(&q_map,
-                    smem_ptr_u32(q_smem + lane * (kTileWords / 2)),
-                    &q_ready, lane * 32, q_contig_row);
-      }
-    } else if (qk_layout == kQkLayoutContiguousK16Split4d) {
-#if ATTENTION_CLOCK_TRACE
-      if (lane0) q_tma_start_shared = clock64();
-#endif
-      if (lane0) mbarrier_expect_tx(&q_ready, kTileBytes);
-      __syncwarp();
-      if (lane < 8) {
-        tma_load_4d(&q_map, smem_ptr_u32(q_smem + lane * 1024), &q_ready,
-                    lane * 8, 0, 0, q_contig_row_group);
-      }
-    } else if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-      q_tma_start_shared = clock64();
-#endif
-      mbarrier_expect_tx(&q_ready, kTileBytes);
-      if (qk_layout == kQkLayoutContiguousSingle5d) {
-        tma_load_5d(&q_map, smem_ptr_u32(q_smem), &q_ready, 0, 0, 0,
-                    q_contig_row_group, 0);
-      } else {
-        tma_load_4d(&q_map, smem_ptr_u32(q_smem), &q_ready, 0, 0, q_tile_row, 0);
-      }
+    mbarrier_expect_tx(&q_ready, kTileBytes);
+    if (lane0) {
+      tma_load_2d(&q_map, smem_ptr_u32(q_smem), &q_ready, 0, q_contig_row);
+      tma_load_2d(&q_map, smem_ptr_u32(q_smem + kTileWords / 2), &q_ready, 32,
+                  q_contig_row);
     }
   }
 
-  if (warp_id == 0 || (!ATTENTION_SINGLE_PIPE_MODE && warp_id == 1)) {
+  if (warp_id == 0 || warp_id == 1) {
     const int pipe = warp_id;
     const uint32_t idesc = make_qk_idesc();
     uint64_t q_desc[8];
@@ -1529,14 +1373,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (lane0) {
 #pragma unroll
       for (int mma = 0; mma < kMmasPerTile; ++mma) {
-        if (qk_layout == kQkLayoutContiguousSw128) {
-          q_desc[mma] = make_sw128_major_k_smem_desc(smem_ptr_u32(q_smem), mma);
-          k_desc[mma] =
-              make_sw128_major_k_smem_desc(smem_ptr_u32(k_smem[pipe]), mma);
-        } else {
-          q_desc[mma] = make_smem_desc(smem_ptr_u32(q_smem + mma * 1024));
-          k_desc[mma] = make_smem_desc(smem_ptr_u32(k_smem[pipe] + mma * 1024));
-        }
+        q_desc[mma] = make_sw128_major_k_smem_desc(smem_ptr_u32(q_smem), mma);
+        k_desc[mma] =
+            make_sw128_major_k_smem_desc(smem_ptr_u32(k_smem[pipe]), mma);
       }
     }
     mbarrier_wait(&q_ready, 0);
@@ -1551,9 +1390,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
     int iter = pipe;
     int local = 0;
-    for (; iter < repeats; iter += kActivePipeStride, ++local) {
+    if (iter < loop_repeats) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
-      const int k_tile = iter % k_tiles;
+      const int k_tile = iter % loop_k_tiles;
+      const int global_k_tile = kv_tile_base + k_tile;
 #if ATTENTION_CLOCK_TRACE
       const int trace_idx = iter - clock_trace_start;
       const bool trace_iter =
@@ -1562,52 +1402,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
       unsigned long long k_tma_start = 0ull;
 #endif
-      if (local > 0) {
-        mbarrier_wait(&qk_done[pipe], static_cast<uint32_t>((local - 1) & 1));
 #if ATTENTION_CLOCK_TRACE
-        const int done_iter = iter - kActivePipeStride;
-        const int done_trace_idx = done_iter - clock_trace_start;
-        if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-            done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
-          end_clock_trace_record(clock_trace,
-                                 done_trace_idx * kClockTraceSlotsPerIter + 2,
-                                 clock64(), clock_trace_base);
-        }
+      if (trace_iter && lane0) k_tma_start = clock64();
 #endif
-      }
-      if (qk_layout == kQkLayoutContiguousSw128) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter && lane0) k_tma_start = clock64();
-#endif
-        if (lane0) mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
-        __syncwarp();
-        if (lane < 2) {
-          tma_load_2d(&k_map,
-                      smem_ptr_u32(k_smem[pipe] + lane * (kTileWords / 2)),
-                      &k_ready[pipe], lane * 32, k_tile * kTileM);
-        }
-      } else if (qk_layout == kQkLayoutContiguousK16Split4d) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter && lane0) k_tma_start = clock64();
-#endif
-        if (lane0) mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
-        __syncwarp();
-        if (lane < 8) {
-          tma_load_4d(&k_map, smem_ptr_u32(k_smem[pipe] + lane * 1024),
-                      &k_ready[pipe], lane * 8, 0, 0, k_tile * 16);
-        }
-      } else if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) k_tma_start = clock64();
-#endif
-        mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
-        if (qk_layout == kQkLayoutContiguousSingle5d) {
-          tma_load_5d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0, 0, 0,
-                      k_tile * 16, 0);
-        } else {
-          tma_load_4d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0, 0,
-                      k_tile * 64, 0);
-        }
+      mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
+      if (lane0) {
+        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0,
+                    global_k_tile * kTileM);
+        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe] + kTileWords / 2),
+                    &k_ready[pipe], 32, global_k_tile * kTileM);
       }
       mbarrier_wait(&k_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
@@ -1618,18 +1421,75 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                  k_tma_start, k_tma_end, clock_trace_base);
       }
 #endif
-      if (local > 0) {
-        mbarrier_wait(&p_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+      if (pipe != 0) {
+        mbarrier_wait(&qk_done[0], phase);
       }
-#if ATTENTION_QK_PINGPONG_DEP && !ATTENTION_SINGLE_PIPE_MODE
-      if (pipe == 0) {
-        if (local > 0) {
-          mbarrier_wait(&qk_done[1], static_cast<uint32_t>((local - 1) & 1));
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          begin_clock_trace_record(clock_trace, trace_slot_base + 2,
+                                   kClockTraceQkMma, iter, pipe, warp_id, -1,
+                                   -1, clock64(), clock_trace_base);
         }
+#endif
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
+        }
+        tcgen05_commit(&qk_done[pipe]);
+      }
+      iter += kActivePipeStride;
+      ++local;
+    }
+    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
+      const uint32_t phase = static_cast<uint32_t>(local & 1);
+      const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
+      const int k_tile = iter % loop_k_tiles;
+      const int global_k_tile = kv_tile_base + k_tile;
+#if ATTENTION_CLOCK_TRACE
+      const int trace_idx = iter - clock_trace_start;
+      const bool trace_iter =
+          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
+          trace_idx < clock_trace_iters;
+      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+      unsigned long long k_tma_start = 0ull;
+#endif
+      mbarrier_wait(&qk_done[pipe], prev_phase);
+#if ATTENTION_CLOCK_TRACE
+      const int done_iter = iter - kActivePipeStride;
+      const int done_trace_idx = done_iter - clock_trace_start;
+      if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+          done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
+        end_clock_trace_record(clock_trace,
+                               done_trace_idx * kClockTraceSlotsPerIter + 2,
+                               clock64(), clock_trace_base);
+      }
+#endif
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter && lane0) k_tma_start = clock64();
+#endif
+      mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
+      if (lane0) {
+        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0,
+                    global_k_tile * kTileM);
+        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe] + kTileWords / 2),
+                    &k_ready[pipe], 32, global_k_tile * kTileM);
+      }
+      mbarrier_wait(&k_ready[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        const unsigned long long k_tma_end = clock64();
+        write_clock_trace_record(clock_trace, trace_slot_base + 1,
+                                 kClockTraceKTma, iter, pipe, warp_id, -1, -1,
+                                 k_tma_start, k_tma_end, clock_trace_base);
+      }
+#endif
+      mbarrier_wait(&p_done[pipe], prev_phase);
+      if (pipe == 0) {
+        mbarrier_wait(&qk_done[1], prev_phase);
       } else {
         mbarrier_wait(&qk_done[0], phase);
       }
-#endif
       if (lane0) {
 #if ATTENTION_CLOCK_TRACE
         if (trace_iter) {
@@ -1660,28 +1520,22 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
   }
 
-  if (warp_id == 2 || (!ATTENTION_SINGLE_PIPE_MODE && warp_id == 3)) {
+  if (warp_id == 2 || warp_id == 3) {
     const int pipe = warp_id - 2;
-    const uint32_t idesc = qk_layout == kQkLayoutContiguousSw128
-                                ? (make_qk_idesc() | (1u << 16))
-                                : make_qk_idesc();
+    const uint32_t idesc = make_qk_idesc() | (1u << 16);
     uint64_t s_desc[8];
     uint64_t v_desc[8];
     if (lane0) {
 #pragma unroll
       for (int mma = 0; mma < kMmasPerTile; ++mma) {
         s_desc[mma] = make_s_smem_desc(smem_ptr_u32(s_smem[pipe] + mma * 1024));
-        if (qk_layout == kQkLayoutContiguousSw128) {
-          v_desc[mma] =
-              make_sw128_major_mn_smem_desc(smem_ptr_u32(v_smem[pipe]), mma);
-        } else {
-          v_desc[mma] = make_smem_desc(smem_ptr_u32(v_smem[pipe] + mma * 1024));
-        }
+        v_desc[mma] =
+            make_sw128_major_mn_smem_desc(smem_ptr_u32(v_smem[pipe]), mma);
       }
     }
     int iter = pipe;
     int local = 0;
-    for (; iter < repeats; iter += kActivePipeStride, ++local) {
+    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
 #if ATTENTION_CLOCK_TRACE
       const int trace_idx = iter - clock_trace_start;
@@ -1694,35 +1548,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       }
-#if ATTENTION_V_TMA_AFTER_S_READY
-#if ATTENTION_SPLIT_S_READY
-      mbarrier_wait(&s_ready[pipe][0], phase);
-#else
-      mbarrier_wait(&s_ready[pipe], phase);
-#endif
-#endif
-      if (qk_layout == kQkLayoutContiguousSw128) {
+      const int global_v_tile = kv_tile_base + (iter % loop_k_tiles);
 #if ATTENTION_CLOCK_TRACE
-        if (trace_iter && lane0) v_tma_start = clock64();
+      if (trace_iter && lane0) v_tma_start = clock64();
 #endif
-        if (lane0) mbarrier_expect_tx(&v_ready[pipe], kTileBytes);
-        if (lane0) {
-          tma_load_4d(&v_map, smem_ptr_u32(v_smem[pipe]), &v_ready[pipe], 0, 0,
-                      0, (iter % k_tiles) * 8);
-        }
-        if (lane0 && pipe == 0) {
-          pipe0_vtma_local_shared = local;
-        }
-      } else if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) v_tma_start = clock64();
-#endif
-        mbarrier_expect_tx(&v_ready[pipe], kTileBytes);
+      mbarrier_expect_tx(&v_ready[pipe], kTileBytes);
+      if (lane0) {
         tma_load_4d(&v_map, smem_ptr_u32(v_smem[pipe]), &v_ready[pipe], 0, 0,
-                    (iter % k_tiles) * 64, 0);
-        if (pipe == 0) {
-          pipe0_vtma_local_shared = local;
-        }
+                    0, global_v_tile * 8);
       }
       mbarrier_wait(&v_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
@@ -1733,14 +1566,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                  v_tma_start, v_tma_end, clock_trace_base);
       }
 #endif
-#if !ATTENTION_V_TMA_AFTER_S_READY
-#if ATTENTION_SPLIT_S_READY
       mbarrier_wait(&s_ready[pipe][0], phase);
-#else
-      mbarrier_wait(&s_ready[pipe], phase);
-#endif
-#endif
-#if ATTENTION_PV_PINGPONG_DEP && !ATTENTION_SINGLE_PIPE_MODE
       if (pipe == 0) {
         if (local > 0) {
           mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
@@ -1748,26 +1574,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       } else {
         mbarrier_wait(&pv_done[0], phase);
       }
-#elif ATTENTION_SPLIT_S_READY && ATTENTION_PV_H0_PINGPONG_DEP && !ATTENTION_SINGLE_PIPE_MODE
-      if (pipe == 0) {
-        if (local > 0) {
-          mbarrier_wait(&pv_h0_done[1],
-                        static_cast<uint32_t>((local - 1) & 1));
-        }
-      } else {
-        mbarrier_wait(&pv_h0_done[0], phase);
-      }
-#endif
-#if ATTENTION_PIPE1_PV_WAIT_PIPE0_VTMA && !ATTENTION_SINGLE_PIPE_MODE
-      if (pipe == 1 && lane0) {
-        const int target_pipe0_local = local + 1;
-        if (target_pipe0_local * kPipeCount < repeats) {
-          while (pipe0_vtma_local_shared < target_pipe0_local) {
-            asm volatile("" ::: "memory");
-          }
-        }
-      }
-#endif
       if (lane0) {
 #if ATTENTION_CLOCK_TRACE
         if (trace_iter) {
@@ -1775,9 +1581,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                    kClockTracePvMma, iter, pipe, warp_id, -1,
                                    -1, clock64(), clock_trace_base);
         }
-#endif
-#if ATTENTION_SPLIT_S_READY
-#if ATTENTION_CLOCK_TRACE
         const unsigned long long pv_h0_start =
             trace_iter ? clock64() : 0ull;
 #endif
@@ -1793,9 +1596,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                    0, pv_h0_start, clock64(),
                                    clock_trace_base);
         }
-#endif
-#if ATTENTION_PV_H0_PINGPONG_DEP && !ATTENTION_PV_PINGPONG_DEP
-        tcgen05_commit(&pv_h0_done[pipe]);
 #endif
       }
       mbarrier_wait(&s_ready[pipe][1], phase);
@@ -1817,13 +1617,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                    clock_trace_base);
         }
 #endif
-#else
-#pragma unroll
-        for (int mma = 0; mma < kMmasPerTile; ++mma) {
-          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                              local != 0 || mma != 0);
-        }
-#endif
         tcgen05_commit(&pv_done[pipe]);
 #if ATTENTION_CLOCK_TRACE
         if (trace_iter) {
@@ -1836,96 +1629,47 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
   }
 
-  if (warp_id >= 4 && warp_id < kMainWarps &&
-      (!ATTENTION_SINGLE_PIPE_MODE || warp_id < 4 + kConsumerWarpsPerPipe)) {
+  if (warp_id >= 4 && warp_id < kMainWarps) {
     const int pipe = (warp_id - 4) / kConsumerWarpsPerPipe;
     const int consumer_slot = (warp_id - 4) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
-#if ATTENTION_ACCUM_ROW_SUM
     const bool do_row_sum = output != nullptr;
     const int row = consumer_warp * 32 + lane;
     float row_sum_reg = 0.0f;
-#endif
     int iter = pipe;
     int local = 0;
-    for (; iter < repeats; iter += kActivePipeStride, ++local) {
+    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
       mbarrier_wait(&qk_done[pipe], phase);
 
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       }
-#if ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME && !ATTENTION_SINGLE_PIPE_MODE
-      if (pipe == 1) {
-        const int expected_count = ((local >> 1) + 1) * kConsumerWarpsPerPipe;
-        volatile int* consume_count = pipe0_consume_phase_count;
-        while (consume_count[phase] < expected_count) {
-          asm volatile("" ::: "memory");
-        }
-      }
-#endif
-
       const uint32_t row_taddr = p_taddr[pipe] +
                                  (static_cast<uint32_t>(consumer_warp * 32) << 16);
-#if ATTENTION_ACCUM_ROW_SUM
       const float row_sum0 =
           tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
               row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
               score_to_exp2_scale, clock_trace, clock_trace_iters,
               clock_trace_start, clock_trace_base, iter, pipe);
-#if ATTENTION_SPLIT_S_READY
-      if (lane == 0) {
+      if (lane0) {
         mbarrier_arrive(&s_ready[pipe][0]);
       }
-#endif
       const float row_sum1 =
           tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
               row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe],
               true, score_to_exp2_scale, clock_trace, clock_trace_iters,
               clock_trace_start, clock_trace_base, iter, pipe);
       if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
-      if (lane == 0) {
-#if ATTENTION_SPLIT_S_READY
+      if (lane0) {
         mbarrier_arrive(&s_ready[pipe][1]);
-#else
-        mbarrier_arrive(&s_ready[pipe]);
-#endif
-      }
-#else
-      TCGEN05_LD_X64_WAIT_PACK_STORE(row_taddr, s_smem[pipe], consumer_warp, 0,
-                                     &p_done[pipe], false, nullptr, iter, pipe);
-#if ATTENTION_SPLIT_S_READY
-      if (lane == 0) {
-        mbarrier_arrive(&s_ready[pipe][0]);
-      }
-#endif
-      TCGEN05_LD_X64_WAIT_PACK_STORE(row_taddr + 64u, s_smem[pipe],
-                                     consumer_warp, 1, &p_done[pipe], true,
-                                     nullptr, iter, pipe);
-      if (lane == 0) {
-#if ATTENTION_SPLIT_S_READY
-        mbarrier_arrive(&s_ready[pipe][1]);
-#else
-        mbarrier_arrive(&s_ready[pipe]);
-#endif
-      }
-#endif
-      if (lane == 0) {
-#if ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME && !ATTENTION_SINGLE_PIPE_MODE
-        if (pipe == 0) {
-          atomicAdd(&pipe0_consume_phase_count[phase], 1);
-        }
-#endif
       }
     }
-#if ATTENTION_ACCUM_ROW_SUM
     if (do_row_sum) {
       row_sum_partial[pipe][row] = row_sum_reg;
     }
-#endif
   }
 
-#if ATTENTION_STORE_OUTPUT && ATTENTION_MATERIALIZE_OUTPUT
   if (output != nullptr) {
 #if ATTENTION_CLOCK_TRACE
     const bool trace_cta = clock_trace != nullptr && blockIdx.x == 0;
@@ -1938,9 +1682,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     const bool trace_cta = false;
     const int trace_extra_base = 0;
 #endif
-    const int pipe0_local_count =
-        ATTENTION_SINGLE_PIPE_MODE ? repeats : (repeats + 1) / 2;
-    const int pipe1_local_count = ATTENTION_SINGLE_PIPE_MODE ? 0 : repeats / 2;
+    const int pipe0_local_count = (loop_repeats + 1) / 2;
+    const int pipe1_local_count = loop_repeats / 2;
     if (pipe0_local_count > 0) {
       mbarrier_wait(&pv_done[0], static_cast<uint32_t>((pipe0_local_count - 1) & 1));
     }
@@ -1951,7 +1694,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (trace_cta && threadIdx.x == 0) {
       const unsigned long long tail_wait_end = clock64();
       write_clock_trace_record(clock_trace, trace_extra_base, kClockTraceTailWait,
-                               repeats, -1, 0, -1, -1, tail_wait_start,
+                               loop_repeats, -1, 0, -1, -1, tail_wait_start,
                                tail_wait_end, clock_trace_base);
     }
 #endif
@@ -1959,7 +1702,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     float* output_smem = reinterpret_cast<float*>(q_smem);
     uint32_t* output_bf16_smem =
         reinterpret_cast<uint32_t*>(output_smem + kTileBf16Elems);
-#if ATTENTION_DRAIN_OUTPUT_TMEM
     const bool trace_drain =
         trace_cta && lane0 && warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe;
     const unsigned long long drain_start = trace_drain ? clock64() : 0ull;
@@ -1992,21 +1734,18 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const unsigned long long drain_end = clock64();
       const int consumer_warp = warp_id - 4;
       write_clock_trace_record(clock_trace, trace_extra_base + 1 + consumer_warp,
-                               kClockTraceTmemDrain, repeats, -1, warp_id,
+                               kClockTraceTmemDrain, loop_repeats, -1, warp_id,
                                consumer_warp, -1, drain_start, drain_end,
                                clock_trace_base);
     }
-#endif
     __syncthreads();
-#if ATTENTION_PACK_OUTPUT
     const bool trace_pack =
         trace_cta && lane0 && warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe;
     const unsigned long long pack_start = trace_pack ? clock64() : 0ull;
     if (warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe) {
       const int consumer_warp = warp_id - 4;
       const int row = consumer_warp * 32 + lane;
-      const float denom = row_sum_partial[0][row] +
-                          (ATTENTION_SINGLE_PIPE_MODE ? 0.0f : row_sum_partial[1][row]);
+      const float denom = row_sum_partial[0][row] + row_sum_partial[1][row];
       const float inv_sum = denom != 0.0f ? 1.0f / denom : 0.0f;
       const float* row_src = output_smem + static_cast<size_t>(row) * kTileN;
       uint32_t* row_dst = output_bf16_smem + static_cast<size_t>(row) * (kTileN / 2);
@@ -2021,13 +1760,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const unsigned long long pack_end = clock64();
       const int consumer_warp = warp_id - 4;
       write_clock_trace_record(clock_trace, trace_extra_base + 5 + consumer_warp,
-                               kClockTracePackNorm, repeats, -1, warp_id,
+                               kClockTracePackNorm, loop_repeats, -1, warp_id,
                                consumer_warp, -1, pack_start, pack_end,
                                clock_trace_base);
     }
-#endif
     __syncthreads();
-#if ATTENTION_DIRECT_STORE_OUTPUT
     const unsigned long long store_start =
         trace_cta && threadIdx.x == 0 ? clock64() : 0ull;
     uint32_t* output_words = reinterpret_cast<uint32_t*>(output);
@@ -2038,22 +1775,20 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (trace_cta && threadIdx.x == 0) {
       const unsigned long long store_end = clock64();
       write_clock_trace_record(clock_trace, trace_extra_base + 9,
-                               kClockTraceGlobalStore, repeats, -1, 0, -1, -1,
+                               kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
                                store_start, store_end, clock_trace_base);
     }
-#endif
     __syncthreads();
 #if ATTENTION_CLOCK_TRACE
     if (trace_cta && threadIdx.x == 0) {
       const unsigned long long tail_total_end = clock64();
       write_clock_trace_record(clock_trace, trace_extra_base + 10,
-                               kClockTraceTailTotal, repeats, -1, 0, -1, -1,
+                               kClockTraceTailTotal, loop_repeats, -1, 0, -1, -1,
                                tail_total_start, tail_total_end,
                                clock_trace_base);
     }
 #endif
   }
-#endif
 
   if (threadIdx.x == 0) {
     tcgen05_fence_after_thread_sync();
@@ -2245,11 +1980,6 @@ double tflops_from_flops(double flops, double ms) {
   return ms > 0.0 ? flops / (ms * 1.0e-3) / 1.0e12 : 0.0;
 }
 
-int selected_qk_layout(const Args& args) {
-  (void)args;
-  return kFixedQkLayout;
-}
-
 RunResult run_kernel(const Args& args,
                      const CUtensorMap& q_map,
                      const CUtensorMap& k_map,
@@ -2265,14 +1995,19 @@ RunResult run_kernel(const Args& args,
 #endif
                      ) {
   RunResult result{};
-  CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel,
+  auto kernel = args.repeats == kFixedBenchmarkRepeats &&
+                        args.k_tiles == kFixedBenchmarkKTiles
+                    ? qk_tma_mma_ld_kernel<kFixedBenchmarkRepeats,
+                                            kFixedBenchmarkKTiles>
+                    : qk_tma_mma_ld_kernel<0, 0>;
+  CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
   CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
-      active_ctas_per_sm, qk_tma_mma_ld_kernel, kMainThreads, kDynamicSmemBytes));
+      active_ctas_per_sm, kernel, kMainThreads, kDynamicSmemBytes));
 
   for (int i = 0; i < args.warmup; ++i) {
-    qk_tma_mma_ld_kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
+    kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
         q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
         score_to_exp2_scale, output
 #if ATTENTION_CLOCK_TRACE
@@ -2301,7 +2036,7 @@ RunResult run_kernel(const Args& args,
   CUDA_CHECK(cudaEventCreate(&stop));
   CUDA_CHECK(cudaEventRecord(start));
   for (int i = 0; i < args.iters; ++i) {
-    qk_tma_mma_ld_kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
+    kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
         q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
         score_to_exp2_scale, output
 #if ATTENTION_CLOCK_TRACE
@@ -2362,42 +2097,24 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
   const double s_store_bytes = groups * kTileBytes;
   const double qk_flops = groups * kMmasPerTile * kFlopsPerMma;
   const double pv_flops = qk_flops;
-  const int qk_layout = selected_qk_layout(args);
-  const char* mode =
-      qk_layout == kQkLayoutContiguousSingle5d
-          ? (args.store_output ? "contiguous_qk_5d_tma_pv_2pipe_bf16_output"
-                               : "contiguous_qk_5d_tma_pv_2pipe")
-      : qk_layout == kQkLayoutContiguousK16Split4d
-          ? (args.store_output ? "contiguous_qk_k16_split4d_tma_pv_2pipe_bf16_output"
-                               : "contiguous_qk_k16_split4d_tma_pv_2pipe")
-      : qk_layout == kQkLayoutContiguousSw128
-          ? (args.store_output ? "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output"
-                               : "contiguous_qkv_sw128_2d_tma_pv_2pipe")
-          : (args.store_output ? "qk_pack_smem_pv_2pipe_bf16_output"
-                               : "qk_pack_smem_pv_2pipe");
+  const int kv_tile_sets = (args.blocks + args.k_tiles - 1) / args.k_tiles;
+  const int kv_total_tiles = kv_tile_sets * args.k_tiles;
+  const char* mode = "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output";
   const char* notes =
-      qk_layout == kQkLayoutContiguousSingle5d
-          ? "qk_contiguous_row_major_single_5d_tma_v_internal_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_bf16_output_when_enabled"
-      : qk_layout == kQkLayoutContiguousK16Split4d
-          ? "qk_contiguous_row_major_k16_split_4d_tma_v_internal_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_bf16_output_when_enabled"
-      : qk_layout == kQkLayoutContiguousSw128
-          ? "qk_contiguous_row_major_2d_sw128_tma_major_k_v_contiguous_k16_sw128_mn_major_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_bf16_output_when_enabled"
-          : "active_path_p128_c184_nvcc_ld_regs_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_bf16_output_when_enabled";
+      "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_major_k_"
+      "v_contiguous_k16_sw128_mn_major_qk_pingpong_dep_pv_pingpong_dep_"
+      "split_s_ready_bf16_output";
   char output_shape[64];
-  if (args.store_output) {
-    std::snprintf(output_shape, sizeof(output_shape), "O[%d,128,128]_bf16", args.blocks);
-  } else {
-    std::snprintf(output_shape, sizeof(output_shape), "none");
-  }
+  std::snprintf(output_shape, sizeof(output_shape), "O[%d,128,128]_bf16", args.blocks);
 
   std::fprintf(csv,
                "%s,Q[%d,128,128]_bf16,K[%d,128,128]_bf16,V[%d,128,128]_bf16,%s,%d,%d,%d,%d,%d,%d,%d,"
                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%.6f,%.0f,%.0f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
                "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%s,%s,%s\n",
-               mode, args.blocks, args.k_tiles, args.k_tiles, output_shape, kTileM, kTileN, kMmaK,
+               mode, args.blocks, kv_total_tiles, kv_total_tiles, output_shape, kTileM, kTileN, kMmaK,
                kMmasPerTile, args.blocks, args.repeats, args.k_tiles, args.warmup, args.iters,
                kMainThreads, active, kDynamicSmemBytes, kTmemAllocCols, kTmemUsedCols, 256, 256,
-               args.store_output ? "bf16_direct" : "smem", result.ms, groups, total_mmas,
+               "bf16_direct", result.ms, groups, total_mmas,
                q_tma_bytes / 1.0e9, k_tma_bytes / 1.0e9, v_tma_bytes / 1.0e9,
                (q_tma_bytes + k_tma_bytes + v_tma_bytes) / 1.0e9,
                p_read_bytes / 1.0e9, s_store_bytes / 1.0e9,
@@ -2437,13 +2154,8 @@ void init_trace_record(TraceRecord* r, int iter) {
   r->mma_start = 0xffffffffffffffffull;
   r->ld_start = 0xffffffffffffffffull;
   r->iter = static_cast<unsigned int>(iter);
-#if ATTENTION_SINGLE_PIPE_MODE
-  r->pipe = 0;
-  r->warp_id = 0;
-#else
   r->pipe = static_cast<unsigned int>(iter & 1);
   r->warp_id = r->pipe;
-#endif
 }
 
 const char* clock_trace_stage_name(int stage) {
@@ -2511,6 +2223,18 @@ unsigned long long trace_end_or_zero(unsigned long long start, unsigned long lon
   return trace_cycles(start, end) > 0 ? end : 0ull;
 }
 
+std::string epilogue_trace_path(const char* csv_path) {
+  std::string path(csv_path ? csv_path : "attention_trace.csv");
+  const std::string suffix = ".csv";
+  if (path.size() >= suffix.size() &&
+      path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    path.insert(path.size() - suffix.size(), "_epilogue");
+  } else {
+    path += ".epilogue.csv";
+  }
+  return path;
+}
+
 void write_clock_trace_csv(const Args& args,
                            const RunResult& result,
                            const std::vector<ClockTraceRecord>& records) {
@@ -2518,9 +2242,53 @@ void write_clock_trace_csv(const Args& args,
   for (int i = 0; i < args.clock_trace_iters; ++i) {
     init_trace_record(&rows[i], args.clock_trace_start + i);
   }
+  unsigned long long tail_wait_start = 0xffffffffffffffffull;
+  unsigned long long tail_wait_end = 0;
+  unsigned long long tmem_drain_start[kConsumerWarpsPerPipe];
+  unsigned long long tmem_drain_end[kConsumerWarpsPerPipe];
+  unsigned long long pack_norm_start[kConsumerWarpsPerPipe];
+  unsigned long long pack_norm_end[kConsumerWarpsPerPipe];
+  for (int i = 0; i < kConsumerWarpsPerPipe; ++i) {
+    tmem_drain_start[i] = 0xffffffffffffffffull;
+    tmem_drain_end[i] = 0;
+    pack_norm_start[i] = 0xffffffffffffffffull;
+    pack_norm_end[i] = 0;
+  }
+  unsigned long long global_store_start = 0xffffffffffffffffull;
+  unsigned long long global_store_end = 0;
+  unsigned long long tail_total_start = 0xffffffffffffffffull;
+  unsigned long long tail_total_end = 0;
 
   for (const ClockTraceRecord& r : records) {
     if (r.stage == 0 || r.end <= r.start) continue;
+    if (r.iter == args.k_tiles) {
+      switch (r.stage) {
+        case kClockTraceTailWait:
+          merge_trace_range(&tail_wait_start, &tail_wait_end, r.start, r.end);
+          break;
+        case kClockTraceTmemDrain:
+          if (r.consumer_warp >= 0 && r.consumer_warp < kConsumerWarpsPerPipe) {
+            merge_trace_range(&tmem_drain_start[r.consumer_warp],
+                              &tmem_drain_end[r.consumer_warp], r.start, r.end);
+          }
+          break;
+        case kClockTracePackNorm:
+          if (r.consumer_warp >= 0 && r.consumer_warp < kConsumerWarpsPerPipe) {
+            merge_trace_range(&pack_norm_start[r.consumer_warp],
+                              &pack_norm_end[r.consumer_warp], r.start, r.end);
+          }
+          break;
+        case kClockTraceGlobalStore:
+          merge_trace_range(&global_store_start, &global_store_end, r.start, r.end);
+          break;
+        case kClockTraceTailTotal:
+          merge_trace_range(&tail_total_start, &tail_total_end, r.start, r.end);
+          break;
+        default:
+          break;
+      }
+      continue;
+    }
     if (r.iter < args.clock_trace_start ||
         r.iter >= args.clock_trace_start + args.clock_trace_iters) {
       continue;
@@ -2542,14 +2310,17 @@ void write_clock_trace_csv(const Args& args,
       case kClockTracePvMma:
         out.pv_start = r.start;
         out.pv_end = r.end;
+        out.pv_warp_id = r.warp_id;
         break;
       case kClockTracePvMmaH0:
         out.pv_h0_start = r.start;
         out.pv_h0_end = r.end;
+        out.pv_h0_warp_id = r.warp_id;
         break;
       case kClockTracePvMmaH1:
         out.pv_h1_start = r.start;
         out.pv_h1_end = r.end;
+        out.pv_h1_warp_id = r.warp_id;
         break;
       case kClockTraceSync:
         if (r.half >= 0 && r.half < kClockTraceSyncCount) {
@@ -2595,8 +2366,9 @@ void write_clock_trace_csv(const Args& args,
                "mode,elapsed_ms,iter,pipe,warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
                "mma_cycles,ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
                "st_start,st_end,st_cycles,v_tma_start,v_tma_end,v_tma_cycles,"
-               "pv_start,pv_end,pv_cycles,pv_h0_start,pv_h0_end,pv_h0_cycles,"
-               "pv_h1_start,pv_h1_end,pv_h1_cycles,total_start,total_end,total_cycles");
+               "pv_start,pv_end,pv_cycles,pv_warp_id,pv_h0_start,pv_h0_end,"
+               "pv_h0_cycles,pv_h0_warp_id,pv_h1_start,pv_h1_end,pv_h1_cycles,"
+               "pv_h1_warp_id,total_start,total_end,total_cycles");
   for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
     std::fprintf(csv, ",ld_warp%d_start,ld_warp%d_end", w, w);
   }
@@ -2614,27 +2386,11 @@ void write_clock_trace_csv(const Args& args,
   }
   std::fprintf(csv, ",status,cuda_error,notes\n");
 
-  const int qk_layout = selected_qk_layout(args);
-  const char* mode =
-      qk_layout == kQkLayoutContiguousSingle5d
-          ? (args.store_output ? "contiguous_qk_5d_tma_pv_2pipe_bf16_output_trace"
-                               : "contiguous_qk_5d_tma_pv_2pipe_trace")
-      : qk_layout == kQkLayoutContiguousK16Split4d
-          ? (args.store_output ? "contiguous_qk_k16_split4d_tma_pv_2pipe_bf16_output_trace"
-                               : "contiguous_qk_k16_split4d_tma_pv_2pipe_trace")
-      : qk_layout == kQkLayoutContiguousSw128
-          ? (args.store_output ? "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_trace"
-                               : "contiguous_qkv_sw128_2d_tma_pv_2pipe_trace")
-          : (args.store_output ? "qk_pack_smem_pv_2pipe_bf16_output_trace"
-                               : "qk_pack_smem_pv_2pipe_trace");
+  const char* mode = "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_trace";
   const char* notes =
-      qk_layout == kQkLayoutContiguousSingle5d
-          ? "qk_contiguous_row_major_single_5d_tma_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_trace_schema"
-      : qk_layout == kQkLayoutContiguousK16Split4d
-          ? "qk_contiguous_row_major_k16_split_4d_tma_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_trace_schema"
-      : qk_layout == kQkLayoutContiguousSw128
-          ? "qk_contiguous_row_major_2d_sw128_tma_v_contiguous_k16_sw128_mn_major_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE "_trace_schema"
-          : "existing_trace_schema_from_qk_tma_mma_ld_pack_st_" ATTENTION_QK_DEP_NOTE "_" ATTENTION_PV_DEP_NOTE "_" ATTENTION_S_READY_NOTE;
+      "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_"
+      "v_contiguous_k16_sw128_mn_major_qk_pingpong_dep_pv_pingpong_dep_"
+      "split_s_ready_trace_schema";
   for (const TraceRecord& r : rows) {
     const unsigned long long ld_start = trace_start_or_zero(r.ld_start);
     const unsigned long long pack_start = trace_start_or_zero(r.pack_start);
@@ -2651,7 +2407,7 @@ void write_clock_trace_csv(const Args& args,
     std::fprintf(csv,
                  "%s,%.6f,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
-                 "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu",
+                 "%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
                  mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_start, r.tma_end,
                  trace_cycles(r.tma_start, r.tma_end), mma_start,
                  trace_end_or_zero(r.mma_start, r.mma_end),
@@ -2660,9 +2416,10 @@ void write_clock_trace_csv(const Args& args,
                  trace_cycles(r.pack_start, r.pack_end), st_start, r.st_end,
                  trace_cycles(r.st_start, r.st_end), r.v_tma_start, r.v_tma_end,
                  trace_cycles(r.v_tma_start, r.v_tma_end), pv_start, r.pv_end,
-                 trace_cycles(r.pv_start, r.pv_end), pv_h0_start, r.pv_h0_end,
-                 trace_cycles(r.pv_h0_start, r.pv_h0_end), pv_h1_start,
-                 r.pv_h1_end, trace_cycles(r.pv_h1_start, r.pv_h1_end),
+                 trace_cycles(r.pv_start, r.pv_end), r.pv_warp_id, pv_h0_start,
+                 r.pv_h0_end, trace_cycles(r.pv_h0_start, r.pv_h0_end),
+                 r.pv_h0_warp_id, pv_h1_start, r.pv_h1_end,
+                 trace_cycles(r.pv_h1_start, r.pv_h1_end), r.pv_h1_warp_id,
                  total_start, total_end,
                  trace_cycles(total_start, total_end));
     for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
@@ -2690,6 +2447,39 @@ void write_clock_trace_csv(const Args& args,
                  cudaGetErrorString(result.error), notes);
   }
   std::fclose(csv);
+
+  const std::string epi_path = epilogue_trace_path(args.csv);
+  FILE* epi = std::fopen(epi_path.c_str(), "w");
+  if (!epi) {
+    std::perror(epi_path.c_str());
+    std::exit(1);
+  }
+  std::fprintf(epi, "stage,consumer_warp,start,end,cycles\n");
+  std::fprintf(epi, "tail_wait_pv_done,-1,%llu,%llu,%llu\n",
+               trace_start_or_zero(tail_wait_start),
+               trace_end_or_zero(tail_wait_start, tail_wait_end),
+               trace_cycles(tail_wait_start, tail_wait_end));
+  for (int w = 0; w < kConsumerWarpsPerPipe; ++w) {
+    std::fprintf(epi, "tmem_drain,%d,%llu,%llu,%llu\n", w,
+                 trace_start_or_zero(tmem_drain_start[w]),
+                 trace_end_or_zero(tmem_drain_start[w], tmem_drain_end[w]),
+                 trace_cycles(tmem_drain_start[w], tmem_drain_end[w]));
+  }
+  for (int w = 0; w < kConsumerWarpsPerPipe; ++w) {
+    std::fprintf(epi, "pack_norm,%d,%llu,%llu,%llu\n", w,
+                 trace_start_or_zero(pack_norm_start[w]),
+                 trace_end_or_zero(pack_norm_start[w], pack_norm_end[w]),
+                 trace_cycles(pack_norm_start[w], pack_norm_end[w]));
+  }
+  std::fprintf(epi, "global_store,-1,%llu,%llu,%llu\n",
+               trace_start_or_zero(global_store_start),
+               trace_end_or_zero(global_store_start, global_store_end),
+               trace_cycles(global_store_start, global_store_end));
+  std::fprintf(epi, "tail_total,-1,%llu,%llu,%llu\n",
+               trace_start_or_zero(tail_total_start),
+               trace_end_or_zero(tail_total_start, tail_total_end),
+               trace_cycles(tail_total_start, tail_total_end));
+  std::fclose(epi);
 }
 
 uint16_t float_to_bf16_bits(float value) {
@@ -3091,8 +2881,6 @@ void parse_args(int argc, char** argv, Args* args) {
   for (int i = 1; i < argc; ++i) {
     if (!std::strcmp(argv[i], "--blocks") && i + 1 < argc) {
       args->blocks = std::atoi(argv[++i]);
-    } else if (!std::strcmp(argv[i], "--repeats") && i + 1 < argc) {
-      args->repeats = std::atoi(argv[++i]);
     } else if (!std::strcmp(argv[i], "--k-tiles") && i + 1 < argc) {
       args->k_tiles = std::atoi(argv[++i]);
       args->k_tiles_set = true;
@@ -3100,20 +2888,6 @@ void parse_args(int argc, char** argv, Args* args) {
       args->warmup = std::atoi(argv[++i]);
     } else if (!std::strcmp(argv[i], "--iters") && i + 1 < argc) {
       args->iters = std::atoi(argv[++i]);
-    } else if (!std::strcmp(argv[i], "--store-output")) {
-      args->store_output = true;
-    } else if (!std::strcmp(argv[i], "--contiguous-qk")) {
-      args->contiguous_qk = true;
-      args->contiguous_qk_single_5d = false;
-      args->contiguous_qk_sw128 = false;
-    } else if (!std::strcmp(argv[i], "--contiguous-qk-single-5d")) {
-      args->contiguous_qk = true;
-      args->contiguous_qk_single_5d = true;
-      args->contiguous_qk_sw128 = false;
-    } else if (!std::strcmp(argv[i], "--contiguous-qk-sw128")) {
-      args->contiguous_qk = true;
-      args->contiguous_qk_single_5d = false;
-      args->contiguous_qk_sw128 = true;
     } else if (!std::strcmp(argv[i], "--clock-trace")) {
       args->clock_trace = true;
     } else if (!std::strcmp(argv[i], "--clock-trace-start") && i + 1 < argc) {
@@ -3124,23 +2898,14 @@ void parse_args(int argc, char** argv, Args* args) {
                !std::strcmp(argv[i], "--real-validate") ||
                !std::strcmp(argv[i], "--fused-validate")) {
       args->stage = "fused_validate";
-      args->store_output = true;
-      args->contiguous_qk = true;
-      args->contiguous_qk_sw128 = true;
     } else if (!std::strcmp(argv[i], "--scalar-validate")) {
       args->stage = "scalar_validate";
     } else if (!std::strcmp(argv[i], "--scalar-validate-suite")) {
       args->stage = "scalar_validate";
       args->validation_suite = true;
-    } else if (!std::strcmp(argv[i], "--toy-validate")) {
-      args->stage = "toy_validate";
-      args->store_output = true;
     } else if (!std::strcmp(argv[i], "--validate-suite")) {
       args->stage = "fused_validate";
       args->validation_suite = true;
-      args->store_output = true;
-      args->contiguous_qk = true;
-      args->contiguous_qk_sw128 = true;
     } else if (!std::strcmp(argv[i], "--pattern") && i + 1 < argc) {
       args->pattern = argv[++i];
     } else if (!std::strcmp(argv[i], "--csv") && i + 1 < argc) {
@@ -3171,13 +2936,11 @@ void parse_args(int argc, char** argv, Args* args) {
       std::printf(
           "Usage: %s [benchmark args] [validation args]\n"
           "\n"
-          "Benchmark/tcgen05 toy path:\n"
-          "  --blocks N --repeats N --k-tiles N --warmup N --iters N --store-output\n"
-          "  --contiguous-qk                read Q/K from row-major contiguous BF16-pair words using k16-split 4D TMA; V remains internal\n"
-          "  --contiguous-qk-single-5d      compare against the older single 5D contiguous Q/K TMA path\n"
-          "  --contiguous-qk-sw128          read Q/K from row-major contiguous BF16-pair words using 2D SW128 TMA\n"
+          "Benchmark path:\n"
+          "  --blocks N --k-tiles N --warmup N --iters N\n"
+          "  fixed path: contiguous Q/K 2D SW128 TMA, contiguous V k16 SW128 MN-major,\n"
+          "              split S-ready, QK/PV pingpong dep, BF16 output store\n"
           "  --clock-trace --clock-trace-start N --clock-trace-iters N   write output-path clock trace CSV; requires -DATTENTION_CLOCK_TRACE=1\n"
-          "  --toy-validate                 validate the original internal-layout toy path; requires -DATTENTION_STORE_OUTPUT=1\n"
           "\n"
           "Fused real-attention validation path:\n"
           "  --validate                     validate qk_tma_mma_ld_kernel for B=H=1,Sq=128,D=128\n"
@@ -3355,10 +3118,6 @@ bool prepare_fused_real_attention_args(const Args& args, Args* out) {
 }
 
 CompareResult run_fused_real_attention_case(const Args& args, const std::string& label) {
-#if !ATTENTION_STORE_OUTPUT
-  (void)args;
-  return CompareResult{label, false, 0.0f, 0.0f, 1};
-#else
   const float scale = resolved_softmax_scale(args);
   const size_t q_elems = kTileBf16Elems;
   const size_t kv_elems = static_cast<size_t>(args.k_tiles) * kTileBf16Elems;
@@ -3377,14 +3136,9 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   std::vector<uint32_t> h_q_contiguous;
   std::vector<uint32_t> h_k_contiguous;
   std::vector<uint32_t> h_v_words;
-  const int qk_layout = selected_qk_layout(args);
   pack_real_row_major_words(h_q, kTileM, &h_q_contiguous);
   pack_real_row_major_words(h_k, args.Skv, &h_k_contiguous);
-  if (qk_layout == kQkLayoutContiguousSw128) {
-    pack_real_row_major_words(h_v, args.Skv, &h_v_words);
-  } else {
-    pack_real_v_internal(h_v, args.k_tiles, &h_v_words);
-  }
+  pack_real_row_major_words(h_v, args.Skv, &h_v_words);
 
   uint32_t* d_q = nullptr;
   uint32_t* d_k = nullptr;
@@ -3403,30 +3157,17 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   CUDA_CHECK(cudaMemset(d_o, 0, kTileWords * sizeof(uint32_t)));
 
   CUtensorMap q_map{}, k_map{}, v_map{}, o_map{};
-  if (qk_layout == kQkLayoutContiguousSingle5d) {
-    encode_qk_contiguous_tma_map(&q_map, d_q, 1);
-    encode_qk_contiguous_tma_map(&k_map, d_k, static_cast<uint64_t>(args.k_tiles));
-  } else if (qk_layout == kQkLayoutContiguousSw128) {
-    encode_qk_contiguous_sw128_tma_map(&q_map, d_q, 1);
-    encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
-                                       static_cast<uint64_t>(args.k_tiles));
-  } else {
-    encode_qk_contiguous_k16_split_tma_map(&q_map, d_q, 1);
-    encode_qk_contiguous_k16_split_tma_map(&k_map, d_k,
-                                           static_cast<uint64_t>(args.k_tiles));
-  }
-  if (qk_layout == kQkLayoutContiguousSw128) {
-    encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
-                                        static_cast<uint64_t>(args.k_tiles));
-  } else {
-    encode_atom_tma_map(&v_map, d_v, static_cast<uint64_t>(args.k_tiles) * 64);
-  }
+  encode_qk_contiguous_sw128_tma_map(&q_map, d_q, 1);
+  encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
+                                     static_cast<uint64_t>(args.k_tiles));
+  encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
+                                      static_cast<uint64_t>(args.k_tiles));
   encode_bf16_output_tma_map(&o_map, d_o, 1);
 
-  CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel,
+  CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel<0, 0>,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
-  qk_tma_mma_ld_kernel<<<1, kMainThreads, kDynamicSmemBytes>>>(
+  qk_tma_mma_ld_kernel<0, 0><<<1, kMainThreads, kDynamicSmemBytes>>>(
       q_map, k_map, v_map, o_map, args.k_tiles, args.k_tiles,
       resolved_score_to_exp2_scale(args), d_o
 #if ATTENTION_CLOCK_TRACE
@@ -3452,15 +3193,9 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
                 "%s_fused_B1_H1_Sq128_Skv%d_D128_noncausal_scale%.6g_pattern_%s",
                 label.c_str(), args.Skv, scale, args.pattern.c_str());
   return compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
-#endif
 }
 
 int run_fused_real_validation(const Args& args) {
-#if !ATTENTION_STORE_OUTPUT
-  std::fprintf(stderr,
-               "--validate requires compiling with -DATTENTION_STORE_OUTPUT=1 for the fused kernel path.\n");
-  return 2;
-#else
   std::vector<CompareResult> results;
   if (args.validation_suite) {
     struct CaseSpec {
@@ -3505,7 +3240,6 @@ int run_fused_real_validation(const Args& args) {
   const bool ok = std::all_of(results.begin(), results.end(),
                               [](const CompareResult& r) { return r.ok; });
   return ok ? 0 : 1;
-#endif
 }
 
 int run_scalar_real_validation(const Args& args) {
@@ -3553,75 +3287,6 @@ int run_scalar_real_validation(const Args& args) {
   return ok ? 0 : 1;
 }
 
-int run_validation(const Args& args) {
-#if !ATTENTION_STORE_OUTPUT
-  std::fprintf(stderr,
-               "--toy-validate requires compiling with -DATTENTION_STORE_OUTPUT=1. "
-               "Use --validate for the real attention validation path.\n");
-  return 2;
-#endif
-  std::vector<uint32_t> h_q(kTileWords);
-  std::vector<uint32_t> h_k(static_cast<size_t>(args.k_tiles) * kTileWords);
-  std::vector<uint32_t> h_v(static_cast<size_t>(args.k_tiles) * kTileWords);
-  fill_logical_matrix(h_q, args.pattern, 'q', 1);
-  fill_logical_matrix(h_k, args.pattern, 'k', args.k_tiles);
-  fill_logical_matrix(h_v, args.pattern, 'v', args.k_tiles);
-
-  std::vector<float> norm_ref;
-  build_reference(h_q, h_k, h_v, args.k_tiles, &norm_ref);
-  const std::vector<uint32_t> expected_bf16 = pack_row_major_bf16_words(norm_ref);
-
-  uint32_t* d_q = nullptr;
-  uint32_t* d_k = nullptr;
-  uint32_t* d_v = nullptr;
-  uint32_t* d_o = nullptr;
-  CUDA_CHECK(cudaMalloc(&d_q, kTileWords * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_k, static_cast<size_t>(args.k_tiles) * kTileWords * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_v, static_cast<size_t>(args.k_tiles) * kTileWords * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_o, kTileWords * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMemcpy(d_q, h_q.data(), kTileWords * sizeof(uint32_t), cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(d_k, h_k.data(), static_cast<size_t>(args.k_tiles) * kTileWords * sizeof(uint32_t), cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemcpy(d_v, h_v.data(), static_cast<size_t>(args.k_tiles) * kTileWords * sizeof(uint32_t), cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemset(d_o, 0, kTileWords * sizeof(uint32_t)));
-
-  CUtensorMap q_map{}, k_map{}, v_map{}, o_map{};
-  encode_atom_tma_map(&q_map, d_q, 64);
-  encode_atom_tma_map(&k_map, d_k, static_cast<uint64_t>(args.k_tiles) * 64);
-  encode_atom_tma_map(&v_map, d_v, static_cast<uint64_t>(args.k_tiles) * 64);
-  encode_bf16_output_tma_map(&o_map, d_o, 1);
-
-  CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel,
-                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  kDynamicSmemBytes));
-  qk_tma_mma_ld_kernel<<<1, kMainThreads, kDynamicSmemBytes>>>(
-      q_map, k_map, v_map, o_map, args.k_tiles, args.k_tiles, 1.0f, d_o
-#if ATTENTION_CLOCK_TRACE
-      ,
-      nullptr, 0, 0
-#endif
-      );
-  CUDA_CHECK(cudaGetLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
-
-  std::vector<uint32_t> h_o(kTileWords);
-  CUDA_CHECK(cudaMemcpy(h_o.data(), d_o, kTileWords * sizeof(uint32_t), cudaMemcpyDeviceToHost));
-  const std::vector<float> got_norm = unpack_row_major_bf16_words(h_o);
-  std::vector<CompareResult> results;
-  results.push_back(compare_float("fused_norm", got_norm, norm_ref, 1.0e-3f, 3.0e-2f));
-  results.push_back(compare_bf16_words("final_o_bf16", h_o, expected_bf16));
-  write_validation_csv(args.csv, results);
-  for (const CompareResult& r : results) {
-    std::printf("%s status=%s max_abs=%g max_rel=%g bad=%zu\n", r.stage.c_str(),
-                r.ok ? "ok" : "fail", r.max_abs, r.max_rel, r.bad_count);
-  }
-
-  CUDA_CHECK(cudaFree(d_q));
-  CUDA_CHECK(cudaFree(d_k));
-  CUDA_CHECK(cudaFree(d_v));
-  CUDA_CHECK(cudaFree(d_o));
-  return std::all_of(results.begin(), results.end(), [](const CompareResult& r) { return r.ok; }) ? 0 : 1;
-}
-
 int run_benchmark(const Args& args_in) {
   Args args = args_in;
 #if !ATTENTION_CLOCK_TRACE
@@ -3631,33 +3296,22 @@ int run_benchmark(const Args& args_in) {
     return 2;
   }
 #endif
-#if !ATTENTION_STORE_OUTPUT
-  if (args.store_output) {
-    std::fprintf(stderr,
-                 "--store-output requires compiling with -DATTENTION_STORE_OUTPUT=1.\n");
-    return 2;
-  }
-#endif
-#if ATTENTION_STORE_OUTPUT
-  if (args.store_output) args.repeats = args.k_tiles;
-#endif
+  args.repeats = args.k_tiles;
   uint32_t* d_q = nullptr;
   uint32_t* d_k = nullptr;
   uint32_t* d_v = nullptr;
   uint32_t* d_o = nullptr;
   ClockTraceRecord* d_clock_trace = nullptr;
+  const int kv_tile_sets = (args.blocks + args.k_tiles - 1) / args.k_tiles;
+  const int kv_total_tiles = kv_tile_sets * args.k_tiles;
   const size_t q_words = static_cast<size_t>(args.blocks) * kTileWords;
-  const size_t k_words = static_cast<size_t>(args.k_tiles) * kTileWords;
-  const size_t v_words = static_cast<size_t>(args.k_tiles) * kTileWords;
+  const size_t k_words = static_cast<size_t>(kv_total_tiles) * kTileWords;
+  const size_t v_words = static_cast<size_t>(kv_total_tiles) * kTileWords;
   CUDA_CHECK(cudaMalloc(&d_q, q_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_k, k_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_v, v_words * sizeof(uint32_t)));
-#if ATTENTION_STORE_OUTPUT
-  if (args.store_output) {
-    CUDA_CHECK(cudaMalloc(&d_o, static_cast<size_t>(args.blocks) * kTileWords * sizeof(uint32_t)));
-    CUDA_CHECK(cudaMemset(d_o, 0, static_cast<size_t>(args.blocks) * kTileWords * sizeof(uint32_t)));
-  }
-#endif
+  CUDA_CHECK(cudaMalloc(&d_o, static_cast<size_t>(args.blocks) * kTileWords * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_o, 0, static_cast<size_t>(args.blocks) * kTileWords * sizeof(uint32_t)));
 
   const int fill_threads = 256;
   fill_packed_bf16<<<static_cast<int>((q_words + fill_threads - 1) / fill_threads), fill_threads>>>(d_q, q_words, 3);
@@ -3669,31 +3323,13 @@ int run_benchmark(const Args& args_in) {
   CUDA_CHECK(cudaDeviceSynchronize());
 
   CUtensorMap q_map{}, k_map{}, v_map{}, o_map{};
-  const int qk_layout = selected_qk_layout(args);
-  if (qk_layout == kQkLayoutContiguousSingle5d) {
-    encode_qk_contiguous_tma_map(&q_map, d_q, static_cast<uint64_t>(args.blocks));
-    encode_qk_contiguous_tma_map(&k_map, d_k, static_cast<uint64_t>(args.k_tiles));
-  } else if (qk_layout == kQkLayoutContiguousSw128) {
-    encode_qk_contiguous_sw128_tma_map(&q_map, d_q,
-                                       static_cast<uint64_t>(args.blocks));
-    encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
-                                       static_cast<uint64_t>(args.k_tiles));
-  } else if (qk_layout == kQkLayoutContiguousK16Split4d) {
-    encode_qk_contiguous_k16_split_tma_map(&q_map, d_q,
-                                           static_cast<uint64_t>(args.blocks));
-    encode_qk_contiguous_k16_split_tma_map(&k_map, d_k,
-                                           static_cast<uint64_t>(args.k_tiles));
-  } else {
-    encode_atom_tma_map(&q_map, d_q, static_cast<uint64_t>(args.blocks) * 64);
-    encode_atom_tma_map(&k_map, d_k, static_cast<uint64_t>(args.k_tiles) * 64);
-  }
-  if (qk_layout == kQkLayoutContiguousSw128) {
-    encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
-                                        static_cast<uint64_t>(args.k_tiles));
-  } else {
-    encode_atom_tma_map(&v_map, d_v, static_cast<uint64_t>(args.k_tiles) * 64);
-  }
-  if (d_o) encode_bf16_output_tma_map(&o_map, d_o, static_cast<uint64_t>(args.blocks));
+  encode_qk_contiguous_sw128_tma_map(&q_map, d_q,
+                                     static_cast<uint64_t>(args.blocks));
+  encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
+                                     static_cast<uint64_t>(kv_total_tiles));
+  encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
+                                      static_cast<uint64_t>(kv_total_tiles));
+  encode_bf16_output_tma_map(&o_map, d_o, static_cast<uint64_t>(args.blocks));
 
 #if ATTENTION_CLOCK_TRACE
   const int clock_record_count = clock_trace_record_count(args);
@@ -3708,8 +3344,7 @@ int run_benchmark(const Args& args_in) {
 #endif
 
   int active = 0;
-  const float score_to_exp2_scale =
-      args.store_output ? resolved_score_to_exp2_scale(args) : 1.0f;
+  const float score_to_exp2_scale = resolved_score_to_exp2_scale(args);
   RunResult result = run_kernel(args, q_map, k_map, v_map, o_map,
                                 score_to_exp2_scale, d_o, &active
 #if ATTENTION_CLOCK_TRACE
@@ -3756,6 +3391,5 @@ int main(int argc, char** argv) {
   driver_check(cuInit(0), "cuInit");
   if (args.stage == "fused_validate") return run_fused_real_validation(args);
   if (args.stage == "scalar_validate") return run_scalar_real_validation(args);
-  if (args.stage == "toy_validate") return run_validation(args);
   return run_benchmark(args);
 }
