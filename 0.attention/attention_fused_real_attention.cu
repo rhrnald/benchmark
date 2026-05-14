@@ -39,6 +39,10 @@
 #define ATTENTION_DEP_MASK 0x00f
 #endif
 
+#ifndef ATTENTION_EARLY_P_LD
+#define ATTENTION_EARLY_P_LD 0
+#endif
+
 #define ATTENTION_STRINGIFY_IMPL(x) #x
 #define ATTENTION_STRINGIFY(x) ATTENTION_STRINGIFY_IMPL(x)
 
@@ -945,6 +949,143 @@ __device__ __forceinline__ void end_clock_trace_record(ClockTraceRecord* records
   (void)base;
 #endif
 }
+
+#if ATTENTION_EARLY_P_LD
+__device__ __forceinline__ void tcgen05_ld_x64_wait_trace(
+    uint32_t src_taddr,
+    uint32_t (&r)[64],
+    int consumer_warp,
+    int consumer_half,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+#if ATTENTION_CLOCK_TRACE
+  const int lane = threadIdx.x & 31;
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+  const unsigned long long ld_start = trace_lane ? clock64() : 0ull;
+#endif
+  TCGEN05_LD_X64_ISSUE_ARRAY(src_taddr, r);
+  tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long ld_end = clock64();
+    const int slot =
+        trace_slot_base + kClockTraceLdBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, slot, kClockTraceLd, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, ld_start, ld_end, clock_trace_base);
+  }
+#endif
+#else
+  (void)src_taddr;
+  (void)r;
+  (void)consumer_warp;
+  (void)consumer_half;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+#endif
+}
+
+template <bool kArrivePDone>
+__device__ __forceinline__ float pack_store_sum_half_from_regs(
+    uint32_t* s_smem,
+    int consumer_warp,
+    int consumer_half,
+    uint64_t* p_done_barrier,
+    uint32_t (&r)[64],
+    float score_to_exp2_scale,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int row = consumer_warp * 32 + lane;
+  const int col_pair_base = consumer_half * 32;
+  uint32_t* smem_base = s_smem + s_store_word_offset(row, col_pair_base);
+#if ATTENTION_CLOCK_TRACE
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+#endif
+  if constexpr (kArrivePDone) {
+    if (lane == 0) {
+      mbarrier_arrive(p_done_barrier);
+    }
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  const unsigned long long pack_start = trace_lane ? clock64() : 0ull;
+#endif
+#if ATTENTION_CLOCK_TRACE && ATTENTION_CLOCK_TRACE_PACK_GROUP >= 0
+  const float row_sum = pack_store_x64_loop_trace_detail<true>(
+      smem_base, r, score_to_exp2_scale, clock_trace, trace_slot_base,
+      trace_iter, trace_pipe, threadIdx.x >> 5, consumer_warp, consumer_half,
+      trace_lane, clock_trace_base);
+#else
+  const float row_sum = pack_store_x64_loop<true>(smem_base, r,
+                                                 score_to_exp2_scale);
+#endif
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long pack_end = clock64();
+    const int pack_slot = trace_slot_base + kClockTracePackStoreBase +
+                          consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, pack_slot, kClockTracePack, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int store_slot =
+        trace_slot_base + kClockTraceStoreBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, store_slot, kClockTraceStore, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int sum_slot =
+        trace_slot_base + kClockTraceRowSumBase + consumer_warp * 2 +
+        consumer_half;
+    write_clock_trace_record(clock_trace, sum_slot, kClockTraceRowSum, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+  }
+#endif
+  return row_sum;
+#else
+  (void)s_smem;
+  (void)consumer_warp;
+  (void)consumer_half;
+  (void)p_done_barrier;
+  (void)r;
+  (void)score_to_exp2_scale;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+  return 0.0f;
+#endif
+}
+#endif  // ATTENTION_EARLY_P_LD
 
 #if 0
 __device__ __forceinline__ void tcgen05_ld_x64_wait_pack_store_nvcc(
@@ -1902,7 +2043,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
       mbarrier_wait(&qk_done[pipe], phase);
-
+#if ATTENTION_EARLY_P_LD
+      const uint32_t row_taddr = p_taddr[pipe] +
+                                 (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      uint32_t h0_regs[64];
+      tcgen05_ld_x64_wait_trace(row_taddr, h0_regs, consumer_warp, 0,
+                                clock_trace, clock_trace_iters,
+                                clock_trace_start, clock_trace_base, iter, pipe);
+#endif
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       }
@@ -1920,13 +2068,22 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           mbarrier_wait(&s_ready[0][0], phase);
         }
       }
+#if !ATTENTION_EARLY_P_LD
       const uint32_t row_taddr = p_taddr[pipe] +
                                  (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#endif
       const float row_sum0 =
+#if ATTENTION_EARLY_P_LD
+          pack_store_sum_half_from_regs<false>(
+              s_smem[pipe], consumer_warp, 0, &p_done[pipe], h0_regs,
+              score_to_exp2_scale, clock_trace, clock_trace_iters,
+              clock_trace_start, clock_trace_base, iter, pipe);
+#else
           tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
               row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
               score_to_exp2_scale, clock_trace, clock_trace_iters,
               clock_trace_start, clock_trace_base, iter, pipe);
+#endif
       if (lane0) {
         mbarrier_arrive(&s_ready[pipe][0]);
       }
@@ -2395,6 +2552,9 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_major_k_"
       "v_contiguous_k16_sw128_mn_major_dep_masked_"
       "split_s_ready_bf16_output"
+#if ATTENTION_EARLY_P_LD
+      "_early_p_ld"
+#endif
 #if ATTENTION_DEP_SWEEP
       "_dep_sweep_mask_0x%03x"
 #else
@@ -2704,7 +2864,11 @@ void write_clock_trace_csv(const Args& args,
   const char* notes =
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_"
       "v_contiguous_k16_sw128_mn_major_qk_pingpong_dep_pv_pingpong_dep_"
-      "split_s_ready_trace_schema";
+      "split_s_ready_trace_schema"
+#if ATTENTION_EARLY_P_LD
+      "_early_p_ld"
+#endif
+      ;
   for (const TraceRecord& r : rows) {
     const unsigned long long ld_start = trace_start_or_zero(r.ld_start);
     const unsigned long long pack_start = trace_start_or_zero(r.pack_start);
