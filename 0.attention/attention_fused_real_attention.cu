@@ -49,6 +49,8 @@ static constexpr int kVBufferCount = kPipeCount;
 static constexpr int kSBufferCount = kPipeCount;
 static constexpr int kFixedBenchmarkRepeats = 256;
 static constexpr int kFixedBenchmarkKTiles = 256;
+static constexpr int kEx2EmuFreq = 10;
+static constexpr int kEx2EmuRes = 1;
 static constexpr int kDynamicSmemBytes =
     (1 + kPipeCount * kKBufferCount + kVBufferCount + kSBufferCount) * kTileBytes + 1024;
 static constexpr int kTmemAllocCols = 512;
@@ -613,6 +615,53 @@ __device__ __forceinline__ uint32_t exp2_approx_bits_scaled_cpp(uint32_t x,
   return __float_as_uint(out);
 }
 
+__device__ __forceinline__ void exp2_emulation_2_bits_scaled_cpp(
+    uint32_t& lo_src,
+    uint32_t& hi_src,
+    float scale) {
+  const float x = __uint_as_float(lo_src) * scale;
+  const float y = __uint_as_float(hi_src) * scale;
+  uint32_t out_x;
+  uint32_t out_y;
+  asm volatile(
+      "{\n\t"
+      ".reg .f32 f1, f2, f3, f4, f5, f6, f7;\n\t"
+      ".reg .b64 l1, l2, l3, l4, l5, l6, l7, l8, l9, l10;\n\t"
+      ".reg .s32 r1, r2, r3, r4, r5, r6, r7, r8;\n\t"
+      "max.ftz.f32 f1, %2, 0fC2FE0000;\n\t"
+      "max.ftz.f32 f2, %3, 0fC2FE0000;\n\t"
+      "mov.b64 l1, {f1, f2};\n\t"
+      "mov.f32 f3, 0f4B400000;\n\t"
+      "mov.b64 l2, {f3, f3};\n\t"
+      "add.rm.ftz.f32x2 l7, l1, l2;\n\t"
+      "sub.rn.ftz.f32x2 l8, l7, l2;\n\t"
+      "sub.rn.ftz.f32x2 l9, l1, l8;\n\t"
+      "mov.f32 f7, 0f3D9DF09D;\n\t"
+      "mov.b64 l6, {f7, f7};\n\t"
+      "mov.f32 f6, 0f3E6906A4;\n\t"
+      "mov.b64 l5, {f6, f6};\n\t"
+      "mov.f32 f5, 0f3F31F519;\n\t"
+      "mov.b64 l4, {f5, f5};\n\t"
+      "mov.f32 f4, 0f3F800000;\n\t"
+      "mov.b64 l3, {f4, f4};\n\t"
+      "fma.rn.ftz.f32x2 l10, l9, l6, l5;\n\t"
+      "fma.rn.ftz.f32x2 l10, l10, l9, l4;\n\t"
+      "fma.rn.ftz.f32x2 l10, l10, l9, l3;\n\t"
+      "mov.b64 {r1, r2}, l7;\n\t"
+      "mov.b64 {r3, r4}, l10;\n\t"
+      "shl.b32 r5, r1, 23;\n\t"
+      "add.s32 r7, r5, r3;\n\t"
+      "shl.b32 r6, r2, 23;\n\t"
+      "add.s32 r8, r6, r4;\n\t"
+      "mov.b32 %0, r7;\n\t"
+      "mov.b32 %1, r8;\n\t"
+      "}\n"
+      : "=r"(out_x), "=r"(out_y)
+      : "f"(x), "f"(y));
+  lo_src = out_x;
+  hi_src = out_y;
+}
+
 __device__ __forceinline__ uint32_t exp2_pack_hi16_update(uint32_t& lo_src,
                                                           uint32_t& hi_src) {
   lo_src = exp2_approx_bits_cpp(lo_src);
@@ -623,9 +672,14 @@ __device__ __forceinline__ uint32_t exp2_pack_hi16_update(uint32_t& lo_src,
 __device__ __forceinline__ uint32_t exp2_pack_hi16_update_scaled(
     uint32_t& lo_src,
     uint32_t& hi_src,
-    float scale) {
-  lo_src = exp2_approx_bits_scaled_cpp(lo_src, scale);
-  hi_src = exp2_approx_bits_scaled_cpp(hi_src, scale);
+    float scale,
+    int pair_index) {
+  if ((pair_index % kEx2EmuFreq) >= (kEx2EmuFreq - kEx2EmuRes)) {
+    exp2_emulation_2_bits_scaled_cpp(lo_src, hi_src, scale);
+  } else {
+    lo_src = exp2_approx_bits_scaled_cpp(lo_src, scale);
+    hi_src = exp2_approx_bits_scaled_cpp(hi_src, scale);
+  }
   return (lo_src >> 16) | (hi_src & 0xffff0000u);
 }
 
@@ -657,7 +711,8 @@ __device__ __forceinline__ float pack_store_x64_loop(uint32_t* smem_base,
     for (int i = 0; i < 4; ++i) {
       p[i] = exp2_pack_hi16_update_scaled(r[r_base + i * 2],
                                           r[r_base + i * 2 + 1],
-                                          score_to_exp2_scale);
+                                          score_to_exp2_scale,
+                                          group * 4 + i);
     }
     const int word_offset = (group >> 1) * 1024 + (group & 1) * 32;
     reinterpret_cast<uint4*>(smem_base + word_offset)[0] =
