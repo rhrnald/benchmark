@@ -15,6 +15,10 @@
 #define ATTENTION_CLOCK_TRACE 0
 #endif
 
+#ifndef ATTENTION_CLOCK_TRACE_PACK_GROUP
+#define ATTENTION_CLOCK_TRACE_PACK_GROUP -1
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                         \
     cudaError_t err__ = (stmt);                                                \
@@ -136,6 +140,8 @@ struct TraceRecord {
   unsigned long long ld_warp_end[kTraceConsumerLanesPerPipe];
   unsigned long long pack_warp_start[kTraceConsumerLanesPerPipe];
   unsigned long long pack_warp_end[kTraceConsumerLanesPerPipe];
+  unsigned long long pack_detail_warp_start[kTraceConsumerLanesPerPipe];
+  unsigned long long pack_detail_warp_end[kTraceConsumerLanesPerPipe];
   unsigned long long st_warp_start[kTraceConsumerLanesPerPipe];
   unsigned long long st_warp_end[kTraceConsumerLanesPerPipe];
   unsigned long long sum_warp_start[kTraceConsumerLanesPerPipe];
@@ -180,6 +186,7 @@ enum ClockTraceStage {
   kClockTracePvMmaH0 = 15,
   kClockTracePvMmaH1 = 16,
   kClockTraceSync = 17,
+  kClockTracePackDetail = 18,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -188,6 +195,7 @@ static constexpr int kClockTracePackStoreBase = 16;
 static constexpr int kClockTraceRowSumBase = 24;
 static constexpr int kClockTraceStoreBase = 32;
 static constexpr int kClockTraceSyncBase = 40;
+static constexpr int kClockTracePackDetailBase = 52;
 static constexpr int kClockTraceExtraSlots = 32;
 
 __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
@@ -727,6 +735,71 @@ __device__ __forceinline__ float pack_store_x64_loop(uint32_t* smem_base,
   return sum;
 }
 
+#if ATTENTION_CLOCK_TRACE
+__device__ __forceinline__ void write_clock_trace_record(ClockTraceRecord* records,
+                                                         int slot,
+                                                         int stage,
+                                                         int iter,
+                                                         int pipe,
+                                                         int warp_id,
+                                                         int consumer_warp,
+                                                         int half,
+                                                         unsigned long long start,
+                                                         unsigned long long end,
+                                                         unsigned long long base);
+
+template <bool kDoSum>
+__device__ __forceinline__ float pack_store_x64_loop_trace_detail(
+    uint32_t* smem_base,
+    uint32_t (&r)[64],
+    float score_to_exp2_scale,
+    ClockTraceRecord* clock_trace,
+    int trace_slot_base,
+    int trace_iter,
+    int trace_pipe,
+    int warp_id,
+    int consumer_warp,
+    int consumer_half,
+    bool trace_lane,
+    unsigned long long clock_trace_base) {
+  float sum = 0.0f;
+#pragma unroll
+  for (int group = 0; group < 8; ++group) {
+    const bool trace_group =
+        trace_lane && group == ATTENTION_CLOCK_TRACE_PACK_GROUP;
+    const unsigned long long group_start = trace_group ? clock64() : 0ull;
+    alignas(16) uint32_t p[4];
+    const int r_base = group * 8;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      p[i] = exp2_pack_hi16_update_scaled(r[r_base + i * 2],
+                                          r[r_base + i * 2 + 1],
+                                          score_to_exp2_scale,
+                                          group * 4 + i);
+    }
+    const int word_offset = (group >> 1) * 1024 + (group & 1) * 32;
+    reinterpret_cast<uint4*>(smem_base + word_offset)[0] =
+        reinterpret_cast<uint4*>(p)[0];
+    if constexpr (kDoSum) {
+#pragma unroll
+      for (int i = 0; i < 4; ++i) {
+        sum += bf16x2_sum_device(p[i]);
+      }
+    }
+    if (trace_group) {
+      const unsigned long long group_end = clock64();
+      const int slot = trace_slot_base + kClockTracePackDetailBase +
+                       consumer_warp * 2 + consumer_half;
+      write_clock_trace_record(clock_trace, slot, kClockTracePackDetail,
+                               trace_iter, trace_pipe, warp_id, consumer_warp,
+                               consumer_half, group_start, group_end,
+                               clock_trace_base);
+    }
+  }
+  return sum;
+}
+#endif
+
 __device__ __forceinline__ void write_clock_trace_record(ClockTraceRecord* records,
                                                          int slot,
                                                          int stage,
@@ -1056,8 +1129,15 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
 #if ATTENTION_CLOCK_TRACE
   const unsigned long long pack_start = trace_lane ? clock64() : 0ull;
 #endif
+#if ATTENTION_CLOCK_TRACE && ATTENTION_CLOCK_TRACE_PACK_GROUP >= 0
+  const float row_sum = pack_store_x64_loop_trace_detail<true>(
+      smem_base, r, score_to_exp2_scale, clock_trace, trace_slot_base,
+      trace_iter, trace_pipe, threadIdx.x >> 5, consumer_warp, consumer_half,
+      trace_lane, clock_trace_base);
+#else
   const float row_sum = pack_store_x64_loop<true>(smem_base, r,
                                                  score_to_exp2_scale);
+#endif
 #if ATTENTION_CLOCK_TRACE
   if (trace_lane) {
     const unsigned long long pack_end = clock64();
@@ -2216,6 +2296,8 @@ void init_trace_record(TraceRecord* r, int iter) {
     r->ld_warp_end[w] = 0;
     r->pack_warp_start[w] = 0xffffffffffffffffull;
     r->pack_warp_end[w] = 0;
+    r->pack_detail_warp_start[w] = 0xffffffffffffffffull;
+    r->pack_detail_warp_end[w] = 0;
     r->st_warp_start[w] = 0xffffffffffffffffull;
     r->st_warp_end[w] = 0;
     r->sum_warp_start[w] = 0xffffffffffffffffull;
@@ -2271,6 +2353,8 @@ const char* clock_trace_stage_name(int stage) {
       return "st";
     case kClockTraceSync:
       return "sync";
+    case kClockTracePackDetail:
+      return "pack_detail";
     default:
       return "unknown";
   }
@@ -2407,6 +2491,7 @@ void write_clock_trace_csv(const Args& args,
         break;
       case kClockTraceLd:
       case kClockTracePack:
+      case kClockTracePackDetail:
       case kClockTraceStore:
       case kClockTraceRowSum: {
         const int lane = r.consumer_warp * 2 + r.half;
@@ -2419,6 +2504,9 @@ void write_clock_trace_csv(const Args& args,
           out.pack_warp_start[lane] = r.start;
           out.pack_warp_end[lane] = r.end;
           merge_trace_range(&out.pack_start, &out.pack_end, r.start, r.end);
+        } else if (r.stage == kClockTracePackDetail) {
+          out.pack_detail_warp_start[lane] = r.start;
+          out.pack_detail_warp_end[lane] = r.end;
         } else if (r.stage == kClockTraceStore) {
           out.st_warp_start[lane] = r.start;
           out.st_warp_end[lane] = r.end;
@@ -2451,6 +2539,9 @@ void write_clock_trace_csv(const Args& args,
   }
   for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
     std::fprintf(csv, ",pack_warp%d_start,pack_warp%d_end", w, w);
+  }
+  for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
+    std::fprintf(csv, ",pack_detail_warp%d_start,pack_detail_warp%d_end", w, w);
   }
   for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
     std::fprintf(csv, ",st_warp%d_start,st_warp%d_end", w, w);
@@ -2506,6 +2597,11 @@ void write_clock_trace_csv(const Args& args,
     for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
       std::fprintf(csv, ",%llu,%llu", trace_start_or_zero(r.pack_warp_start[w]),
                    r.pack_warp_end[w]);
+    }
+    for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
+      std::fprintf(csv, ",%llu,%llu",
+                   trace_start_or_zero(r.pack_detail_warp_start[w]),
+                   r.pack_detail_warp_end[w]);
     }
     for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
       std::fprintf(csv, ",%llu,%llu", trace_start_or_zero(r.st_warp_start[w]),
