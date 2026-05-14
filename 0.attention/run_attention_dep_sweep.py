@@ -19,9 +19,17 @@ BIT_NAMES = [
     "sum_h1_wait_v",
     "next_ktma_wait_s1",
     "next_ktma_wait_pv",
+    "ktma_p1_wait_p0",
+    "ktma_p0_wait_p1",
+    "vtma_p1_wait_p0",
+    "vtma_p0_wait_p1",
+    "sum_h0_p1_wait_p0",
+    "sum_h0_p0_wait_p1",
+    "sum_h1_p1_wait_p0",
+    "sum_h1_p0_wait_p1",
 ]
 
-BASELINE_MASK = 0x00F
+BASELINE_MASK = 0x00D
 CSV_FIELDS = [
     "round",
     "mask",
@@ -198,6 +206,10 @@ def round_masks(round_name: str) -> list[int | None]:
         masks += [BASELINE_MASK & ~(1 << bit) for bit in range(4)]
         masks += [BASELINE_MASK | (1 << bit) for bit in range(4, 10)]
         return list(dict.fromkeys(masks))
+    if round_name == "sameunit":
+        masks = [BASELINE_MASK]
+        masks += [BASELINE_MASK | (1 << bit) for bit in range(10, len(BIT_NAMES))]
+        return list(dict.fromkeys(masks))
     if round_name == "full":
         return list(range(1024))
     raise ValueError(f"unsupported round without dynamic runner: {round_name}")
@@ -278,7 +290,7 @@ def run_beam(root: Path, args: argparse.Namespace) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compile-time attention dependency sweep")
-    parser.add_argument("--round", choices=["round0", "round1", "beam", "full"], default="round1")
+    parser.add_argument("--round", choices=["round0", "round1", "sameunit", "beam", "full"], default="round1")
     parser.add_argument("--masks", default="", help="Comma-separated mask list, e.g. default,0x00f,0x00d")
     parser.add_argument("--output", default="0.attention/attention_dep_sweep_results.csv")
     parser.add_argument("--build-dir", default="build_attention_dep_sweep")
