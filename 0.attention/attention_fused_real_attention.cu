@@ -43,6 +43,14 @@
 #define ATTENTION_EARLY_P_LD 0
 #endif
 
+#ifndef ATTENTION_SINGLE_PIPE0
+#define ATTENTION_SINGLE_PIPE0 0
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0_IDLE_WARPS
+#define ATTENTION_SINGLE_PIPE0_IDLE_WARPS 0
+#endif
+
 #define ATTENTION_STRINGIFY_IMPL(x) #x
 #define ATTENTION_STRINGIFY(x) ATTENTION_STRINGIFY_IMPL(x)
 
@@ -62,11 +70,18 @@ static constexpr int kWarpSize = 32;
 static constexpr int kWarps = 16;
 static constexpr int kThreads = kWarps * kWarpSize;
 static constexpr int kPipeCount = 2;
-static constexpr int kActivePipeStride = kPipeCount;
+static constexpr int kActivePipeStride = ATTENTION_SINGLE_PIPE0 ? 1 : kPipeCount;
 static constexpr int kConsumerWarpsPerPipe = 4;
 static constexpr int kTraceConsumerLanesPerPipe = kConsumerWarpsPerPipe * 2;
 static constexpr int kClockTraceSyncCount = 4;
-static constexpr int kMainWarps = 4 + kPipeCount * kConsumerWarpsPerPipe;
+static constexpr int kActiveConsumerPipeCount = ATTENTION_SINGLE_PIPE0 ? 1 : kPipeCount;
+static constexpr int kProducerWarpCount = 4;
+static constexpr int kConsumerBaseWarp = 4;
+static constexpr int kSinglePipePvWarp = 2;
+static constexpr int kMainWarps =
+    (ATTENTION_SINGLE_PIPE0 && !ATTENTION_SINGLE_PIPE0_IDLE_WARPS)
+        ? (kProducerWarpCount + kConsumerWarpsPerPipe)
+        : (kProducerWarpCount + kPipeCount * kConsumerWarpsPerPipe);
 static constexpr int kMainThreads = kMainWarps * kWarpSize;
 static constexpr int kTileM = 128;
 static constexpr int kTileN = 128;
@@ -76,6 +91,7 @@ static constexpr int kTileBf16Elems = kTileM * kTileN;
 static constexpr int kTileWords = kTileBf16Elems / 2;
 static constexpr int kTileBytes = kTileWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kKBufferCount = 1;
+static constexpr int kKBufferTileCount = kPipeCount * kKBufferCount;
 static constexpr int kVBufferCount = kPipeCount;
 static constexpr int kSBufferCount = kPipeCount;
 static constexpr int kFixedBenchmarkRepeats = 256;
@@ -83,9 +99,11 @@ static constexpr int kFixedBenchmarkKTiles = 256;
 static constexpr int kEx2EmuFreq = 10;
 static constexpr int kEx2EmuRes = 1;
 static constexpr int kDynamicSmemBytes =
-    (1 + kPipeCount * kKBufferCount + kVBufferCount + kSBufferCount) * kTileBytes + 1024;
+    (1 + kKBufferTileCount + kVBufferCount + kSBufferCount) * kTileBytes + 1024;
 static constexpr int kTmemAllocCols = 512;
 static constexpr int kTmemUsedCols = 512;
+static constexpr int kPTmemCols = 256;
+static constexpr int kOTmemCols = 256;
 static constexpr float kLog2E = 1.44269504088896340736f;
 static constexpr double kFlopsPerMma =
     2.0 * static_cast<double>(kTileM) * static_cast<double>(kTileN) *
@@ -1630,12 +1648,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   uint32_t* v_smem[kPipeCount];
 #pragma unroll
   for (int p = 0; p < kPipeCount; ++p) {
-    v_smem[p] = q_smem + (1 + kPipeCount + p) * kTileWords;
+    v_smem[p] = q_smem + (1 + kKBufferTileCount + p) * kTileWords;
   }
   uint32_t* s_smem[kPipeCount];
 #pragma unroll
   for (int p = 0; p < kPipeCount; ++p) {
-    s_smem[p] = q_smem + (1 + kPipeCount + kVBufferCount + p) * kTileWords;
+    s_smem[p] = q_smem + (1 + kKBufferTileCount + kVBufferCount + p) * kTileWords;
   }
 
   __shared__ uint64_t q_ready;
@@ -1662,7 +1680,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const int warp_id = threadIdx.x >> 5;
   const bool lane0 = lane == 0;
 
-  if (warp_id < 4) {
+  if (warp_id < kProducerWarpCount) {
     setmaxnreg_dec_producer();
   } else {
     setmaxnreg_inc_consumer();
@@ -1719,7 +1737,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
   }
 
-  if (warp_id == 0 || warp_id == 1) {
+  if (warp_id == 0 || (!ATTENTION_SINGLE_PIPE0 && warp_id == 1)) {
     const int pipe = warp_id;
     const uint32_t idesc = make_qk_idesc();
     uint64_t q_desc[8];
@@ -1837,7 +1855,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepKTmaPipe0WaitsPipe1, false>()) {
-          mbarrier_wait(&k_ready[1], prev_phase);
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            mbarrier_wait(&k_ready[1], prev_phase);
+          }
         }
       } else {
         if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
@@ -1863,7 +1883,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_wait(&p_done[pipe], prev_phase);
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepQkPipe0WaitsPipe1, true>()) {
-          mbarrier_wait(&qk_done[1], prev_phase);
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            mbarrier_wait(&qk_done[1], prev_phase);
+          }
         }
       } else {
         if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
@@ -1900,8 +1922,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
   }
 
-  if (warp_id == 2 || warp_id == 3) {
-    const int pipe = warp_id - 2;
+  if ((ATTENTION_SINGLE_PIPE0 && warp_id == kSinglePipePvWarp) ||
+      (!ATTENTION_SINGLE_PIPE0 && (warp_id == 2 || warp_id == 3))) {
+    const int pipe = ATTENTION_SINGLE_PIPE0 ? 0 : warp_id - 2;
     const uint32_t idesc = make_qk_idesc() | (1u << 16);
     uint64_t s_desc[8];
     uint64_t v_desc[8];
@@ -1936,8 +1959,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepVTmaPipe0WaitsPipe1, false>()) {
-          if (local > 0) {
-            mbarrier_wait(&v_ready[1], static_cast<uint32_t>((local - 1) & 1));
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            if (local > 0) {
+              mbarrier_wait(&v_ready[1], static_cast<uint32_t>((local - 1) & 1));
+            }
           }
         }
       } else {
@@ -1967,8 +1992,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_wait(&s_ready[pipe][0], phase);
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepPvPipe0WaitsPipe1, true>()) {
-          if (local > 0) {
-            mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            if (local > 0) {
+              mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+            }
           }
         }
       } else {
@@ -2031,9 +2058,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
   }
 
-  if (warp_id >= 4 && warp_id < kMainWarps) {
-    const int pipe = (warp_id - 4) / kConsumerWarpsPerPipe;
-    const int consumer_slot = (warp_id - 4) - pipe * kConsumerWarpsPerPipe;
+  if (warp_id >= kConsumerBaseWarp &&
+      warp_id < kConsumerBaseWarp + kActiveConsumerPipeCount * kConsumerWarpsPerPipe) {
+    const int pipe = (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
+    const int consumer_slot =
+        (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
     const bool do_row_sum = output != nullptr;
     const int row = consumer_warp * 32 + lane;
@@ -2059,8 +2088,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepSumH0Pipe0WaitsPipe1, false>()) {
-          if (local > 0) {
-            mbarrier_wait(&s_ready[1][0], static_cast<uint32_t>((local - 1) & 1));
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            if (local > 0) {
+              mbarrier_wait(&s_ready[1][0], static_cast<uint32_t>((local - 1) & 1));
+            }
           }
         }
       } else {
@@ -2092,8 +2123,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepSumH1Pipe0WaitsPipe1, false>()) {
-          if (local > 0) {
-            mbarrier_wait(&s_ready[1][1], static_cast<uint32_t>((local - 1) & 1));
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            if (local > 0) {
+              mbarrier_wait(&s_ready[1][1], static_cast<uint32_t>((local - 1) & 1));
+            }
           }
         }
       } else {
@@ -2128,8 +2161,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     const bool trace_cta = false;
     const int trace_extra_base = 0;
 #endif
-    const int pipe0_local_count = (loop_repeats + 1) / 2;
-    const int pipe1_local_count = loop_repeats / 2;
+    const int pipe0_local_count =
+        ATTENTION_SINGLE_PIPE0 ? loop_repeats : (loop_repeats + 1) / 2;
+    const int pipe1_local_count = ATTENTION_SINGLE_PIPE0 ? 0 : loop_repeats / 2;
     if (pipe0_local_count > 0) {
       mbarrier_wait(&pv_done[0], static_cast<uint32_t>((pipe0_local_count - 1) & 1));
     }
@@ -2149,11 +2183,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     uint32_t* output_bf16_smem =
         reinterpret_cast<uint32_t*>(output_smem + kTileBf16Elems);
     const bool trace_drain =
-        trace_cta && lane0 && warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe;
+        trace_cta && lane0 && warp_id >= kConsumerBaseWarp &&
+        warp_id < kConsumerBaseWarp + kConsumerWarpsPerPipe;
     const unsigned long long drain_start = trace_drain ? clock64() : 0ull;
-    if (pipe0_local_count > 0 && pipe1_local_count > 0 && warp_id >= 4 &&
-        warp_id < 4 + kConsumerWarpsPerPipe) {
-      const int consumer_warp = warp_id - 4;
+    if (pipe0_local_count > 0 && pipe1_local_count > 0 && warp_id >= kConsumerBaseWarp &&
+        warp_id < kConsumerBaseWarp + kConsumerWarpsPerPipe) {
+      const int consumer_warp = warp_id - kConsumerBaseWarp;
       const uint32_t row_taddr0 =
           o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
       const uint32_t row_taddr1 =
@@ -2166,9 +2201,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                        true);
       store_tmem_x64_accum_output_smem(row_taddr1 + 64u, output_smem, consumer_warp,
                                        1, true);
-    } else if (pipe0_local_count > 0 && pipe1_local_count == 0 && warp_id >= 4 &&
-               warp_id < 4 + kConsumerWarpsPerPipe) {
-      const int consumer_warp = warp_id - 4;
+    } else if (pipe0_local_count > 0 && pipe1_local_count == 0 &&
+               warp_id >= kConsumerBaseWarp &&
+               warp_id < kConsumerBaseWarp + kConsumerWarpsPerPipe) {
+      const int consumer_warp = warp_id - kConsumerBaseWarp;
       const uint32_t row_taddr =
           o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
       store_tmem_x64_accum_output_smem(row_taddr, output_smem, consumer_warp, 0,
@@ -2178,7 +2214,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     if (trace_drain) {
       const unsigned long long drain_end = clock64();
-      const int consumer_warp = warp_id - 4;
+      const int consumer_warp = warp_id - kConsumerBaseWarp;
       write_clock_trace_record(clock_trace, trace_extra_base + 1 + consumer_warp,
                                kClockTraceTmemDrain, loop_repeats, -1, warp_id,
                                consumer_warp, -1, drain_start, drain_end,
@@ -2186,10 +2222,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     __syncthreads();
     const bool trace_pack =
-        trace_cta && lane0 && warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe;
+        trace_cta && lane0 && warp_id >= kConsumerBaseWarp &&
+        warp_id < kConsumerBaseWarp + kConsumerWarpsPerPipe;
     const unsigned long long pack_start = trace_pack ? clock64() : 0ull;
-    if (warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe) {
-      const int consumer_warp = warp_id - 4;
+    if (warp_id >= kConsumerBaseWarp && warp_id < kConsumerBaseWarp + kConsumerWarpsPerPipe) {
+      const int consumer_warp = warp_id - kConsumerBaseWarp;
       const int row = consumer_warp * 32 + lane;
       const float denom = row_sum_partial[0][row] + row_sum_partial[1][row];
       const float inv_sum = denom != 0.0f ? 1.0f / denom : 0.0f;
@@ -2204,7 +2241,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     if (trace_pack) {
       const unsigned long long pack_end = clock64();
-      const int consumer_warp = warp_id - 4;
+      const int consumer_warp = warp_id - kConsumerBaseWarp;
       write_clock_trace_record(clock_trace, trace_extra_base + 5 + consumer_warp,
                                kClockTracePackNorm, loop_repeats, -1, warp_id,
                                consumer_warp, -1, pack_start, pack_end,
@@ -2552,6 +2589,14 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_major_k_"
       "v_contiguous_k16_sw128_mn_major_dep_masked_"
       "split_s_ready_bf16_output"
+#if ATTENTION_SINGLE_PIPE0
+      "_single_pipe0"
+#if ATTENTION_SINGLE_PIPE0_IDLE_WARPS
+      "_idle_warps"
+#else
+      "_compact_warps"
+#endif
+#endif
 #if ATTENTION_EARLY_P_LD
       "_early_p_ld"
 #endif
@@ -2576,7 +2621,7 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
                "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%s,%s,%s\n",
                mode, args.blocks, kv_total_tiles, kv_total_tiles, output_shape, kTileM, kTileN, kMmaK,
                kMmasPerTile, args.blocks, args.repeats, args.k_tiles, args.warmup, args.iters,
-               kMainThreads, active, kDynamicSmemBytes, kTmemAllocCols, kTmemUsedCols, 256, 256,
+               kMainThreads, active, kDynamicSmemBytes, kTmemAllocCols, kTmemUsedCols, kPTmemCols, kOTmemCols,
                "bf16_direct", result.ms, groups, total_mmas,
                q_tma_bytes / 1.0e9, k_tma_bytes / 1.0e9, v_tma_bytes / 1.0e9,
                (q_tma_bytes + k_tma_bytes + v_tma_bytes) / 1.0e9,
@@ -2865,6 +2910,14 @@ void write_clock_trace_csv(const Args& args,
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_"
       "v_contiguous_k16_sw128_mn_major_qk_pingpong_dep_pv_pingpong_dep_"
       "split_s_ready_trace_schema"
+#if ATTENTION_SINGLE_PIPE0
+      "_single_pipe0"
+#if ATTENTION_SINGLE_PIPE0_IDLE_WARPS
+      "_idle_warps"
+#else
+      "_compact_warps"
+#endif
+#endif
 #if ATTENTION_EARLY_P_LD
       "_early_p_ld"
 #endif
