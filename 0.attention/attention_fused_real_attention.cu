@@ -19,6 +19,29 @@
 #define ATTENTION_CLOCK_TRACE_PACK_GROUP -1
 #endif
 
+#ifndef ATTENTION_PRODUCER_REGS
+#define ATTENTION_PRODUCER_REGS 128
+#endif
+
+#ifndef ATTENTION_CONSUMER_REGS
+#define ATTENTION_CONSUMER_REGS 184
+#endif
+
+#ifndef ATTENTION_DEP_SWEEP
+#define ATTENTION_DEP_SWEEP 0
+#endif
+
+#ifndef ATTENTION_DEP_DEFAULT_MASK
+#define ATTENTION_DEP_DEFAULT_MASK 0x00d
+#endif
+
+#ifndef ATTENTION_DEP_MASK
+#define ATTENTION_DEP_MASK 0x00f
+#endif
+
+#define ATTENTION_STRINGIFY_IMPL(x) #x
+#define ATTENTION_STRINGIFY(x) ATTENTION_STRINGIFY_IMPL(x)
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                         \
     cudaError_t err__ = (stmt);                                                \
@@ -63,6 +86,28 @@ static constexpr float kLog2E = 1.44269504088896340736f;
 static constexpr double kFlopsPerMma =
     2.0 * static_cast<double>(kTileM) * static_cast<double>(kTileN) *
     static_cast<double>(kMmaK);
+
+enum AttentionDepBit {
+  kDepQkPipe1WaitsPipe0 = 0,
+  kDepQkPipe0WaitsPipe1 = 1,
+  kDepPvPipe1WaitsPipe0 = 2,
+  kDepPvPipe0WaitsPipe1 = 3,
+  kDepVTmaWaitsQk = 4,
+  kDepVTmaWaitsK = 5,
+  kDepSumH0WaitsV = 6,
+  kDepSumH1WaitsV = 7,
+  kDepNextKTmaWaitsS1 = 8,
+  kDepNextKTmaWaitsPv = 9,
+};
+
+template <int Bit, bool DefaultEnabled>
+__host__ __device__ __forceinline__ constexpr bool attention_dep_enabled() {
+#if ATTENTION_DEP_SWEEP
+  return (ATTENTION_DEP_MASK & (1 << Bit)) != 0;
+#else
+  return (ATTENTION_DEP_DEFAULT_MASK & (1 << Bit)) != 0;
+#endif
+}
 
 template <int kFixedKTiles>
 __device__ __forceinline__ int kv_tile_base_for_block(int block_idx,
@@ -301,13 +346,17 @@ __host__ __device__ __forceinline__ uint32_t make_qk_idesc() {
 
 __device__ __forceinline__ void setmaxnreg_dec_producer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("setmaxnreg.dec.sync.aligned.u32 96;" ::: "memory");
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 "
+               ATTENTION_STRINGIFY(ATTENTION_PRODUCER_REGS) ";"
+               ::: "memory");
 #endif
 }
 
 __device__ __forceinline__ void setmaxnreg_inc_consumer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("setmaxnreg.inc.sync.aligned.u32 176;" ::: "memory");
+  asm volatile("setmaxnreg.inc.sync.aligned.u32 "
+               ATTENTION_STRINGIFY(ATTENTION_CONSUMER_REGS) ";"
+               ::: "memory");
 #endif
 }
 
@@ -1577,8 +1626,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                  k_tma_start, k_tma_end, clock_trace_base);
       }
 #endif
-      if (pipe != 0) {
-        mbarrier_wait(&qk_done[0], phase);
+      if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
+        if (pipe != 0) {
+          mbarrier_wait(&qk_done[0], phase);
+        }
       }
       if (lane0) {
 #if ATTENTION_CLOCK_TRACE
@@ -1624,6 +1675,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter && lane0) k_tma_start = clock64();
 #endif
+      if constexpr (attention_dep_enabled<kDepNextKTmaWaitsS1, false>()) {
+        mbarrier_wait(&s_ready[pipe][1], prev_phase);
+      }
+      if constexpr (attention_dep_enabled<kDepNextKTmaWaitsPv, false>()) {
+        mbarrier_wait(&pv_done[pipe], prev_phase);
+      }
       mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
       if (lane0) {
         tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0,
@@ -1642,9 +1699,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
       mbarrier_wait(&p_done[pipe], prev_phase);
       if (pipe == 0) {
-        mbarrier_wait(&qk_done[1], prev_phase);
+        if constexpr (attention_dep_enabled<kDepQkPipe0WaitsPipe1, true>()) {
+          mbarrier_wait(&qk_done[1], prev_phase);
+        }
       } else {
-        mbarrier_wait(&qk_done[0], phase);
+        if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
+          mbarrier_wait(&qk_done[0], phase);
+        }
       }
       if (lane0) {
 #if ATTENTION_CLOCK_TRACE
@@ -1704,6 +1765,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       }
+      if constexpr (attention_dep_enabled<kDepVTmaWaitsQk, false>()) {
+        mbarrier_wait(&qk_done[pipe], phase);
+      }
+      if constexpr (attention_dep_enabled<kDepVTmaWaitsK, false>()) {
+        mbarrier_wait(&k_ready[pipe], phase);
+      }
       const int global_v_tile =
           kv_tile_base + local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
 #if ATTENTION_CLOCK_TRACE
@@ -1725,11 +1792,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
       mbarrier_wait(&s_ready[pipe][0], phase);
       if (pipe == 0) {
-        if (local > 0) {
-          mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+        if constexpr (attention_dep_enabled<kDepPvPipe0WaitsPipe1, true>()) {
+          if (local > 0) {
+            mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+          }
         }
       } else {
-        mbarrier_wait(&pv_done[0], phase);
+        if constexpr (attention_dep_enabled<kDepPvPipe1WaitsPipe0, true>()) {
+          mbarrier_wait(&pv_done[0], phase);
+        }
       }
       if (lane0) {
 #if ATTENTION_CLOCK_TRACE
@@ -1802,6 +1873,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       }
+      if constexpr (attention_dep_enabled<kDepSumH0WaitsV, false>()) {
+        mbarrier_wait(&v_ready[pipe], phase);
+      }
       const uint32_t row_taddr = p_taddr[pipe] +
                                  (static_cast<uint32_t>(consumer_warp * 32) << 16);
       const float row_sum0 =
@@ -1811,6 +1885,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
               clock_trace_start, clock_trace_base, iter, pipe);
       if (lane0) {
         mbarrier_arrive(&s_ready[pipe][0]);
+      }
+      if constexpr (attention_dep_enabled<kDepSumH1WaitsV, false>()) {
+        mbarrier_wait(&v_ready[pipe], phase);
       }
       const float row_sum1 =
           tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
@@ -2257,10 +2334,24 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
   const int kv_tile_sets = (args.blocks + args.k_tiles - 1) / args.k_tiles;
   const int kv_total_tiles = kv_tile_sets * args.k_tiles;
   const char* mode = "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output";
-  const char* notes =
+  char notes[256];
+  std::snprintf(
+      notes, sizeof(notes),
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_major_k_"
-      "v_contiguous_k16_sw128_mn_major_qk_pingpong_dep_pv_pingpong_dep_"
-      "split_s_ready_bf16_output";
+      "v_contiguous_k16_sw128_mn_major_dep_masked_"
+      "split_s_ready_bf16_output"
+#if ATTENTION_DEP_SWEEP
+      "_dep_sweep_mask_0x%03x"
+#else
+      "_dep_default_mask_0x%03x"
+#endif
+      ,
+#if ATTENTION_DEP_SWEEP
+      ATTENTION_DEP_MASK
+#else
+      ATTENTION_DEP_DEFAULT_MASK
+#endif
+  );
   char output_shape[64];
   std::snprintf(output_shape, sizeof(output_shape), "O[%d,128,128]_bf16", args.blocks);
 
