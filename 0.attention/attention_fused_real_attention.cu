@@ -19,12 +19,20 @@
 #define ATTENTION_CLOCK_TRACE_PACK_GROUP -1
 #endif
 
+#ifndef ATTENTION_SINGLE_PIPE0
+#define ATTENTION_SINGLE_PIPE0 0
+#endif
+
 #ifndef ATTENTION_PRODUCER_REGS
 #define ATTENTION_PRODUCER_REGS 128
 #endif
 
 #ifndef ATTENTION_CONSUMER_REGS
+#if ATTENTION_SINGLE_PIPE0
+#define ATTENTION_CONSUMER_REGS 200
+#else
 #define ATTENTION_CONSUMER_REGS 184
+#endif
 #endif
 
 #ifndef ATTENTION_DEP_SWEEP
@@ -40,11 +48,7 @@
 #endif
 
 #ifndef ATTENTION_EARLY_P_LD
-#define ATTENTION_EARLY_P_LD 0
-#endif
-
-#ifndef ATTENTION_SINGLE_PIPE0
-#define ATTENTION_SINGLE_PIPE0 0
+#define ATTENTION_EARLY_P_LD ATTENTION_SINGLE_PIPE0
 #endif
 
 #ifndef ATTENTION_SINGLE_PIPE0_IDLE_WARPS
@@ -57,6 +61,26 @@
 
 #ifndef ATTENTION_SINGLE_PIPE0_V_DOUBLE_BUFFER
 #define ATTENTION_SINGLE_PIPE0_V_DOUBLE_BUFFER 0
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0_LD_X128
+#define ATTENTION_SINGLE_PIPE0_LD_X128 0
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0_LD_X128_SKIP_ROWSUM
+#define ATTENTION_SINGLE_PIPE0_LD_X128_SKIP_ROWSUM 0
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0_PV_ONCE
+#define ATTENTION_SINGLE_PIPE0_PV_ONCE 0
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+#define ATTENTION_SINGLE_PIPE0_PV_H0_DONE 0
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0_EARLY_P_LD_H1
+#define ATTENTION_SINGLE_PIPE0_EARLY_P_LD_H1 0
 #endif
 
 #define ATTENTION_STRINGIFY_IMPL(x) #x
@@ -719,6 +743,44 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
       "}, [%64];"                                                          \
       : NVCC_LD_REG_OUTPUTS_ARRAY(arr)                                     \
       : "r"(src_taddr)                                                    \
+      : "memory")
+
+#define NVCC_LD_REG_OUTPUTS_ARRAY_128(a)                                    \
+  NVCC_LD_REG_OUTPUTS_ARRAY(a),                                             \
+      "=&r"(a[64]), "=&r"(a[65]), "=&r"(a[66]), "=&r"(a[67]),             \
+      "=&r"(a[68]), "=&r"(a[69]), "=&r"(a[70]), "=&r"(a[71]),             \
+      "=&r"(a[72]), "=&r"(a[73]), "=&r"(a[74]), "=&r"(a[75]),             \
+      "=&r"(a[76]), "=&r"(a[77]), "=&r"(a[78]), "=&r"(a[79]),             \
+      "=&r"(a[80]), "=&r"(a[81]), "=&r"(a[82]), "=&r"(a[83]),             \
+      "=&r"(a[84]), "=&r"(a[85]), "=&r"(a[86]), "=&r"(a[87]),             \
+      "=&r"(a[88]), "=&r"(a[89]), "=&r"(a[90]), "=&r"(a[91]),             \
+      "=&r"(a[92]), "=&r"(a[93]), "=&r"(a[94]), "=&r"(a[95]),             \
+      "=&r"(a[96]), "=&r"(a[97]), "=&r"(a[98]), "=&r"(a[99]),             \
+      "=&r"(a[100]), "=&r"(a[101]), "=&r"(a[102]), "=&r"(a[103]),         \
+      "=&r"(a[104]), "=&r"(a[105]), "=&r"(a[106]), "=&r"(a[107]),         \
+      "=&r"(a[108]), "=&r"(a[109]), "=&r"(a[110]), "=&r"(a[111]),         \
+      "=&r"(a[112]), "=&r"(a[113]), "=&r"(a[114]), "=&r"(a[115]),         \
+      "=&r"(a[116]), "=&r"(a[117]), "=&r"(a[118]), "=&r"(a[119]),         \
+      "=&r"(a[120]), "=&r"(a[121]), "=&r"(a[122]), "=&r"(a[123]),         \
+      "=&r"(a[124]), "=&r"(a[125]), "=&r"(a[126]), "=&r"(a[127])
+
+#define NVCC_LD_REG_OPERANDS_0_127                                          \
+  NVCC_LD_REG_OPERANDS_0_63 ", "                                           \
+  "%64, %65, %66, %67, %68, %69, %70, %71, "                               \
+  "%72, %73, %74, %75, %76, %77, %78, %79, "                               \
+  "%80, %81, %82, %83, %84, %85, %86, %87, "                               \
+  "%88, %89, %90, %91, %92, %93, %94, %95, "                               \
+  "%96, %97, %98, %99, %100, %101, %102, %103, "                           \
+  "%104, %105, %106, %107, %108, %109, %110, %111, "                       \
+  "%112, %113, %114, %115, %116, %117, %118, %119, "                       \
+  "%120, %121, %122, %123, %124, %125, %126, %127"
+
+#define TCGEN05_LD_X128_ISSUE_ARRAY(src_taddr, arr)                         \
+  asm volatile(                                                             \
+      "tcgen05.ld.sync.aligned.32x32b.x128.b32 {"                           \
+      NVCC_LD_REG_OPERANDS_0_127 "}, [%128];"                               \
+      : NVCC_LD_REG_OUTPUTS_ARRAY_128(arr)                                  \
+      : "r"(src_taddr)                                                     \
       : "memory")
 
 __device__ __forceinline__ uint32_t exp2_approx_bits_cpp(uint32_t x) {
@@ -1430,6 +1492,197 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
 #endif
 }
 
+#if ATTENTION_SINGLE_PIPE0_LD_X128
+template <int kRegBase, bool kDoSum>
+__device__ __forceinline__ float pack_store_x128_half_loop(
+    uint32_t* smem_base,
+    uint32_t (&r)[128],
+    float score_to_exp2_scale) {
+  float sum = 0.0f;
+#pragma unroll
+  for (int group = 0; group < 8; ++group) {
+    alignas(16) uint32_t p[4];
+    const int r_base = kRegBase + group * 8;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      p[i] = exp2_pack_hi16_update_scaled(r[r_base + i * 2],
+                                          r[r_base + i * 2 + 1],
+                                          score_to_exp2_scale,
+                                          (kRegBase >> 1) + group * 4 + i);
+    }
+    const int word_offset = (group >> 1) * 1024 + (group & 1) * 32;
+    reinterpret_cast<uint4*>(smem_base + word_offset)[0] =
+        reinterpret_cast<uint4*>(p)[0];
+    if constexpr (kDoSum) {
+#pragma unroll
+      for (int i = 0; i < 4; ++i) {
+        sum += bf16x2_sum_device(p[i]);
+      }
+    }
+  }
+  return sum;
+}
+
+__device__ __forceinline__ void tcgen05_ld_x128_wait_trace(
+    uint32_t src_taddr,
+    uint32_t (&r)[128],
+    int consumer_warp,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+#if ATTENTION_CLOCK_TRACE
+  const int lane = threadIdx.x & 31;
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+  const unsigned long long ld_start = trace_lane ? clock64() : 0ull;
+#endif
+  TCGEN05_LD_X128_ISSUE_ARRAY(src_taddr, r);
+  tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long ld_end = clock64();
+#pragma unroll
+    for (int half = 0; half < 2; ++half) {
+      const int slot =
+          trace_slot_base + kClockTraceLdBase + consumer_warp * 2 + half;
+      write_clock_trace_record(clock_trace, slot, kClockTraceLd, trace_iter,
+                               trace_pipe, threadIdx.x >> 5, consumer_warp,
+                               half, ld_start, ld_end, clock_trace_base);
+    }
+  }
+#endif
+#else
+  (void)src_taddr;
+  (void)r;
+  (void)consumer_warp;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+#endif
+}
+
+__device__ __forceinline__ float pack_store_sum_pair_from_x128_regs(
+    uint32_t* s_smem,
+    int consumer_warp,
+    uint64_t* s_ready_h0,
+    uint64_t* s_ready_h1,
+    uint64_t* p_done_barrier,
+    uint32_t (&r)[128],
+    float score_to_exp2_scale,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int row = consumer_warp * 32 + lane;
+  uint32_t* smem_h0 = s_smem + s_store_word_offset(row, 0);
+  uint32_t* smem_h1 = s_smem + s_store_word_offset(row, 32);
+#if ATTENTION_CLOCK_TRACE
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+#endif
+  if (lane == 0) {
+    mbarrier_arrive(p_done_barrier);
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  const unsigned long long h0_start = trace_lane ? clock64() : 0ull;
+#endif
+  constexpr bool kDoRowSum = !static_cast<bool>(ATTENTION_SINGLE_PIPE0_LD_X128_SKIP_ROWSUM);
+  const float row_sum0 =
+      pack_store_x128_half_loop<0, kDoRowSum>(smem_h0, r, score_to_exp2_scale);
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long h0_end = clock64();
+    const int half = 0;
+    const int pack_slot =
+        trace_slot_base + kClockTracePackStoreBase + consumer_warp * 2 + half;
+    write_clock_trace_record(clock_trace, pack_slot, kClockTracePack, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp, half,
+                             h0_start, h0_end, clock_trace_base);
+    const int store_slot =
+        trace_slot_base + kClockTraceStoreBase + consumer_warp * 2 + half;
+    write_clock_trace_record(clock_trace, store_slot, kClockTraceStore, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp, half,
+                             h0_start, h0_end, clock_trace_base);
+    const int sum_slot =
+        trace_slot_base + kClockTraceRowSumBase + consumer_warp * 2 + half;
+    write_clock_trace_record(clock_trace, sum_slot, kClockTraceRowSum, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp, half,
+                             h0_start, h0_end, clock_trace_base);
+  }
+#endif
+  if (lane == 0) {
+    mbarrier_arrive(s_ready_h0);
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  const unsigned long long h1_start = trace_lane ? clock64() : 0ull;
+#endif
+  const float row_sum1 =
+      pack_store_x128_half_loop<64, kDoRowSum>(smem_h1, r, score_to_exp2_scale);
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long h1_end = clock64();
+    const int half = 1;
+    const int pack_slot =
+        trace_slot_base + kClockTracePackStoreBase + consumer_warp * 2 + half;
+    write_clock_trace_record(clock_trace, pack_slot, kClockTracePack, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp, half,
+                             h1_start, h1_end, clock_trace_base);
+    const int store_slot =
+        trace_slot_base + kClockTraceStoreBase + consumer_warp * 2 + half;
+    write_clock_trace_record(clock_trace, store_slot, kClockTraceStore, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp, half,
+                             h1_start, h1_end, clock_trace_base);
+    const int sum_slot =
+        trace_slot_base + kClockTraceRowSumBase + consumer_warp * 2 + half;
+    write_clock_trace_record(clock_trace, sum_slot, kClockTraceRowSum, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp, half,
+                             h1_start, h1_end, clock_trace_base);
+  }
+#endif
+  if (lane == 0) {
+    mbarrier_arrive(s_ready_h1);
+  }
+  return row_sum0 + row_sum1;
+#else
+  (void)s_smem;
+  (void)consumer_warp;
+  (void)s_ready_h0;
+  (void)s_ready_h1;
+  (void)p_done_barrier;
+  (void)r;
+  (void)score_to_exp2_scale;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+  return 0.0f;
+#endif
+}
+#endif  // ATTENTION_SINGLE_PIPE0_LD_X128
+
 __device__ __forceinline__ float bf16_bits_to_float_device(uint16_t bits) {
   return __uint_as_float(static_cast<uint32_t>(bits) << 16);
 }
@@ -1697,6 +1950,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ uint64_t v_ready[kPipeCount];
   __shared__ uint64_t s_ready[kPipeCount][2];
   __shared__ uint64_t pv_done[kPipeCount];
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+  __shared__ uint64_t pv_h0_done[kPipeCount];
+#endif
   __shared__ float row_sum_partial[kPipeCount][kTileM];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
@@ -1731,6 +1987,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_init(&s_ready[p][0], kConsumerWarpsPerPipe);
       mbarrier_init(&s_ready[p][1], kConsumerWarpsPerPipe);
       mbarrier_init(&pv_done[p], 1);
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+      mbarrier_init(&pv_h0_done[p], 1);
+#endif
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
@@ -2141,6 +2400,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                      clock_trace_base);
           }
 #endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+          tcgen05_commit(&pv_h0_done[0]);
+#endif
         }
         mbarrier_wait(&s_ready[0][1], phase);
         if (lane0) {
@@ -2206,7 +2468,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       unsigned long long v_tma_start = 0ull;
 #endif
       if (local > 0) {
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+        mbarrier_wait(&pv_h0_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+#else
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+#endif
       }
       if constexpr (attention_dep_enabled<kDepVTmaWaitsQk, false>()) {
         mbarrier_wait(&qk_done[pipe], phase);
@@ -2246,6 +2512,60 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                  v_tma_start, v_tma_end, clock_trace_base);
       }
 #endif
+#if ATTENTION_SINGLE_PIPE0 && (ATTENTION_SINGLE_PIPE0_LD_X128 || ATTENTION_SINGLE_PIPE0_PV_ONCE)
+      mbarrier_wait(&s_ready[pipe][1], phase);
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          begin_clock_trace_record(clock_trace, trace_slot_base + 4,
+                                   kClockTracePvMma, iter, pipe, warp_id, -1,
+                                   -1, clock64(), clock_trace_base);
+        }
+        const unsigned long long pv_h0_start =
+            trace_iter ? clock64() : 0ull;
+#endif
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              local != 0 || mma != 0);
+        }
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          write_clock_trace_record(clock_trace, trace_slot_base + 5,
+                                   kClockTracePvMmaH0, iter, pipe, warp_id, -1,
+                                   0, pv_h0_start, clock64(),
+                                   clock_trace_base);
+        }
+        const unsigned long long pv_h1_start =
+            trace_iter ? clock64() : 0ull;
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+        tcgen05_commit(&pv_h0_done[pipe]);
+#endif
+#pragma unroll
+        for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              true);
+        }
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          write_clock_trace_record(clock_trace, trace_slot_base + 6,
+                                   kClockTracePvMmaH1, iter, pipe, warp_id, -1,
+                                   1, pv_h1_start, clock64(),
+                                   clock_trace_base);
+        }
+#endif
+        tcgen05_commit(&pv_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          mbarrier_wait(&pv_done[pipe], phase);
+          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
+                                 clock_trace_base);
+        }
+#endif
+      }
+      continue;
+#endif
       mbarrier_wait(&s_ready[pipe][0], phase);
       if (pipe == 0) {
         if constexpr (attention_dep_enabled<kDepPvPipe0WaitsPipe1, true>()) {
@@ -2282,6 +2602,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                    0, pv_h0_start, clock64(),
                                    clock_trace_base);
         }
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+        tcgen05_commit(&pv_h0_done[pipe]);
 #endif
       }
       mbarrier_wait(&s_ready[pipe][1], phase);
@@ -2330,6 +2653,33 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
       mbarrier_wait(&qk_done[pipe], phase);
+#if ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_LD_X128
+      {
+      const uint32_t row_taddr = p_taddr[pipe] +
+                                 (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      uint32_t p_regs[128];
+      tcgen05_ld_x128_wait_trace(row_taddr, p_regs, consumer_warp,
+                                 clock_trace, clock_trace_iters,
+                                 clock_trace_start, clock_trace_base, iter, pipe);
+      if (local > 0) {
+        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+      }
+      if constexpr (attention_dep_enabled<kDepSumH0WaitsV, false>()) {
+        mbarrier_wait(&v_ready[pipe], phase);
+      }
+      if constexpr (attention_dep_enabled<kDepSumH1WaitsV, false>()) {
+        mbarrier_wait(&v_ready[pipe], phase);
+      }
+      const float row_sum01 =
+          pack_store_sum_pair_from_x128_regs(
+              s_smem[pipe], consumer_warp, &s_ready[pipe][0],
+              &s_ready[pipe][1], &p_done[pipe], p_regs, score_to_exp2_scale,
+              clock_trace, clock_trace_iters, clock_trace_start,
+              clock_trace_base, iter, pipe);
+      if (do_row_sum) row_sum_reg += row_sum01;
+      continue;
+      }
+#endif
 #if ATTENTION_EARLY_P_LD
       const uint32_t row_taddr = p_taddr[pipe] +
                                  (static_cast<uint32_t>(consumer_warp * 32) << 16);
@@ -2337,6 +2687,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       tcgen05_ld_x64_wait_trace(row_taddr, h0_regs, consumer_warp, 0,
                                 clock_trace, clock_trace_iters,
                                 clock_trace_start, clock_trace_base, iter, pipe);
+#if ATTENTION_SINGLE_PIPE0_EARLY_P_LD_H1
+      uint32_t h1_regs[64];
+      tcgen05_ld_x64_wait_trace(row_taddr + 64u, h1_regs, consumer_warp, 1,
+                                clock_trace, clock_trace_iters,
+                                clock_trace_start, clock_trace_base, iter, pipe);
+#endif
 #endif
       if (local > 0) {
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
@@ -2376,6 +2732,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if (lane0) {
         mbarrier_arrive(&s_ready[pipe][0]);
       }
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+      if (local > 0) {
+        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+      }
+#endif
       if constexpr (attention_dep_enabled<kDepSumH1WaitsV, false>()) {
         mbarrier_wait(&v_ready[pipe], phase);
       }
@@ -2393,10 +2754,17 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         }
       }
       const float row_sum1 =
+#if ATTENTION_SINGLE_PIPE0_EARLY_P_LD_H1
+          pack_store_sum_half_from_regs<true>(
+              s_smem[pipe], consumer_warp, 1, &p_done[pipe], h1_regs,
+              score_to_exp2_scale, clock_trace, clock_trace_iters,
+              clock_trace_start, clock_trace_base, iter, pipe);
+#else
           tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
               row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe],
               true, score_to_exp2_scale, clock_trace, clock_trace_iters,
               clock_trace_start, clock_trace_base, iter, pipe);
+#endif
       if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
       if (lane0) {
         mbarrier_arrive(&s_ready[pipe][1]);
@@ -2860,6 +3228,18 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
 #if ATTENTION_SINGLE_PIPE0_V_DOUBLE_BUFFER
       "_vdbuf"
 #endif
+#if ATTENTION_SINGLE_PIPE0_LD_X128
+      "_ldx128_pvonce"
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_ONCE
+      "_pvonce"
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+      "_pv_h0_done"
+#endif
+#if ATTENTION_SINGLE_PIPE0_EARLY_P_LD_H1
+      "_early_p_ld_h1"
+#endif
 #endif
 #if ATTENTION_EARLY_P_LD
       "_early_p_ld"
@@ -3191,6 +3571,9 @@ void write_clock_trace_csv(const Args& args,
 #endif
 #if ATTENTION_SINGLE_PIPE0_V_DOUBLE_BUFFER
       "_vdbuf"
+#endif
+#if ATTENTION_SINGLE_PIPE0_EARLY_P_LD_H1
+      "_early_p_ld_h1"
 #endif
 #endif
 #if ATTENTION_EARLY_P_LD
