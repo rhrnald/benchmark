@@ -1827,10 +1827,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
             trace_idx >= 0 && trace_idx < clock_trace_iters;
         const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
-        if (trace_iter) {
-          end_clock_trace_record(clock_trace, trace_slot_base + 1, clock64(),
-                                 clock_trace_base);
-        }
 #endif
         if (iter > 0) {
           mbarrier_wait(&p_done[0], static_cast<uint32_t>((iter - 1) & 1));
@@ -2043,6 +2039,25 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
     }
   }
+
+#if ATTENTION_CLOCK_TRACE
+  if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_K_DOUBLE_BUFFER) {
+    if (warp_id == 1) {
+      for (int iter = 0; iter < loop_repeats; ++iter) {
+        const int stage = iter & 1;
+        const uint32_t k_phase = static_cast<uint32_t>((iter >> 1) & 1);
+        mbarrier_wait(&k_ready[stage], k_phase);
+        const int trace_idx = iter - clock_trace_start;
+        if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+            trace_idx >= 0 && trace_idx < clock_trace_iters) {
+          end_clock_trace_record(clock_trace,
+                                 trace_idx * kClockTraceSlotsPerIter + 1,
+                                 clock64(), clock_trace_base);
+        }
+      }
+    }
+  }
+#endif
 
   if ((ATTENTION_SINGLE_PIPE0 && warp_id == kSinglePipePvWarp) ||
       (!ATTENTION_SINGLE_PIPE0 && (warp_id == 2 || warp_id == 3))) {
@@ -2913,7 +2928,7 @@ void init_trace_record(TraceRecord* r, int iter) {
   r->mma_start = 0xffffffffffffffffull;
   r->ld_start = 0xffffffffffffffffull;
   r->iter = static_cast<unsigned int>(iter);
-  r->pipe = static_cast<unsigned int>(iter & 1);
+  r->pipe = static_cast<unsigned int>(ATTENTION_SINGLE_PIPE0 ? 0 : (iter & 1));
   r->warp_id = r->pipe;
 }
 
@@ -3057,14 +3072,19 @@ void write_clock_trace_csv(const Args& args,
     TraceRecord& out = rows[r.iter - args.clock_trace_start];
     switch (r.stage) {
       case kClockTraceKTma:
+        out.pipe = static_cast<unsigned int>(r.pipe);
+        out.warp_id = static_cast<unsigned int>(r.warp_id);
         out.tma_start = r.start;
         out.tma_end = r.end;
         break;
       case kClockTraceQkMma:
+        out.pipe = static_cast<unsigned int>(r.pipe);
+        out.warp_id = static_cast<unsigned int>(r.warp_id);
         out.mma_start = r.start;
         out.mma_end = r.end;
         break;
       case kClockTraceVTma:
+        out.pipe = static_cast<unsigned int>(r.pipe);
         out.v_tma_start = r.start;
         out.v_tma_end = r.end;
         break;
