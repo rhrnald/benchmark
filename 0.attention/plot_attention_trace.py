@@ -270,7 +270,7 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
     per_consumer = any(has_consumer_warp_stamps(row) for row in rows)
     consumer_count = max((consumer_warp_count(row) for row in rows), default=4)
     if has_pv:
-        lanes += [("v_tma", pipe, f"V TMA warp{2 + pipe}") for pipe in pipes]
+        lanes += [("v_tma", pipe, f"V/PV warp{2 + pipe}") for pipe in pipes]
     if per_consumer:
         for pipe in pipes:
             lane_count = consumer_count // 2 if consumer_count == 8 and consumer_lane_mode == "warp" else consumer_count
@@ -295,7 +295,9 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
             pv_stage_warp(row, name)
             for row in rows
             for name, _, _, _, _, _ in stage_items(row, base, clock_mhz, sms, ld_warps)
-            if name.startswith("PV ") and not (
+            if name.startswith("PV ")
+            and pv_stage_warp(row, name) != 2 + int(row["pipe"])
+            and not (
                 per_consumer and pv_consumer_lane(
                     row, name, consumer_base, consumer_count, consumer_lane_mode))
         })
@@ -345,11 +347,14 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
             elif name == "V TMA":
                 lane = ("v_tma", pipe)
             elif name.startswith("PV "):
-                lane = pv_consumer_lane(
-                    row, name, consumer_base, consumer_count, consumer_lane_mode
-                ) if per_consumer else None
-                if lane is None:
-                    lane = ("pv_issue", pv_stage_warp(row, name))
+                if pv_stage_warp(row, name) == 2 + pipe:
+                    lane = ("v_tma", pipe)
+                else:
+                    lane = pv_consumer_lane(
+                        row, name, consumer_base, consumer_count, consumer_lane_mode
+                    ) if per_consumer else None
+                    if lane is None:
+                        lane = ("pv_issue", pv_stage_warp(row, name))
             else:
                 lane = ("producer", warp)
             blocks.append((start, lane_index[lane], row, name, end, cycles, color, rate))
