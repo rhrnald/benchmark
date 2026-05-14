@@ -98,6 +98,14 @@ enum AttentionDepBit {
   kDepSumH1WaitsV = 7,
   kDepNextKTmaWaitsS1 = 8,
   kDepNextKTmaWaitsPv = 9,
+  kDepKTmaPipe1WaitsPipe0 = 10,
+  kDepKTmaPipe0WaitsPipe1 = 11,
+  kDepVTmaPipe1WaitsPipe0 = 12,
+  kDepVTmaPipe0WaitsPipe1 = 13,
+  kDepSumH0Pipe1WaitsPipe0 = 14,
+  kDepSumH0Pipe0WaitsPipe1 = 15,
+  kDepSumH1Pipe1WaitsPipe0 = 16,
+  kDepSumH1Pipe0WaitsPipe1 = 17,
 };
 
 template <int Bit, bool DefaultEnabled>
@@ -1610,6 +1618,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter && lane0) k_tma_start = clock64();
 #endif
+      if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
+        if (pipe != 0) {
+          mbarrier_wait(&k_ready[0], phase);
+        }
+      }
       mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
       if (lane0) {
         tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0,
@@ -1680,6 +1693,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if constexpr (attention_dep_enabled<kDepNextKTmaWaitsPv, false>()) {
         mbarrier_wait(&pv_done[pipe], prev_phase);
+      }
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepKTmaPipe0WaitsPipe1, false>()) {
+          mbarrier_wait(&k_ready[1], prev_phase);
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&k_ready[0], phase);
+        }
       }
       mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
       if (lane0) {
@@ -1770,6 +1792,17 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if constexpr (attention_dep_enabled<kDepVTmaWaitsK, false>()) {
         mbarrier_wait(&k_ready[pipe], phase);
+      }
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepVTmaPipe0WaitsPipe1, false>()) {
+          if (local > 0) {
+            mbarrier_wait(&v_ready[1], static_cast<uint32_t>((local - 1) & 1));
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepVTmaPipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&v_ready[0], phase);
+        }
       }
       const int global_v_tile =
           kv_tile_base + local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
@@ -1876,6 +1909,17 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if constexpr (attention_dep_enabled<kDepSumH0WaitsV, false>()) {
         mbarrier_wait(&v_ready[pipe], phase);
       }
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepSumH0Pipe0WaitsPipe1, false>()) {
+          if (local > 0) {
+            mbarrier_wait(&s_ready[1][0], static_cast<uint32_t>((local - 1) & 1));
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepSumH0Pipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&s_ready[0][0], phase);
+        }
+      }
       const uint32_t row_taddr = p_taddr[pipe] +
                                  (static_cast<uint32_t>(consumer_warp * 32) << 16);
       const float row_sum0 =
@@ -1888,6 +1932,17 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
       if constexpr (attention_dep_enabled<kDepSumH1WaitsV, false>()) {
         mbarrier_wait(&v_ready[pipe], phase);
+      }
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepSumH1Pipe0WaitsPipe1, false>()) {
+          if (local > 0) {
+            mbarrier_wait(&s_ready[1][1], static_cast<uint32_t>((local - 1) & 1));
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepSumH1Pipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&s_ready[0][1], phase);
+        }
       }
       const float row_sum1 =
           tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
