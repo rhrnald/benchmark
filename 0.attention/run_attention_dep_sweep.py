@@ -98,7 +98,7 @@ def build_cmd(args: argparse.Namespace, root: Path, binary: Path, mask: int | No
             f"-DATTENTION_DEP_MASK={mask}",
         ]
     cmd += [
-        "0.attention/old_cu/attention_fused_real_attention.cu",
+        "0.attention/main.cu",
         "-o",
         str(binary),
         "-lcuda",

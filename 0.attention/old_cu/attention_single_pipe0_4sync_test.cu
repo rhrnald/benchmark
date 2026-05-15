@@ -1,5 +1,5 @@
 // Test-only snapshot of the single-pipe 4-sync experiment.
-// The main attention_fused_real_attention.cu keeps the non-syncthreads fast path.
+// The main.cu path keeps the non-syncthreads fast path.
 #include <cuda.h>
 #include <cuda_runtime.h>
 

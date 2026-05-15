@@ -1,8 +1,0 @@
-stage,status,max_abs,max_rel,bad_count,first_bad_row,first_bad_col
-qk,ok,0,0,0,-1,-1
-row_max,ok,0,0,0,-1,-1
-softmax,ok,0.00195009,0.00228478,0,-1,-1
-pv,ok,0.0132389,0.000715528,0,-1,-1
-norm,ok,2.77087e-05,0.000716126,0,-1,-1
-fused_pv,ok,0.0883636,0.00480491,0,-1,-1
-fused_norm,ok,0.000186026,0.00480499,0,-1,-1
