@@ -598,6 +598,76 @@ CompareResult compare_softmax(const std::vector<uint32_t>& s_words,
   return result;
 }
 
+std::vector<uint32_t> pack_row_major_bf16_words(const std::vector<float>& values) {
+  std::vector<uint32_t> words(kTileWords, 0);
+  for (int row = 0; row < kTileM; ++row) {
+    for (int col_pair = 0; col_pair < kTileN / 2; ++col_pair) {
+      const int col = col_pair * 2;
+      words[row * (kTileN / 2) + col_pair] =
+          pack_bf16_pair(values[row * kTileN + col], values[row * kTileN + col + 1]);
+    }
+  }
+  return words;
+}
+
+std::vector<float> unpack_row_major_bf16_words(const std::vector<uint32_t>& words) {
+  std::vector<float> values(kTileBf16Elems, 0.0f);
+  for (int row = 0; row < kTileM; ++row) {
+    for (int col_pair = 0; col_pair < kTileN / 2; ++col_pair) {
+      const uint32_t packed = words[row * (kTileN / 2) + col_pair];
+      const int col = col_pair * 2;
+      values[row * kTileN + col] =
+          bf16_bits_to_float(static_cast<uint16_t>(packed & 0xffffu));
+      values[row * kTileN + col + 1] =
+          bf16_bits_to_float(static_cast<uint16_t>(packed >> 16));
+    }
+  }
+  return values;
+}
+
+CompareResult compare_bf16_words(const std::string& stage,
+                                 const std::vector<uint32_t>& got,
+                                 const std::vector<uint32_t>& expected,
+                                 int dump_mismatch) {
+  CompareResult result;
+  result.stage = stage;
+  int dumped = 0;
+  for (size_t word = 0; word < got.size(); ++word) {
+    if (got[word] == expected[word]) continue;
+    const int row = static_cast<int>(word / (kTileN / 2));
+    const int col_pair = static_cast<int>(word % (kTileN / 2));
+    for (int lane = 0; lane < 2; ++lane) {
+      const uint16_t got_bits =
+          static_cast<uint16_t>(lane == 0 ? (got[word] & 0xffffu) : (got[word] >> 16));
+      const uint16_t exp_bits =
+          static_cast<uint16_t>(lane == 0 ? (expected[word] & 0xffffu)
+                                          : (expected[word] >> 16));
+      const float got_f = bf16_bits_to_float(got_bits);
+      const float exp_f = bf16_bits_to_float(exp_bits);
+      const float abs_err = std::fabs(got_f - exp_f);
+      const float rel_err = abs_err / std::max(std::fabs(exp_f), 1.0e-6f);
+      result.max_abs = std::max(result.max_abs, abs_err);
+      result.max_rel = std::max(result.max_rel, rel_err);
+      if (got_bits != exp_bits) {
+        if (result.bad_count == 0) {
+          result.first_bad_row = row;
+          result.first_bad_col = col_pair * 2 + lane;
+        }
+        ++result.bad_count;
+        if (dumped < dump_mismatch) {
+          std::printf("%s mismatch[row=%d col=%d] got_bits=0x%04x expected_bits=0x%04x "
+                      "got=%g expected=%g\n",
+                      stage.c_str(), row, col_pair * 2 + lane, got_bits, exp_bits, got_f,
+                      exp_f);
+          ++dumped;
+        }
+      }
+    }
+  }
+  result.ok = result.bad_count == 0;
+  return result;
+}
+
 void write_probe_csv(const std::string& path,
                      const std::vector<float>& p,
                      int expected_row,
@@ -794,7 +864,7 @@ int main(int argc, char** argv) {
   float* d_p = nullptr;
   float* d_o = nullptr;
   float* d_o_norm = nullptr;
-  float* d_fused_pipe_o = nullptr;
+  uint32_t* d_fused_o = nullptr;
   float* d_row_max = nullptr;
   float* d_row_sum = nullptr;
   CUDA_CHECK(cudaMalloc(&d_q, q_words * sizeof(uint32_t)));
@@ -804,9 +874,7 @@ int main(int argc, char** argv) {
   if (needs_fused(args.stage)) {
 #if ATTENTION_STORE_OUTPUT
     CUDA_CHECK(cudaMalloc(&d_sink, sizeof(uint32_t)));
-    CUDA_CHECK(cudaMalloc(&d_fused_pipe_o,
-                          static_cast<size_t>(kPipeCount) * kTileBf16Elems *
-                              sizeof(float)));
+    CUDA_CHECK(cudaMalloc(&d_fused_o, kTileWords * sizeof(uint32_t)));
 #else
     std::fprintf(stderr,
                  "--stage fused/all requires -DATTENTION_STORE_OUTPUT=1 "
@@ -827,10 +895,8 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaMemset(d_o_norm, 0, o_elems * sizeof(float)));
   CUDA_CHECK(cudaMemset(d_row_max, 0, kTileM * sizeof(float)));
   if (d_sink) CUDA_CHECK(cudaMemset(d_sink, 0, sizeof(uint32_t)));
-  if (d_fused_pipe_o) {
-    CUDA_CHECK(cudaMemset(d_fused_pipe_o, 0,
-                          static_cast<size_t>(kPipeCount) * kTileBf16Elems *
-                              sizeof(float)));
+  if (d_fused_o) {
+    CUDA_CHECK(cudaMemset(d_fused_o, 0, kTileWords * sizeof(uint32_t)));
   }
   CUDA_CHECK(cudaMemset(d_s, 0, kv_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_row_sum, 0, kTileM * sizeof(float)));
@@ -839,10 +905,14 @@ int main(int argc, char** argv) {
   CUtensorMap k_map{};
   CUtensorMap v_map{};
   CUtensorMap s_map{};
+  CUtensorMap o_map{};
   encode_validation_atom_tma_map(&q_map, d_q, 64);
   encode_validation_atom_tma_map(&k_map, d_k, static_cast<uint64_t>(args.k_tiles) * 64);
   encode_validation_atom_tma_map(&v_map, d_v, static_cast<uint64_t>(args.k_tiles) * 64);
   encode_validation_atom_tma_map(&s_map, d_s, static_cast<uint64_t>(args.k_tiles) * 64);
+  if (d_fused_o) {
+    encode_bf16_output_tma_map(&o_map, d_fused_o, 1);
+  }
 
   CUDA_CHECK(cudaFuncSetAttribute(qk_validate_kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -949,35 +1019,21 @@ int main(int argc, char** argv) {
   if (needs_fused(args.stage)) {
 #if ATTENTION_STORE_OUTPUT
     CUDA_CHECK(cudaMemset(d_sink, 0, sizeof(uint32_t)));
-    CUDA_CHECK(cudaMemset(d_fused_pipe_o, 0,
-                          static_cast<size_t>(kPipeCount) * kTileBf16Elems *
-                              sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_fused_o, 0, kTileWords * sizeof(uint32_t)));
     qk_tma_mma_ld_kernel<<<1, kMainThreads, kDynamicSmemBytes>>>(
-        q_map, k_map, v_map, d_sink, args.k_tiles, args.k_tiles, d_fused_pipe_o);
+        q_map, k_map, v_map, o_map, d_sink, args.k_tiles, args.k_tiles, d_fused_o);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    std::vector<float> h_pipe(static_cast<size_t>(kPipeCount) * kTileBf16Elems);
-    CUDA_CHECK(cudaMemcpy(h_pipe.data(), d_fused_pipe_o,
-                          h_pipe.size() * sizeof(float), cudaMemcpyDeviceToHost));
-    std::vector<float> h_fused(o_elems, 0.0f);
-    for (int pipe = 0; pipe < kPipeCount; ++pipe) {
-      for (size_t i = 0; i < o_elems; ++i) {
-        h_fused[i] += h_pipe[static_cast<size_t>(pipe) * kTileBf16Elems + i];
-      }
-    }
-    std::vector<float> h_fused_shifted(o_elems, 0.0f);
-    std::vector<float> h_fused_norm(o_elems, 0.0f);
-    for (size_t i = 0; i < o_elems; ++i) {
-      const int row = static_cast<int>(i / kTileN);
-      const float shift = args.row_max ? std::exp2(-row_max_ref[row]) : 1.0f;
-      h_fused_shifted[i] = h_fused[i] * shift;
-      h_fused_norm[i] = h_fused_shifted[i] / row_sum_ref[row];
-    }
-    results.push_back(compare_vector("fused_pv", h_fused_shifted, o_ref, 2.0e-2f, kPvRelTol,
-                                     args.dump_mismatch));
+    std::vector<uint32_t> h_fused(kTileWords, 0);
+    CUDA_CHECK(cudaMemcpy(h_fused.data(), d_fused_o, kTileWords * sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    const std::vector<float> h_fused_norm = unpack_row_major_bf16_words(h_fused);
+    const std::vector<uint32_t> expected_bf16 = pack_row_major_bf16_words(norm_ref);
     results.push_back(compare_vector("fused_norm", h_fused_norm, norm_ref, 1.0e-3f,
                                      kPvRelTol, args.dump_mismatch));
+    results.push_back(compare_bf16_words("final_o_bf16", h_fused, expected_bf16,
+                                         args.dump_mismatch));
 #endif
   }
 
@@ -998,7 +1054,7 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaFree(d_p));
   CUDA_CHECK(cudaFree(d_o));
   CUDA_CHECK(cudaFree(d_o_norm));
-  if (d_fused_pipe_o) CUDA_CHECK(cudaFree(d_fused_pipe_o));
+  if (d_fused_o) CUDA_CHECK(cudaFree(d_fused_o));
   CUDA_CHECK(cudaFree(d_row_max));
   CUDA_CHECK(cudaFree(d_row_sum));
   return all_ok ? 0 : 1;

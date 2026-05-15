@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "0.attention" / "attention_fused_real_attention.cu"
+SRC = ROOT / "0.attention" / "old_cu" / "attention_fused_real_attention.cu"
 OUT_DIR = ROOT / "0.attention"
 BIN_REL = Path("0.attention") / "attention_custom_kernel"
 
