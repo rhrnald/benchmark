@@ -24,7 +24,7 @@
 #endif
 
 #ifndef ATTENTION_PRODUCER_REGS
-#define ATTENTION_PRODUCER_REGS 128
+#define ATTENTION_PRODUCER_REGS 120
 #endif
 
 #ifndef ATTENTION_CONSUMER_REGS
@@ -40,7 +40,7 @@
 #endif
 
 #ifndef ATTENTION_DEP_DEFAULT_MASK
-#define ATTENTION_DEP_DEFAULT_MASK 0x00d
+#define ATTENTION_DEP_DEFAULT_MASK 0x00f
 #endif
 
 #ifndef ATTENTION_DEP_MASK
@@ -314,65 +314,74 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
 }
 
 __host__ __device__ __forceinline__ uint64_t make_smem_desc(uint32_t matrix_start_addr) {
-  const uint32_t matrix_start_aligned = matrix_start_addr & ~0xFu;
   constexpr uint32_t leading_dim_byte_offset = 128;
   constexpr uint32_t stride_dim_byte_offset = 256;
   constexpr uint32_t swizzle_mode = 0;
-  const uint32_t lead_enc = (leading_dim_byte_offset & 0x3ffffu) >> 4;
-  const uint32_t stride_enc = (stride_dim_byte_offset & 0x3ffffu) >> 4;
-  uint64_t desc = 0;
-  desc |= static_cast<uint64_t>(matrix_start_aligned >> 4);
-  desc |= static_cast<uint64_t>(lead_enc) << 16;
-  desc |= static_cast<uint64_t>(stride_enc) << 32;
-  desc |= static_cast<uint64_t>(0x1u) << 46;
-  desc |= static_cast<uint64_t>(0xB0u) << 53;
-  desc |= static_cast<uint64_t>(swizzle_mode) << 61;
-  return desc;
+  constexpr uint64_t lead_enc =
+      static_cast<uint64_t>((leading_dim_byte_offset & 0x3ffffu) >> 4);
+  constexpr uint64_t stride_enc =
+      static_cast<uint64_t>((stride_dim_byte_offset & 0x3ffffu) >> 4);
+  constexpr uint64_t desc_base = (lead_enc << 16) | (stride_enc << 32) |
+                                 (static_cast<uint64_t>(0x1u) << 46) |
+                                 (static_cast<uint64_t>(0xB0u) << 53) |
+                                 (static_cast<uint64_t>(swizzle_mode) << 61);
+  return desc_base | static_cast<uint64_t>((matrix_start_addr & ~0xFu) >> 4);
+}
+
+__host__ __device__ __forceinline__ uint64_t make_sw128_major_k_smem_desc_addr16(
+    uint32_t matrix_start_addr16,
+    int mma) {
+  constexpr uint64_t desc_base = (static_cast<uint64_t>(1u) << 16) |   // leading byte offset = 16B.
+                                 (static_cast<uint64_t>(64u) << 32) |  // stride byte offset = 1024B.
+                                 (static_cast<uint64_t>(1u) << 46) |   // Blackwell descriptor version.
+                                 (static_cast<uint64_t>(2u) << 61);    // SWIZZLE_128B.
+  const int half = mma >> 2;
+  const int in_half = mma & 3;
+  const uint32_t addr16 =
+      matrix_start_addr16 + static_cast<uint32_t>(half * ((kTileBytes / 2) >> 4) +
+                                                  in_half * (32 >> 4));
+  return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
 }
 
 __host__ __device__ __forceinline__ uint64_t make_sw128_major_k_smem_desc(
     uint32_t matrix_start_addr,
     int mma) {
-  const int half = mma >> 2;
-  const int in_half = mma & 3;
-  const uint32_t addr =
-      matrix_start_addr + static_cast<uint32_t>(half * (kTileBytes / 2) +
-                                                in_half * 32);
-  uint64_t desc = 0;
-  desc |= static_cast<uint64_t>((addr >> 4) & 0x3fffu);
-  desc |= static_cast<uint64_t>(1u) << 16;   // leading byte offset = 16B.
-  desc |= static_cast<uint64_t>(64u) << 32;  // stride byte offset = 1024B.
-  desc |= static_cast<uint64_t>(1u) << 46;   // Blackwell descriptor version.
-  desc |= static_cast<uint64_t>(2u) << 61;   // SWIZZLE_128B.
-  return desc;
+  return make_sw128_major_k_smem_desc_addr16((matrix_start_addr & ~0xFu) >> 4, mma);
+}
+
+__host__ __device__ __forceinline__ uint64_t make_sw128_major_mn_smem_desc_addr16(
+    uint32_t matrix_start_addr16,
+    int mma) {
+  constexpr uint64_t desc_base = (static_cast<uint64_t>(128u) << 16) |  // leading byte offset = 2048B.
+                                 (static_cast<uint64_t>(64u) << 32) |   // stride byte offset = 1024B.
+                                 (static_cast<uint64_t>(1u) << 46) |    // Blackwell descriptor version.
+                                 (static_cast<uint64_t>(2u) << 61);     // SWIZZLE_128B.
+  const uint32_t addr16 = matrix_start_addr16 + static_cast<uint32_t>(mma) * (4096u >> 4);
+  return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
 }
 
 __host__ __device__ __forceinline__ uint64_t make_sw128_major_mn_smem_desc(
     uint32_t matrix_start_addr,
     int mma) {
-  const uint32_t addr = matrix_start_addr + static_cast<uint32_t>(mma) * 4096u;
-  uint64_t desc = 0;
-  desc |= static_cast<uint64_t>((addr >> 4) & 0x3fffu);
-  desc |= static_cast<uint64_t>(128u) << 16;  // leading byte offset = 2048B.
-  desc |= static_cast<uint64_t>(64u) << 32;   // stride byte offset = 1024B.
-  desc |= static_cast<uint64_t>(1u) << 46;    // Blackwell descriptor version.
-  desc |= static_cast<uint64_t>(2u) << 61;    // SWIZZLE_128B.
-  return desc;
+  return make_sw128_major_mn_smem_desc_addr16((matrix_start_addr & ~0xFu) >> 4, mma);
+}
+
+__host__ __device__ __forceinline__ uint64_t make_s_smem_desc_addr16(
+    uint32_t matrix_start_addr16) {
+  constexpr uint32_t leading_dim_byte_offset = 128;
+  constexpr uint32_t stride_dim_byte_offset = 256;
+  constexpr uint64_t lead_enc =
+      static_cast<uint64_t>((leading_dim_byte_offset & 0x3ffffu) >> 4);
+  constexpr uint64_t stride_enc =
+      static_cast<uint64_t>((stride_dim_byte_offset & 0x3ffffu) >> 4);
+  constexpr uint64_t desc_base = (lead_enc << 16) | (stride_enc << 32) |
+                                 (static_cast<uint64_t>(0x1u) << 46) |
+                                 (static_cast<uint64_t>(0xB0u) << 53);
+  return desc_base | static_cast<uint64_t>(matrix_start_addr16);
 }
 
 __host__ __device__ __forceinline__ uint64_t make_s_smem_desc(uint32_t matrix_start_addr) {
-  const uint32_t matrix_start_aligned = matrix_start_addr & ~0xFu;
-  constexpr uint32_t leading_dim_byte_offset = 128;
-  constexpr uint32_t stride_dim_byte_offset = 256;
-  const uint32_t lead_enc = (leading_dim_byte_offset & 0x3ffffu) >> 4;
-  const uint32_t stride_enc = (stride_dim_byte_offset & 0x3ffffu) >> 4;
-  uint64_t desc = 0;
-  desc |= static_cast<uint64_t>(matrix_start_aligned >> 4);
-  desc |= static_cast<uint64_t>(lead_enc) << 16;
-  desc |= static_cast<uint64_t>(stride_enc) << 32;
-  desc |= static_cast<uint64_t>(0x1u) << 46;
-  desc |= static_cast<uint64_t>(0xB0u) << 53;
-  return desc;
+  return make_s_smem_desc_addr16((matrix_start_addr & ~0xFu) >> 4);
 }
 
 __host__ __device__ __forceinline__ int atom_major_k_word_offset(int row, int col_pair) {
@@ -517,9 +526,9 @@ __device__ __forceinline__ void issue_k_tma_tile(const CUtensorMap* k_map,
                                                  bool lane0) {
   mbarrier_expect_tx(barrier, kTileBytes);
   if (lane0) {
-    tma_load_2d(k_map, smem_ptr_u32(dst_smem), barrier, 0,
-                global_k_tile * kTileM);
-    tma_load_2d(k_map, smem_ptr_u32(dst_smem + kTileWords / 2), barrier, 32,
+    const uint32_t dst_smem_addr = smem_ptr_u32(dst_smem);
+    tma_load_2d(k_map, dst_smem_addr, barrier, 0, global_k_tile * kTileM);
+    tma_load_2d(k_map, dst_smem_addr + kTileBytes / 2, barrier, 32,
                 global_k_tile * kTileM);
   }
 }
@@ -557,8 +566,8 @@ __device__ __forceinline__ void issue_v_tma_tile(const CUtensorMap* v_map,
                                                  bool lane0) {
   mbarrier_expect_tx(barrier, kTileBytes);
   if (lane0) {
-    tma_load_4d(v_map, smem_ptr_u32(dst_smem), barrier, 0, 0, 0,
-                global_v_tile * 8);
+    const uint32_t dst_smem_addr = smem_ptr_u32(dst_smem);
+    tma_load_4d(v_map, dst_smem_addr, barrier, 0, 0, 0, global_v_tile * 8);
   }
 }
 
@@ -2024,618 +2033,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
     mbarrier_expect_tx(&q_ready, kTileBytes);
     if (lane0) {
-      tma_load_2d(&q_map, smem_ptr_u32(q_smem), &q_ready, 0, q_contig_row);
-      tma_load_2d(&q_map, smem_ptr_u32(q_smem + kTileWords / 2), &q_ready, 32,
-                  q_contig_row);
-    }
-  }
-
-  if (warp_id == 0 || (!ATTENTION_SINGLE_PIPE0 && warp_id == 1)) {
-    const int pipe = warp_id;
-    const uint32_t idesc = make_qk_idesc();
-    uint64_t q_desc[8];
-    uint64_t k_desc[8];
-    if (lane0) {
-#pragma unroll
-      for (int mma = 0; mma < kMmasPerTile; ++mma) {
-        q_desc[mma] = make_sw128_major_k_smem_desc(smem_ptr_u32(q_smem), mma);
-        k_desc[mma] =
-            make_sw128_major_k_smem_desc(smem_ptr_u32(k_smem[pipe]), mma);
-      }
-    }
-    mbarrier_wait(&q_ready, 0);
-#if ATTENTION_CLOCK_TRACE
-    if (blockIdx.x == 0 && lane0 && warp_id == 0 && clock_trace != nullptr) {
-      const unsigned long long q_tma_end = clock64();
-      const int q_tma_slot = clock_trace_iters * kClockTraceSlotsPerIter + 11;
-      write_clock_trace_record(clock_trace, q_tma_slot, kClockTraceQTma, -1, -1,
-                               warp_id, -1, -1, q_tma_start_shared, q_tma_end,
-                               clock_trace_base);
-    }
-#endif
-    if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_K_DOUBLE_BUFFER) {
-#pragma unroll
-      for (int preload = 0; preload < 2; ++preload) {
-        if (preload < loop_repeats) {
-          const int stage = preload & 1;
-          const int global_k_tile =
-              kv_tile_base +
-              local_k_tile_for_iter<kFixedKTiles>(preload, loop_k_tiles);
-#if ATTENTION_CLOCK_TRACE
-          const int trace_idx = preload - clock_trace_start;
-          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-              trace_idx >= 0 && trace_idx < clock_trace_iters) {
-            begin_clock_trace_record(clock_trace,
-                                     trace_idx * kClockTraceSlotsPerIter + 1,
-                                     kClockTraceKTma, preload, 0, warp_id, -1,
-                                     -1, clock64(), clock_trace_base);
-          }
-#endif
-          issue_k_tma_tile(&k_map, k_smem[stage], &k_ready[stage],
-                           global_k_tile, lane0);
-        }
-      }
-      for (int iter = 0; iter < loop_repeats; ++iter) {
-        const int stage = iter & 1;
-        const uint32_t k_phase = static_cast<uint32_t>((iter >> 1) & 1);
-        const uint32_t phase = static_cast<uint32_t>(iter & 1);
-        mbarrier_wait(&k_ready[stage], k_phase);
-#if ATTENTION_CLOCK_TRACE
-        const int trace_idx = iter - clock_trace_start;
-        const bool trace_iter =
-            clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-            trace_idx >= 0 && trace_idx < clock_trace_iters;
-        const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
-#endif
-        if (iter > 0) {
-          mbarrier_wait(&p_done[0], static_cast<uint32_t>((iter - 1) & 1));
-        }
-        if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-          if (trace_iter) {
-            begin_clock_trace_record(clock_trace, trace_slot_base + 2,
-                                     kClockTraceQkMma, iter, 0, warp_id, -1,
-                                     -1, clock64(), clock_trace_base);
-          }
-#endif
-#pragma unroll
-          for (int mma = 0; mma < kMmasPerTile; ++mma) {
-            const uint64_t k_desc_stage =
-                make_sw128_major_k_smem_desc(smem_ptr_u32(k_smem[stage]), mma);
-            tcgen05_mma_bf16_ss(p_taddr[0], q_desc[mma], k_desc_stage, idesc,
-                                mma != 0);
-          }
-          tcgen05_commit(&qk_done[0]);
-        }
-        mbarrier_wait(&qk_done[0], phase);
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          end_clock_trace_record(clock_trace, trace_slot_base + 2, clock64(),
-                                 clock_trace_base);
-        }
-#endif
-        const int prefetch_iter = iter + 2;
-        if (prefetch_iter < loop_repeats) {
-          const int prefetch_stage = prefetch_iter & 1;
-          const int global_k_tile =
-              kv_tile_base +
-              local_k_tile_for_iter<kFixedKTiles>(prefetch_iter, loop_k_tiles);
-#if ATTENTION_CLOCK_TRACE
-          const int prefetch_trace_idx = prefetch_iter - clock_trace_start;
-          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-              prefetch_trace_idx >= 0 &&
-              prefetch_trace_idx < clock_trace_iters) {
-            begin_clock_trace_record(
-                clock_trace, prefetch_trace_idx * kClockTraceSlotsPerIter + 1,
-                kClockTraceKTma, prefetch_iter, 0, warp_id, -1, -1, clock64(),
-                clock_trace_base);
-          }
-#endif
-          issue_k_tma_tile(&k_map, k_smem[prefetch_stage],
-                           &k_ready[prefetch_stage], global_k_tile, lane0);
-        }
-      }
-    } else {
-    int iter = pipe;
-    int local = 0;
-    if (iter < loop_repeats) {
-      const uint32_t phase = static_cast<uint32_t>(local & 1);
-      const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
-      const int global_k_tile = kv_tile_base + k_tile;
-#if ATTENTION_CLOCK_TRACE
-      const int trace_idx = iter - clock_trace_start;
-      const bool trace_iter =
-          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
-          trace_idx < clock_trace_iters;
-      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
-      unsigned long long k_tma_start = 0ull;
-#endif
-#if ATTENTION_CLOCK_TRACE
-      if (trace_iter && lane0) k_tma_start = clock64();
-#endif
-      if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
-        if (pipe != 0) {
-          mbarrier_wait(&k_ready[0], phase);
-        }
-      }
-      mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
-      if (lane0) {
-        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0,
-                    global_k_tile * kTileM);
-        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe] + kTileWords / 2),
-                    &k_ready[pipe], 32, global_k_tile * kTileM);
-      }
-      mbarrier_wait(&k_ready[pipe], phase);
-#if ATTENTION_CLOCK_TRACE
-      if (trace_iter) {
-        const unsigned long long k_tma_end = clock64();
-        write_clock_trace_record(clock_trace, trace_slot_base + 1,
-                                 kClockTraceKTma, iter, pipe, warp_id, -1, -1,
-                                 k_tma_start, k_tma_end, clock_trace_base);
-      }
-#endif
-      if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
-        if (pipe != 0) {
-          mbarrier_wait(&qk_done[0], phase);
-        }
-      }
-      if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          begin_clock_trace_record(clock_trace, trace_slot_base + 2,
-                                   kClockTraceQkMma, iter, pipe, warp_id, -1,
-                                   -1, clock64(), clock_trace_base);
-        }
-#endif
-#pragma unroll
-        for (int mma = 0; mma < kMmasPerTile; ++mma) {
-          tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
-        }
-        tcgen05_commit(&qk_done[pipe]);
-      }
-      iter += kActivePipeStride;
-      ++local;
-    }
-    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
-      const uint32_t phase = static_cast<uint32_t>(local & 1);
-      const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
-      const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
-      const int global_k_tile = kv_tile_base + k_tile;
-#if ATTENTION_CLOCK_TRACE
-      const int trace_idx = iter - clock_trace_start;
-      const bool trace_iter =
-          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
-          trace_idx < clock_trace_iters;
-      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
-      unsigned long long k_tma_start = 0ull;
-#endif
-      mbarrier_wait(&qk_done[pipe], prev_phase);
-#if ATTENTION_CLOCK_TRACE
-      const int done_iter = iter - kActivePipeStride;
-      const int done_trace_idx = done_iter - clock_trace_start;
-      if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-          done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
-        end_clock_trace_record(clock_trace,
-                               done_trace_idx * kClockTraceSlotsPerIter + 2,
-                               clock64(), clock_trace_base);
-      }
-#endif
-#if ATTENTION_CLOCK_TRACE
-      if (trace_iter && lane0) k_tma_start = clock64();
-#endif
-      if constexpr (attention_dep_enabled<kDepNextKTmaWaitsS1, false>()) {
-        mbarrier_wait(&s_ready[pipe][1], prev_phase);
-      }
-      if constexpr (attention_dep_enabled<kDepNextKTmaWaitsPv, false>()) {
-        mbarrier_wait(&pv_done[pipe], prev_phase);
-      }
-      if (pipe == 0) {
-        if constexpr (attention_dep_enabled<kDepKTmaPipe0WaitsPipe1, false>()) {
-          if constexpr (!ATTENTION_SINGLE_PIPE0) {
-            mbarrier_wait(&k_ready[1], prev_phase);
-          }
-        }
-      } else {
-        if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
-          mbarrier_wait(&k_ready[0], phase);
-        }
-      }
-      mbarrier_expect_tx(&k_ready[pipe], kTileBytes);
-      if (lane0) {
-        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe]), &k_ready[pipe], 0,
-                    global_k_tile * kTileM);
-        tma_load_2d(&k_map, smem_ptr_u32(k_smem[pipe] + kTileWords / 2),
-                    &k_ready[pipe], 32, global_k_tile * kTileM);
-      }
-      mbarrier_wait(&k_ready[pipe], phase);
-#if ATTENTION_CLOCK_TRACE
-      if (trace_iter) {
-        const unsigned long long k_tma_end = clock64();
-        write_clock_trace_record(clock_trace, trace_slot_base + 1,
-                                 kClockTraceKTma, iter, pipe, warp_id, -1, -1,
-                                 k_tma_start, k_tma_end, clock_trace_base);
-      }
-#endif
-      mbarrier_wait(&p_done[pipe], prev_phase);
-      if (pipe == 0) {
-        if constexpr (attention_dep_enabled<kDepQkPipe0WaitsPipe1, true>()) {
-          if constexpr (!ATTENTION_SINGLE_PIPE0) {
-            mbarrier_wait(&qk_done[1], prev_phase);
-          }
-        }
-      } else {
-        if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
-          mbarrier_wait(&qk_done[0], phase);
-        }
-      }
-      if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          begin_clock_trace_record(clock_trace, trace_slot_base + 2,
-                                   kClockTraceQkMma, iter, pipe, warp_id, -1,
-                                   -1, clock64(), clock_trace_base);
-        }
-#endif
-#pragma unroll
-        for (int mma = 0; mma < kMmasPerTile; ++mma) {
-          tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
-        }
-        tcgen05_commit(&qk_done[pipe]);
-      }
-    }
-#if ATTENTION_CLOCK_TRACE
-    if (local > 0) {
-      mbarrier_wait(&qk_done[pipe], static_cast<uint32_t>((local - 1) & 1));
-      const int done_iter = iter - kActivePipeStride;
-      const int done_trace_idx = done_iter - clock_trace_start;
-      if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-          done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
-        end_clock_trace_record(clock_trace,
-                               done_trace_idx * kClockTraceSlotsPerIter + 2,
-                               clock64(), clock_trace_base);
-      }
-    }
-#endif
-    }
-  }
-
-#if ATTENTION_CLOCK_TRACE
-  if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_K_DOUBLE_BUFFER) {
-    if (warp_id == 1) {
-      for (int iter = 0; iter < loop_repeats; ++iter) {
-        const int stage = iter & 1;
-        const uint32_t k_phase = static_cast<uint32_t>((iter >> 1) & 1);
-        mbarrier_wait(&k_ready[stage], k_phase);
-        const int trace_idx = iter - clock_trace_start;
-        if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-            trace_idx >= 0 && trace_idx < clock_trace_iters) {
-          end_clock_trace_record(clock_trace,
-                                 trace_idx * kClockTraceSlotsPerIter + 1,
-                                 clock64(), clock_trace_base);
-        }
-      }
-    }
-  }
-#endif
-
-  if ((ATTENTION_SINGLE_PIPE0 && warp_id == kSinglePipePvWarp) ||
-      (!ATTENTION_SINGLE_PIPE0 && (warp_id == 2 || warp_id == 3))) {
-    const int pipe = ATTENTION_SINGLE_PIPE0 ? 0 : warp_id - 2;
-    const uint32_t idesc = make_qk_idesc() | (1u << 16);
-    uint64_t s_desc[8];
-    uint64_t v_desc[8];
-    if (lane0) {
-#pragma unroll
-      for (int mma = 0; mma < kMmasPerTile; ++mma) {
-        s_desc[mma] = make_s_smem_desc(smem_ptr_u32(s_smem[pipe] + mma * 1024));
-        v_desc[mma] =
-            make_sw128_major_mn_smem_desc(smem_ptr_u32(v_smem[pipe]), mma);
-      }
-    }
-    if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_V_DOUBLE_BUFFER) {
-#pragma unroll
-      for (int preload = 0; preload < 2; ++preload) {
-        if (preload < loop_repeats) {
-          const int stage = preload & 1;
-          const int global_v_tile =
-              kv_tile_base +
-              local_k_tile_for_iter<kFixedKTiles>(preload, loop_k_tiles);
-#if ATTENTION_CLOCK_TRACE
-          const int trace_idx = preload - clock_trace_start;
-          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-              trace_idx >= 0 && trace_idx < clock_trace_iters) {
-            begin_clock_trace_record(clock_trace,
-                                     trace_idx * kClockTraceSlotsPerIter + 3,
-                                     kClockTraceVTma, preload, 0, warp_id, -1,
-                                     -1, clock64(), clock_trace_base);
-          }
-#endif
-          issue_v_tma_tile(&v_map, v_smem[stage], &v_ready[stage],
-                           global_v_tile, lane0);
-        }
-      }
-      for (int iter = 0; iter < loop_repeats; ++iter) {
-        const int stage = iter & 1;
-        const uint32_t v_phase = static_cast<uint32_t>((iter >> 1) & 1);
-        const uint32_t phase = static_cast<uint32_t>(iter & 1);
-#if ATTENTION_CLOCK_TRACE
-        const int trace_idx = iter - clock_trace_start;
-        const bool trace_iter =
-            clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-            trace_idx >= 0 && trace_idx < clock_trace_iters;
-        const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
-#endif
-        mbarrier_wait(&v_ready[stage], v_phase);
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          end_clock_trace_record(clock_trace, trace_slot_base + 3, clock64(),
-                                 clock_trace_base);
-        }
-#endif
-        mbarrier_wait(&s_ready[0][0], phase);
-        if (iter > 0) {
-          mbarrier_wait(&pv_done[0], static_cast<uint32_t>((iter - 1) & 1));
-        }
-        if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-          if (trace_iter) {
-            begin_clock_trace_record(clock_trace, trace_slot_base + 4,
-                                     kClockTracePvMma, iter, 0, warp_id, -1,
-                                     -1, clock64(), clock_trace_base);
-          }
-          const unsigned long long pv_h0_start = trace_iter ? clock64() : 0ull;
-#endif
-#pragma unroll
-          for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
-            const uint64_t v_desc_stage =
-                make_sw128_major_mn_smem_desc(smem_ptr_u32(v_smem[stage]), mma);
-            tcgen05_mma_bf16_ss(o_taddr[0], s_desc[mma], v_desc_stage, idesc,
-                                iter != 0 || mma != 0);
-          }
-#if ATTENTION_CLOCK_TRACE
-          if (trace_iter) {
-            write_clock_trace_record(clock_trace, trace_slot_base + 5,
-                                     kClockTracePvMmaH0, iter, 0, warp_id, -1,
-                                     0, pv_h0_start, clock64(),
-                                     clock_trace_base);
-          }
-#endif
-#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
-          tcgen05_commit(&pv_h0_done[0]);
-#endif
-        }
-        mbarrier_wait(&s_ready[0][1], phase);
-        if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-          const unsigned long long pv_h1_start = trace_iter ? clock64() : 0ull;
-#endif
-#pragma unroll
-          for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
-            const uint64_t v_desc_stage =
-                make_sw128_major_mn_smem_desc(smem_ptr_u32(v_smem[stage]), mma);
-            tcgen05_mma_bf16_ss(o_taddr[0], s_desc[mma], v_desc_stage, idesc,
-                                true);
-          }
-#if ATTENTION_CLOCK_TRACE
-          if (trace_iter) {
-            write_clock_trace_record(clock_trace, trace_slot_base + 6,
-                                     kClockTracePvMmaH1, iter, 0, warp_id, -1,
-                                     1, pv_h1_start, clock64(),
-                                     clock_trace_base);
-          }
-#endif
-          tcgen05_commit(&pv_done[0]);
-        }
-        mbarrier_wait(&pv_done[0], phase);
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
-                                 clock_trace_base);
-        }
-#endif
-        const int prefetch_iter = iter + 2;
-        if (prefetch_iter < loop_repeats) {
-          const int prefetch_stage = prefetch_iter & 1;
-          const int global_v_tile =
-              kv_tile_base +
-              local_k_tile_for_iter<kFixedKTiles>(prefetch_iter, loop_k_tiles);
-#if ATTENTION_CLOCK_TRACE
-          const int prefetch_trace_idx = prefetch_iter - clock_trace_start;
-          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-              prefetch_trace_idx >= 0 &&
-              prefetch_trace_idx < clock_trace_iters) {
-            begin_clock_trace_record(
-                clock_trace, prefetch_trace_idx * kClockTraceSlotsPerIter + 3,
-                kClockTraceVTma, prefetch_iter, 0, warp_id, -1, -1, clock64(),
-                clock_trace_base);
-          }
-#endif
-          issue_v_tma_tile(&v_map, v_smem[prefetch_stage],
-                           &v_ready[prefetch_stage], global_v_tile, lane0);
-        }
-      }
-    } else {
-    int iter = pipe;
-    int local = 0;
-    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
-      const uint32_t phase = static_cast<uint32_t>(local & 1);
-#if ATTENTION_CLOCK_TRACE
-      const int trace_idx = iter - clock_trace_start;
-      const bool trace_iter =
-          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
-          trace_idx < clock_trace_iters;
-      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
-      unsigned long long v_tma_start = 0ull;
-#endif
-      if (local > 0) {
-#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
-        mbarrier_wait(&pv_h0_done[pipe], static_cast<uint32_t>((local - 1) & 1));
-#else
-        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
-#endif
-      }
-      if constexpr (attention_dep_enabled<kDepVTmaWaitsQk, false>()) {
-        mbarrier_wait(&qk_done[pipe], phase);
-      }
-      if constexpr (attention_dep_enabled<kDepVTmaWaitsK, false>()) {
-        mbarrier_wait(&k_ready[pipe], phase);
-      }
-      if (pipe == 0) {
-        if constexpr (attention_dep_enabled<kDepVTmaPipe0WaitsPipe1, false>()) {
-          if constexpr (!ATTENTION_SINGLE_PIPE0) {
-            if (local > 0) {
-              mbarrier_wait(&v_ready[1], static_cast<uint32_t>((local - 1) & 1));
-            }
-          }
-        }
-      } else {
-        if constexpr (attention_dep_enabled<kDepVTmaPipe1WaitsPipe0, false>()) {
-          mbarrier_wait(&v_ready[0], phase);
-        }
-      }
-      const int global_v_tile =
-          kv_tile_base + local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
-#if ATTENTION_CLOCK_TRACE
-      if (trace_iter && lane0) v_tma_start = clock64();
-#endif
-      mbarrier_expect_tx(&v_ready[pipe], kTileBytes);
-      if (lane0) {
-        tma_load_4d(&v_map, smem_ptr_u32(v_smem[pipe]), &v_ready[pipe], 0, 0,
-                    0, global_v_tile * 8);
-      }
-      mbarrier_wait(&v_ready[pipe], phase);
-#if ATTENTION_CLOCK_TRACE
-      if (trace_iter) {
-        const unsigned long long v_tma_end = clock64();
-        write_clock_trace_record(clock_trace, trace_slot_base + 3,
-                                 kClockTraceVTma, iter, pipe, warp_id, -1, -1,
-                                 v_tma_start, v_tma_end, clock_trace_base);
-      }
-#endif
-#if ATTENTION_SINGLE_PIPE0 && (ATTENTION_SINGLE_PIPE0_LD_X128 || ATTENTION_SINGLE_PIPE0_PV_ONCE)
-      mbarrier_wait(&s_ready[pipe][1], phase);
-      if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          begin_clock_trace_record(clock_trace, trace_slot_base + 4,
-                                   kClockTracePvMma, iter, pipe, warp_id, -1,
-                                   -1, clock64(), clock_trace_base);
-        }
-        const unsigned long long pv_h0_start =
-            trace_iter ? clock64() : 0ull;
-#endif
-#pragma unroll
-        for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
-          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                              local != 0 || mma != 0);
-        }
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          write_clock_trace_record(clock_trace, trace_slot_base + 5,
-                                   kClockTracePvMmaH0, iter, pipe, warp_id, -1,
-                                   0, pv_h0_start, clock64(),
-                                   clock_trace_base);
-        }
-        const unsigned long long pv_h1_start =
-            trace_iter ? clock64() : 0ull;
-#endif
-#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
-        tcgen05_commit(&pv_h0_done[pipe]);
-#endif
-#pragma unroll
-        for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
-          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                              true);
-        }
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          write_clock_trace_record(clock_trace, trace_slot_base + 6,
-                                   kClockTracePvMmaH1, iter, pipe, warp_id, -1,
-                                   1, pv_h1_start, clock64(),
-                                   clock_trace_base);
-        }
-#endif
-        tcgen05_commit(&pv_done[pipe]);
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          mbarrier_wait(&pv_done[pipe], phase);
-          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
-                                 clock_trace_base);
-        }
-#endif
-      }
-      continue;
-#endif
-      mbarrier_wait(&s_ready[pipe][0], phase);
-      if (pipe == 0) {
-        if constexpr (attention_dep_enabled<kDepPvPipe0WaitsPipe1, true>()) {
-          if constexpr (!ATTENTION_SINGLE_PIPE0) {
-            if (local > 0) {
-              mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
-            }
-          }
-        }
-      } else {
-        if constexpr (attention_dep_enabled<kDepPvPipe1WaitsPipe0, true>()) {
-          mbarrier_wait(&pv_done[0], phase);
-        }
-      }
-      if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          begin_clock_trace_record(clock_trace, trace_slot_base + 4,
-                                   kClockTracePvMma, iter, pipe, warp_id, -1,
-                                   -1, clock64(), clock_trace_base);
-        }
-        const unsigned long long pv_h0_start =
-            trace_iter ? clock64() : 0ull;
-#endif
-#pragma unroll
-        for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
-          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                              local != 0 || mma != 0);
-        }
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          write_clock_trace_record(clock_trace, trace_slot_base + 5,
-                                   kClockTracePvMmaH0, iter, pipe, warp_id, -1,
-                                   0, pv_h0_start, clock64(),
-                                   clock_trace_base);
-        }
-#endif
-#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
-        tcgen05_commit(&pv_h0_done[pipe]);
-#endif
-      }
-      mbarrier_wait(&s_ready[pipe][1], phase);
-      if (lane0) {
-#if ATTENTION_CLOCK_TRACE
-        const unsigned long long pv_h1_start =
-            trace_iter ? clock64() : 0ull;
-#endif
-#pragma unroll
-        for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
-          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                              true);
-        }
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          write_clock_trace_record(clock_trace, trace_slot_base + 6,
-                                   kClockTracePvMmaH1, iter, pipe, warp_id, -1,
-                                   1, pv_h1_start, clock64(),
-                                   clock_trace_base);
-        }
-#endif
-        tcgen05_commit(&pv_done[pipe]);
-#if ATTENTION_CLOCK_TRACE
-        if (trace_iter) {
-          mbarrier_wait(&pv_done[pipe], phase);
-          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
-                                 clock_trace_base);
-        }
-#endif
-      }
-    }
+      const uint32_t q_smem_addr = smem_ptr_u32(q_smem);
+      tma_load_2d(&q_map, q_smem_addr, &q_ready, 0, q_contig_row);
+      tma_load_2d(&q_map, q_smem_addr + kTileBytes / 2, &q_ready, 32, q_contig_row);
     }
   }
 
@@ -2775,6 +2175,609 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
   }
 
+  if ((ATTENTION_SINGLE_PIPE0 && warp_id == kSinglePipePvWarp) ||
+      (!ATTENTION_SINGLE_PIPE0 && (warp_id == 2 || warp_id == 3))) {
+    const int pipe = ATTENTION_SINGLE_PIPE0 ? 0 : warp_id - 2;
+    const uint32_t idesc = make_qk_idesc() | (1u << 16);
+    uint64_t s_desc[8];
+    uint64_t v_desc[8];
+    if (lane0) {
+      const uint32_t s_smem_addr16 = smem_ptr_u32(s_smem[pipe]) >> 4;
+      const uint32_t v_smem_addr16 = smem_ptr_u32(v_smem[pipe]) >> 4;
+#pragma unroll
+      for (int mma = 0; mma < kMmasPerTile; ++mma) {
+        s_desc[mma] =
+            make_s_smem_desc_addr16(s_smem_addr16 + static_cast<uint32_t>(mma) * (4096u >> 4));
+        v_desc[mma] = make_sw128_major_mn_smem_desc_addr16(v_smem_addr16, mma);
+      }
+    }
+    if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_V_DOUBLE_BUFFER) {
+#pragma unroll
+      for (int preload = 0; preload < 2; ++preload) {
+        if (preload < loop_repeats) {
+          const int stage = preload & 1;
+          const int global_v_tile =
+              kv_tile_base +
+              local_k_tile_for_iter<kFixedKTiles>(preload, loop_k_tiles);
+#if ATTENTION_CLOCK_TRACE
+          const int trace_idx = preload - clock_trace_start;
+          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+              trace_idx >= 0 && trace_idx < clock_trace_iters) {
+            begin_clock_trace_record(clock_trace,
+                                     trace_idx * kClockTraceSlotsPerIter + 3,
+                                     kClockTraceVTma, preload, 0, warp_id, -1,
+                                     -1, clock64(), clock_trace_base);
+          }
+#endif
+          issue_v_tma_tile(&v_map, v_smem[stage], &v_ready[stage],
+                           global_v_tile, lane0);
+        }
+      }
+      for (int iter = 0; iter < loop_repeats; ++iter) {
+        const int stage = iter & 1;
+        const uint32_t v_phase = static_cast<uint32_t>((iter >> 1) & 1);
+        const uint32_t phase = static_cast<uint32_t>(iter & 1);
+#if ATTENTION_CLOCK_TRACE
+        const int trace_idx = iter - clock_trace_start;
+        const bool trace_iter =
+            clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+            trace_idx >= 0 && trace_idx < clock_trace_iters;
+        const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+#endif
+        mbarrier_wait(&v_ready[stage], v_phase);
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          end_clock_trace_record(clock_trace, trace_slot_base + 3, clock64(),
+                                 clock_trace_base);
+        }
+#endif
+        mbarrier_wait(&s_ready[0][0], phase);
+        if (iter > 0) {
+          mbarrier_wait(&pv_done[0], static_cast<uint32_t>((iter - 1) & 1));
+        }
+        const uint32_t v_smem_stage_addr16 = lane0 ? (smem_ptr_u32(v_smem[stage]) >> 4) : 0u;
+        if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+          if (trace_iter) {
+            begin_clock_trace_record(clock_trace, trace_slot_base + 4,
+                                     kClockTracePvMma, iter, 0, warp_id, -1,
+                                     -1, clock64(), clock_trace_base);
+          }
+          const unsigned long long pv_h0_start = trace_iter ? clock64() : 0ull;
+#endif
+#pragma unroll
+          for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+            const uint64_t v_desc_stage =
+                make_sw128_major_mn_smem_desc_addr16(v_smem_stage_addr16, mma);
+            tcgen05_mma_bf16_ss(o_taddr[0], s_desc[mma], v_desc_stage, idesc,
+                                iter != 0 || mma != 0);
+          }
+#if ATTENTION_CLOCK_TRACE
+          if (trace_iter) {
+            write_clock_trace_record(clock_trace, trace_slot_base + 5,
+                                     kClockTracePvMmaH0, iter, 0, warp_id, -1,
+                                     0, pv_h0_start, clock64(),
+                                     clock_trace_base);
+          }
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+          tcgen05_commit(&pv_h0_done[0]);
+#endif
+        }
+        mbarrier_wait(&s_ready[0][1], phase);
+        if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+          const unsigned long long pv_h1_start = trace_iter ? clock64() : 0ull;
+#endif
+#pragma unroll
+          for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
+            const uint64_t v_desc_stage =
+                make_sw128_major_mn_smem_desc_addr16(v_smem_stage_addr16, mma);
+            tcgen05_mma_bf16_ss(o_taddr[0], s_desc[mma], v_desc_stage, idesc,
+                                true);
+          }
+#if ATTENTION_CLOCK_TRACE
+          if (trace_iter) {
+            write_clock_trace_record(clock_trace, trace_slot_base + 6,
+                                     kClockTracePvMmaH1, iter, 0, warp_id, -1,
+                                     1, pv_h1_start, clock64(),
+                                     clock_trace_base);
+          }
+#endif
+          tcgen05_commit(&pv_done[0]);
+        }
+        mbarrier_wait(&pv_done[0], phase);
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
+                                 clock_trace_base);
+        }
+#endif
+        const int prefetch_iter = iter + 2;
+        if (prefetch_iter < loop_repeats) {
+          const int prefetch_stage = prefetch_iter & 1;
+          const int global_v_tile =
+              kv_tile_base +
+              local_k_tile_for_iter<kFixedKTiles>(prefetch_iter, loop_k_tiles);
+#if ATTENTION_CLOCK_TRACE
+          const int prefetch_trace_idx = prefetch_iter - clock_trace_start;
+          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+              prefetch_trace_idx >= 0 &&
+              prefetch_trace_idx < clock_trace_iters) {
+            begin_clock_trace_record(
+                clock_trace, prefetch_trace_idx * kClockTraceSlotsPerIter + 3,
+                kClockTraceVTma, prefetch_iter, 0, warp_id, -1, -1, clock64(),
+                clock_trace_base);
+          }
+#endif
+          issue_v_tma_tile(&v_map, v_smem[prefetch_stage],
+                           &v_ready[prefetch_stage], global_v_tile, lane0);
+        }
+      }
+    } else {
+    int iter = pipe;
+    int local = 0;
+    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
+      const uint32_t phase = static_cast<uint32_t>(local & 1);
+      const int global_v_tile =
+          kv_tile_base + local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
+#if ATTENTION_CLOCK_TRACE
+      const int trace_idx = iter - clock_trace_start;
+      const bool trace_iter =
+          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
+          trace_idx < clock_trace_iters;
+      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+      unsigned long long v_tma_start = 0ull;
+#endif
+      if (local > 0) {
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+        mbarrier_wait(&pv_h0_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+#else
+        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+#endif
+      }
+      if constexpr (attention_dep_enabled<kDepVTmaWaitsQk, false>()) {
+        mbarrier_wait(&qk_done[pipe], phase);
+      }
+      if constexpr (attention_dep_enabled<kDepVTmaWaitsK, false>()) {
+        mbarrier_wait(&k_ready[pipe], phase);
+      }
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepVTmaPipe0WaitsPipe1, false>()) {
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            if (local > 0) {
+              mbarrier_wait(&v_ready[1], static_cast<uint32_t>((local - 1) & 1));
+            }
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepVTmaPipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&v_ready[0], phase);
+        }
+      }
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter && lane0) v_tma_start = clock64();
+#endif
+      issue_v_tma_tile(&v_map, v_smem[pipe], &v_ready[pipe], global_v_tile,
+                       lane0);
+#if !(ATTENTION_SINGLE_PIPE0 && (ATTENTION_SINGLE_PIPE0_LD_X128 || ATTENTION_SINGLE_PIPE0_PV_ONCE))
+      mbarrier_wait(&s_ready[pipe][0], phase);
+#endif
+      mbarrier_wait(&v_ready[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        const unsigned long long v_tma_end = clock64();
+        write_clock_trace_record(clock_trace, trace_slot_base + 3,
+                                 kClockTraceVTma, iter, pipe, warp_id, -1, -1,
+                                 v_tma_start, v_tma_end, clock_trace_base);
+      }
+#endif
+#if ATTENTION_SINGLE_PIPE0 && (ATTENTION_SINGLE_PIPE0_LD_X128 || ATTENTION_SINGLE_PIPE0_PV_ONCE)
+      mbarrier_wait(&s_ready[pipe][1], phase);
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          begin_clock_trace_record(clock_trace, trace_slot_base + 4,
+                                   kClockTracePvMma, iter, pipe, warp_id, -1,
+                                   -1, clock64(), clock_trace_base);
+        }
+        const unsigned long long pv_h0_start =
+            trace_iter ? clock64() : 0ull;
+#endif
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              local != 0 || mma != 0);
+        }
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          write_clock_trace_record(clock_trace, trace_slot_base + 5,
+                                   kClockTracePvMmaH0, iter, pipe, warp_id, -1,
+                                   0, pv_h0_start, clock64(),
+                                   clock_trace_base);
+        }
+        const unsigned long long pv_h1_start =
+            trace_iter ? clock64() : 0ull;
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+        tcgen05_commit(&pv_h0_done[pipe]);
+#endif
+#pragma unroll
+        for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              true);
+        }
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          write_clock_trace_record(clock_trace, trace_slot_base + 6,
+                                   kClockTracePvMmaH1, iter, pipe, warp_id, -1,
+                                   1, pv_h1_start, clock64(),
+                                   clock_trace_base);
+        }
+#endif
+        tcgen05_commit(&pv_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          mbarrier_wait(&pv_done[pipe], phase);
+          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
+                                 clock_trace_base);
+        }
+#endif
+      }
+      continue;
+#endif
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepPvPipe0WaitsPipe1, true>()) {
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            if (local > 0) {
+              mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+            }
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepPvPipe1WaitsPipe0, true>()) {
+          mbarrier_wait(&pv_done[0], phase);
+        }
+      }
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          begin_clock_trace_record(clock_trace, trace_slot_base + 4,
+                                   kClockTracePvMma, iter, pipe, warp_id, -1,
+                                   -1, clock64(), clock_trace_base);
+        }
+        const unsigned long long pv_h0_start =
+            trace_iter ? clock64() : 0ull;
+#endif
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              local != 0 || mma != 0);
+        }
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          write_clock_trace_record(clock_trace, trace_slot_base + 5,
+                                   kClockTracePvMmaH0, iter, pipe, warp_id, -1,
+                                   0, pv_h0_start, clock64(),
+                                   clock_trace_base);
+        }
+#endif
+#if ATTENTION_SINGLE_PIPE0_PV_H0_DONE
+        tcgen05_commit(&pv_h0_done[pipe]);
+#endif
+      }
+      mbarrier_wait(&s_ready[pipe][1], phase);
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        const unsigned long long pv_h1_start =
+            trace_iter ? clock64() : 0ull;
+#endif
+#pragma unroll
+        for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              true);
+        }
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          write_clock_trace_record(clock_trace, trace_slot_base + 6,
+                                   kClockTracePvMmaH1, iter, pipe, warp_id, -1,
+                                   1, pv_h1_start, clock64(),
+                                   clock_trace_base);
+        }
+#endif
+        tcgen05_commit(&pv_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          mbarrier_wait(&pv_done[pipe], phase);
+          end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
+                                 clock_trace_base);
+        }
+#endif
+      }
+    }
+    }
+  }
+
+  if (warp_id == 0 || (!ATTENTION_SINGLE_PIPE0 && warp_id == 1)) {
+    const int pipe = warp_id;
+    const uint32_t idesc = make_qk_idesc();
+    uint64_t q_desc[8];
+    uint64_t k_desc[8];
+    if (lane0) {
+      const uint32_t q_smem_addr16 = smem_ptr_u32(q_smem) >> 4;
+      const uint32_t k_smem_addr16 = smem_ptr_u32(k_smem[pipe]) >> 4;
+#pragma unroll
+      for (int mma = 0; mma < kMmasPerTile; ++mma) {
+        q_desc[mma] = make_sw128_major_k_smem_desc_addr16(q_smem_addr16, mma);
+        k_desc[mma] = make_sw128_major_k_smem_desc_addr16(k_smem_addr16, mma);
+      }
+    }
+    mbarrier_wait(&q_ready, 0);
+#if ATTENTION_CLOCK_TRACE
+    if (blockIdx.x == 0 && lane0 && warp_id == 0 && clock_trace != nullptr) {
+      const unsigned long long q_tma_end = clock64();
+      const int q_tma_slot = clock_trace_iters * kClockTraceSlotsPerIter + 11;
+      write_clock_trace_record(clock_trace, q_tma_slot, kClockTraceQTma, -1, -1,
+                               warp_id, -1, -1, q_tma_start_shared, q_tma_end,
+                               clock_trace_base);
+    }
+#endif
+    if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_K_DOUBLE_BUFFER) {
+#pragma unroll
+      for (int preload = 0; preload < 2; ++preload) {
+        if (preload < loop_repeats) {
+          const int stage = preload & 1;
+          const int global_k_tile =
+              kv_tile_base +
+              local_k_tile_for_iter<kFixedKTiles>(preload, loop_k_tiles);
+#if ATTENTION_CLOCK_TRACE
+          const int trace_idx = preload - clock_trace_start;
+          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+              trace_idx >= 0 && trace_idx < clock_trace_iters) {
+            begin_clock_trace_record(clock_trace,
+                                     trace_idx * kClockTraceSlotsPerIter + 1,
+                                     kClockTraceKTma, preload, 0, warp_id, -1,
+                                     -1, clock64(), clock_trace_base);
+          }
+#endif
+          issue_k_tma_tile(&k_map, k_smem[stage], &k_ready[stage],
+                           global_k_tile, lane0);
+        }
+      }
+      for (int iter = 0; iter < loop_repeats; ++iter) {
+        const int stage = iter & 1;
+        const uint32_t k_phase = static_cast<uint32_t>((iter >> 1) & 1);
+        const uint32_t phase = static_cast<uint32_t>(iter & 1);
+        mbarrier_wait(&k_ready[stage], k_phase);
+#if ATTENTION_CLOCK_TRACE
+        const int trace_idx = iter - clock_trace_start;
+        const bool trace_iter =
+            clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+            trace_idx >= 0 && trace_idx < clock_trace_iters;
+        const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+#endif
+        if (iter > 0) {
+          mbarrier_wait(&p_done[0], static_cast<uint32_t>((iter - 1) & 1));
+        }
+        if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+          if (trace_iter) {
+            begin_clock_trace_record(clock_trace, trace_slot_base + 2,
+                                     kClockTraceQkMma, iter, 0, warp_id, -1,
+                                     -1, clock64(), clock_trace_base);
+          }
+#endif
+          const uint32_t k_smem_stage_addr16 = smem_ptr_u32(k_smem[stage]) >> 4;
+#pragma unroll
+          for (int mma = 0; mma < kMmasPerTile; ++mma) {
+            const uint64_t k_desc_stage =
+                make_sw128_major_k_smem_desc_addr16(k_smem_stage_addr16, mma);
+            tcgen05_mma_bf16_ss(p_taddr[0], q_desc[mma], k_desc_stage, idesc,
+                                mma != 0);
+          }
+          tcgen05_commit(&qk_done[0]);
+        }
+        mbarrier_wait(&qk_done[0], phase);
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          end_clock_trace_record(clock_trace, trace_slot_base + 2, clock64(),
+                                 clock_trace_base);
+        }
+#endif
+        const int prefetch_iter = iter + 2;
+        if (prefetch_iter < loop_repeats) {
+          const int prefetch_stage = prefetch_iter & 1;
+          const int global_k_tile =
+              kv_tile_base +
+              local_k_tile_for_iter<kFixedKTiles>(prefetch_iter, loop_k_tiles);
+#if ATTENTION_CLOCK_TRACE
+          const int prefetch_trace_idx = prefetch_iter - clock_trace_start;
+          if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+              prefetch_trace_idx >= 0 &&
+              prefetch_trace_idx < clock_trace_iters) {
+            begin_clock_trace_record(
+                clock_trace, prefetch_trace_idx * kClockTraceSlotsPerIter + 1,
+                kClockTraceKTma, prefetch_iter, 0, warp_id, -1, -1, clock64(),
+                clock_trace_base);
+          }
+#endif
+          issue_k_tma_tile(&k_map, k_smem[prefetch_stage],
+                           &k_ready[prefetch_stage], global_k_tile, lane0);
+        }
+      }
+    } else {
+    int iter = pipe;
+    int local = 0;
+    if (iter < loop_repeats) {
+      const uint32_t phase = static_cast<uint32_t>(local & 1);
+      const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
+      const int global_k_tile = kv_tile_base + k_tile;
+#if ATTENTION_CLOCK_TRACE
+      const int trace_idx = iter - clock_trace_start;
+      const bool trace_iter =
+          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
+          trace_idx < clock_trace_iters;
+      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+      unsigned long long k_tma_start = 0ull;
+#endif
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter && lane0) k_tma_start = clock64();
+#endif
+      if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
+        if (pipe != 0) {
+          mbarrier_wait(&k_ready[0], phase);
+        }
+      }
+      issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
+                       lane0);
+      mbarrier_wait(&k_ready[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        const unsigned long long k_tma_end = clock64();
+        write_clock_trace_record(clock_trace, trace_slot_base + 1,
+                                 kClockTraceKTma, iter, pipe, warp_id, -1, -1,
+                                 k_tma_start, k_tma_end, clock_trace_base);
+      }
+#endif
+      if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
+        if (pipe != 0) {
+          mbarrier_wait(&qk_done[0], phase);
+        }
+      }
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          begin_clock_trace_record(clock_trace, trace_slot_base + 2,
+                                   kClockTraceQkMma, iter, pipe, warp_id, -1,
+                                   -1, clock64(), clock_trace_base);
+        }
+#endif
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
+        }
+        tcgen05_commit(&qk_done[pipe]);
+      }
+      iter += kActivePipeStride;
+      ++local;
+    }
+    for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
+      const uint32_t phase = static_cast<uint32_t>(local & 1);
+      const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
+      const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
+      const int global_k_tile = kv_tile_base + k_tile;
+#if ATTENTION_CLOCK_TRACE
+      const int trace_idx = iter - clock_trace_start;
+      const bool trace_iter =
+          clock_trace != nullptr && blockIdx.x == 0 && lane0 && trace_idx >= 0 &&
+          trace_idx < clock_trace_iters;
+      const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+      unsigned long long k_tma_start = 0ull;
+#endif
+      mbarrier_wait(&qk_done[pipe], prev_phase);
+#if ATTENTION_CLOCK_TRACE
+      const int done_iter = iter - kActivePipeStride;
+      const int done_trace_idx = done_iter - clock_trace_start;
+      if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+          done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
+        end_clock_trace_record(clock_trace,
+                               done_trace_idx * kClockTraceSlotsPerIter + 2,
+                               clock64(), clock_trace_base);
+      }
+#endif
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter && lane0) k_tma_start = clock64();
+#endif
+      if constexpr (attention_dep_enabled<kDepNextKTmaWaitsS1, false>()) {
+        mbarrier_wait(&s_ready[pipe][1], prev_phase);
+      }
+      if constexpr (attention_dep_enabled<kDepNextKTmaWaitsPv, false>()) {
+        mbarrier_wait(&pv_done[pipe], prev_phase);
+      }
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepKTmaPipe0WaitsPipe1, false>()) {
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            mbarrier_wait(&k_ready[1], prev_phase);
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&k_ready[0], phase);
+        }
+      }
+      issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
+                       lane0);
+      mbarrier_wait(&k_ready[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        const unsigned long long k_tma_end = clock64();
+        write_clock_trace_record(clock_trace, trace_slot_base + 1,
+                                 kClockTraceKTma, iter, pipe, warp_id, -1, -1,
+                                 k_tma_start, k_tma_end, clock_trace_base);
+      }
+#endif
+      mbarrier_wait(&p_done[pipe], prev_phase);
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepQkPipe0WaitsPipe1, true>()) {
+          if constexpr (!ATTENTION_SINGLE_PIPE0) {
+            mbarrier_wait(&qk_done[1], prev_phase);
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
+          mbarrier_wait(&qk_done[0], phase);
+        }
+      }
+      if (lane0) {
+#if ATTENTION_CLOCK_TRACE
+        if (trace_iter) {
+          begin_clock_trace_record(clock_trace, trace_slot_base + 2,
+                                   kClockTraceQkMma, iter, pipe, warp_id, -1,
+                                   -1, clock64(), clock_trace_base);
+        }
+#endif
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
+        }
+        tcgen05_commit(&qk_done[pipe]);
+      }
+    }
+#if ATTENTION_CLOCK_TRACE
+    if (local > 0) {
+      mbarrier_wait(&qk_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+      const int done_iter = iter - kActivePipeStride;
+      const int done_trace_idx = done_iter - clock_trace_start;
+      if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+          done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
+        end_clock_trace_record(clock_trace,
+                               done_trace_idx * kClockTraceSlotsPerIter + 2,
+                               clock64(), clock_trace_base);
+      }
+    }
+#endif
+    }
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  if constexpr (ATTENTION_SINGLE_PIPE0 && ATTENTION_SINGLE_PIPE0_K_DOUBLE_BUFFER) {
+    if (warp_id == 1) {
+      for (int iter = 0; iter < loop_repeats; ++iter) {
+        const int stage = iter & 1;
+        const uint32_t k_phase = static_cast<uint32_t>((iter >> 1) & 1);
+        mbarrier_wait(&k_ready[stage], k_phase);
+        const int trace_idx = iter - clock_trace_start;
+        if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
+            trace_idx >= 0 && trace_idx < clock_trace_iters) {
+          end_clock_trace_record(clock_trace,
+                                 trace_idx * kClockTraceSlotsPerIter + 1,
+                                 clock64(), clock_trace_base);
+        }
+      }
+    }
+  }
+#endif
+
   if (output != nullptr) {
 #if ATTENTION_CLOCK_TRACE
     const bool trace_cta = clock_trace != nullptr && blockIdx.x == 0;
@@ -2887,8 +2890,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
                                store_start, store_end, clock_trace_base);
     }
-    __syncthreads();
 #if ATTENTION_CLOCK_TRACE
+    __syncthreads();
     if (trace_cta && threadIdx.x == 0) {
       const unsigned long long tail_total_end = clock64();
       write_clock_trace_record(clock_trace, trace_extra_base + 10,
