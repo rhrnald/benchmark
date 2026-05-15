@@ -2,7 +2,9 @@
 
 This directory contains the current fused Blackwell attention benchmark.
 
-- `main.cu`: minimal current fastest fused attention path
+- `main.cu`: host-side driver, CLI, benchmark, and validation harness
+- `attention.cu`: core fused attention and validation CUDA kernels
+- `ptx_wrappers.cuh`: low-level PTX/TMA/TCGEN05 helper wrappers
 - `Makefile`: local build, run, validation, and trace plot entrypoint
 - `run.py`: small wrapper for benchmark and trace commands
 - `plot_attention_trace.py`: cycle timeline SVG renderer
