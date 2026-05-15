@@ -45,7 +45,7 @@ $(TRACE_BIN): $(SRC) | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -DATTENTION_CLOCK_TRACE=1 $(SRC) -o $@ -lcuda
 
 $(VALIDATION_BIN): $(SRC) | $(BUILD_DIR)
-	$(NVCC) $(NVCCFLAGS) -DATTENTION_STORE_OUTPUT=1 $(SRC) -o $@ -lcuda
+	$(NVCC) $(NVCCFLAGS) $(SRC) -o $@ -lcuda
 
 run: $(FASTEST_BIN)
 	$(PYTHON) run.py benchmark --binary $(FASTEST_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(WARMUP) --iters $(ITERS) --csv $(RUN_CSV)
