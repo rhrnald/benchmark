@@ -6,6 +6,7 @@ GENCODE ?= -gencode=arch=compute_100a,code=sm_100a
 NVCCFLAGS ?= -O3 -std=c++17 $(GENCODE) --expt-relaxed-constexpr
 
 SRC ?= main.cu
+DEPS ?= attention.cu ptx_wrappers.cuh
 BUILD_DIR ?= ../build/0.attention
 FASTEST_BIN ?= $(BUILD_DIR)/attention_custom_kernel
 TRACE_BIN ?= $(BUILD_DIR)/attention_custom_kernel_trace
@@ -38,13 +39,13 @@ build: $(FASTEST_BIN)
 $(BUILD_DIR):
 	@mkdir -p $@
 
-$(FASTEST_BIN): $(SRC) | $(BUILD_DIR)
+$(FASTEST_BIN): $(SRC) $(DEPS) | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) $(SRC) -o $@ -lcuda
 
-$(TRACE_BIN): $(SRC) | $(BUILD_DIR)
+$(TRACE_BIN): $(SRC) $(DEPS) | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -DATTENTION_CLOCK_TRACE=1 $(SRC) -o $@ -lcuda
 
-$(VALIDATION_BIN): $(SRC) | $(BUILD_DIR)
+$(VALIDATION_BIN): $(SRC) $(DEPS) | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) $(SRC) -o $@ -lcuda
 
 run: $(FASTEST_BIN)
