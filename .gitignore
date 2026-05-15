@@ -20,6 +20,7 @@
 *.csv
 *.log
 *.svg
+*.png
 /0.attention/log/
 
 # Python environments and caches
