@@ -619,7 +619,7 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
 #endif
 }
 
-#define NVCC_LD_REG_OUTPUTS_ARRAY(a)                                         \
+#define TCGEN05_LD_X64_OUTPUTS(a)                                            \
   "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
       "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
       "=&r"(a[10]), "=&r"(a[11]), "=&r"(a[12]), "=&r"(a[13]),             \
@@ -637,59 +637,19 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
       "=&r"(a[58]), "=&r"(a[59]), "=&r"(a[60]), "=&r"(a[61]),             \
       "=&r"(a[62]), "=&r"(a[63])
 
-#define NVCC_LD_REG_OUTPUTS_0_63 NVCC_LD_REG_OUTPUTS_ARRAY(r)
-
-#define NVCC_LD_REG_OPERANDS_0_63                                            \
+#define TCGEN05_LD_X64_OPERANDS                                              \
   "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, "  \
   "%16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, "  \
   "%30, %31, %32, %33, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43, "  \
   "%44, %45, %46, %47, %48, %49, %50, %51, %52, %53, %54, %55, %56, %57, "  \
   "%58, %59, %60, %61, %62, %63"
 
-#define TCGEN05_LD_X64_ISSUE_ARRAY(src_taddr, arr)                         \
+#define TCGEN05_LD_X64(src_taddr, out_regs)                                \
   asm volatile(                                                            \
-      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" NVCC_LD_REG_OPERANDS_0_63 \
+      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
       "}, [%64];"                                                          \
-      : NVCC_LD_REG_OUTPUTS_ARRAY(arr)                                     \
+      : TCGEN05_LD_X64_OUTPUTS(out_regs)                                   \
       : "r"(src_taddr)                                                    \
-      : "memory")
-
-#define NVCC_LD_REG_OUTPUTS_ARRAY_128(a)                                    \
-  NVCC_LD_REG_OUTPUTS_ARRAY(a),                                             \
-      "=&r"(a[64]), "=&r"(a[65]), "=&r"(a[66]), "=&r"(a[67]),             \
-      "=&r"(a[68]), "=&r"(a[69]), "=&r"(a[70]), "=&r"(a[71]),             \
-      "=&r"(a[72]), "=&r"(a[73]), "=&r"(a[74]), "=&r"(a[75]),             \
-      "=&r"(a[76]), "=&r"(a[77]), "=&r"(a[78]), "=&r"(a[79]),             \
-      "=&r"(a[80]), "=&r"(a[81]), "=&r"(a[82]), "=&r"(a[83]),             \
-      "=&r"(a[84]), "=&r"(a[85]), "=&r"(a[86]), "=&r"(a[87]),             \
-      "=&r"(a[88]), "=&r"(a[89]), "=&r"(a[90]), "=&r"(a[91]),             \
-      "=&r"(a[92]), "=&r"(a[93]), "=&r"(a[94]), "=&r"(a[95]),             \
-      "=&r"(a[96]), "=&r"(a[97]), "=&r"(a[98]), "=&r"(a[99]),             \
-      "=&r"(a[100]), "=&r"(a[101]), "=&r"(a[102]), "=&r"(a[103]),         \
-      "=&r"(a[104]), "=&r"(a[105]), "=&r"(a[106]), "=&r"(a[107]),         \
-      "=&r"(a[108]), "=&r"(a[109]), "=&r"(a[110]), "=&r"(a[111]),         \
-      "=&r"(a[112]), "=&r"(a[113]), "=&r"(a[114]), "=&r"(a[115]),         \
-      "=&r"(a[116]), "=&r"(a[117]), "=&r"(a[118]), "=&r"(a[119]),         \
-      "=&r"(a[120]), "=&r"(a[121]), "=&r"(a[122]), "=&r"(a[123]),         \
-      "=&r"(a[124]), "=&r"(a[125]), "=&r"(a[126]), "=&r"(a[127])
-
-#define NVCC_LD_REG_OPERANDS_0_127                                          \
-  NVCC_LD_REG_OPERANDS_0_63 ", "                                           \
-  "%64, %65, %66, %67, %68, %69, %70, %71, "                               \
-  "%72, %73, %74, %75, %76, %77, %78, %79, "                               \
-  "%80, %81, %82, %83, %84, %85, %86, %87, "                               \
-  "%88, %89, %90, %91, %92, %93, %94, %95, "                               \
-  "%96, %97, %98, %99, %100, %101, %102, %103, "                           \
-  "%104, %105, %106, %107, %108, %109, %110, %111, "                       \
-  "%112, %113, %114, %115, %116, %117, %118, %119, "                       \
-  "%120, %121, %122, %123, %124, %125, %126, %127"
-
-#define TCGEN05_LD_X128_ISSUE_ARRAY(src_taddr, arr)                         \
-  asm volatile(                                                             \
-      "tcgen05.ld.sync.aligned.32x32b.x128.b32 {"                           \
-      NVCC_LD_REG_OPERANDS_0_127 "}, [%128];"                               \
-      : NVCC_LD_REG_OUTPUTS_ARRAY_128(arr)                                  \
-      : "r"(src_taddr)                                                     \
       : "memory")
 
 __device__ __forceinline__ uint32_t exp2_approx_bits_cpp(uint32_t x) {
@@ -1006,7 +966,7 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
   const bool trace_lane = trace_window && lane == 0;
   const unsigned long long ld_start = trace_lane ? clock64() : 0ull;
 #endif
-  TCGEN05_LD_X64_ISSUE_ARRAY(src_taddr, r);
+  TCGEN05_LD_X64(src_taddr, r);
   tcgen05_wait_ld();
 #if ATTENTION_CLOCK_TRACE
   if (trace_lane) {
@@ -1103,12 +1063,7 @@ __device__ __noinline__ void store_tmem_x64_accum_output_smem(uint32_t src_taddr
   float* dst = output_smem + static_cast<size_t>(consumer_warp * 32 + lane) * kTileN +
                consumer_half * 64;
   uint32_t r[64];
-  asm volatile(
-      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" NVCC_LD_REG_OPERANDS_0_63
-      "}, [%64];"
-      : NVCC_LD_REG_OUTPUTS_0_63
-      : "r"(src_taddr)
-      : "memory");
+  TCGEN05_LD_X64(src_taddr, r);
   tcgen05_wait_ld();
   if (add_to_smem) {
 #pragma unroll
