@@ -11,7 +11,7 @@ reference, and generated CSV/SVG reports are kept locally under
 Build the current attention benchmark:
 
 ```bash
-make -C 0.attention build \
+make -C 0.attention \
   NVCCFLAGS='-O3 -std=c++17 -gencode=arch=compute_100a,code=sm_100a --expt-relaxed-constexpr -Xptxas=-v'
 ```
 
@@ -24,9 +24,9 @@ make -C 0.attention run \
 
 Expected shape on the current system is about 1595 TFLOP/s total for the
 BF16-output benchmark with producer regs `120`, consumer regs `184`, and the
-default dependency mask `0x00f`. `make -C 0.attention` and
-`make -C 0.attention run` use this path; the default benchmark CSV is written
-under `/tmp` so generated logs/CSV/SVG do not enter the repo.
+default dependency mask `0x00f`. `make -C 0.attention` compiles this path, and
+`make -C 0.attention run` measures it. Generated CSV/SVG files are written under
+ignored local paths so they do not enter the repo.
 
 ## Validation Path
 
@@ -60,3 +60,11 @@ stores `O[blocks,128,128]` BF16:
 
 The trace CSV/SVG helpers in `0.attention/plot_attention_trace.py` visualize
 cycle-level overlap between K TMA, QK MMA, LD/PACK/ST, V TMA, and PV MMA.
+
+```bash
+make -C 0.attention plot \
+  NVCCFLAGS='-O3 -std=c++17 -gencode=arch=compute_100a,code=sm_100a --expt-relaxed-constexpr -Xptxas=-v'
+```
+
+The default plot target writes the current cycle trace SVG to
+`0.attention/log/best.svg`.
