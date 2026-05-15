@@ -1,0 +1,1151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="5452" height="868" viewBox="0 0 5452 868">
+<rect width="100%" height="100%" fill="white"/>
+<text x="24" y="26" font-family="Arial, sans-serif" font-size="17" fill="#222">Attention current descopt trace, iter56-63</text>
+<line x1="132.0" y1="42" x2="132.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="132.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">0</text>
+<line x1="372.0" y1="42" x2="372.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="372.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">1000</text>
+<line x1="612.0" y1="42" x2="612.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="612.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">2000</text>
+<line x1="852.0" y1="42" x2="852.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="852.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">3000</text>
+<line x1="1092.0" y1="42" x2="1092.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1092.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">4000</text>
+<line x1="1332.0" y1="42" x2="1332.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1332.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">5000</text>
+<line x1="1572.0" y1="42" x2="1572.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1572.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">6000</text>
+<line x1="1812.0" y1="42" x2="1812.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="1812.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">7000</text>
+<line x1="2052.0" y1="42" x2="2052.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2052.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">8000</text>
+<line x1="2292.0" y1="42" x2="2292.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2292.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">9000</text>
+<line x1="2532.0" y1="42" x2="2532.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2532.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">10000</text>
+<line x1="2772.0" y1="42" x2="2772.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="2772.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">11000</text>
+<line x1="3012.0" y1="42" x2="3012.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3012.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">12000</text>
+<line x1="3252.0" y1="42" x2="3252.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3252.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">13000</text>
+<line x1="3492.0" y1="42" x2="3492.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3492.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">14000</text>
+<line x1="3732.0" y1="42" x2="3732.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3732.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">15000</text>
+<line x1="3972.0" y1="42" x2="3972.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="3972.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">16000</text>
+<line x1="4212.0" y1="42" x2="4212.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4212.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">17000</text>
+<line x1="4452.0" y1="42" x2="4452.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4452.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">18000</text>
+<line x1="4692.0" y1="42" x2="4692.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4692.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">19000</text>
+<line x1="4932.0" y1="42" x2="4932.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="4932.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">20000</text>
+<line x1="5172.0" y1="42" x2="5172.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="5172.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">21000</text>
+<line x1="5412.0" y1="42" x2="5412.0" y2="846" stroke="#e3e8ef" stroke-width="1"/>
+<text x="5412.0" y="43" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#667">22000</text>
+<text x="24" y="82" font-family="Arial, sans-serif" font-size="13" fill="#333">K+QK warp0</text>
+<line x1="132" y1="114" x2="5412.0" y2="114" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="146" font-family="Arial, sans-serif" font-size="13" fill="#333">K+QK warp1</text>
+<line x1="132" y1="178" x2="5412.0" y2="178" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="210" font-family="Arial, sans-serif" font-size="13" fill="#333">V/PV warp2</text>
+<line x1="132" y1="242" x2="5412.0" y2="242" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="274" font-family="Arial, sans-serif" font-size="13" fill="#333">V/PV warp3</text>
+<line x1="132" y1="306" x2="5412.0" y2="306" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="338" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp4</text>
+<line x1="132" y1="370" x2="5412.0" y2="370" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="402" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp5</text>
+<line x1="132" y1="434" x2="5412.0" y2="434" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="466" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp6</text>
+<line x1="132" y1="498" x2="5412.0" y2="498" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="530" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp7</text>
+<line x1="132" y1="562" x2="5412.0" y2="562" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="594" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp8</text>
+<line x1="132" y1="626" x2="5412.0" y2="626" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="658" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp9</text>
+<line x1="132" y1="690" x2="5412.0" y2="690" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="722" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp10</text>
+<line x1="132" y1="754" x2="5412.0" y2="754" stroke="#ccd5e0" stroke-width="1"/>
+<text x="24" y="786" font-family="Arial, sans-serif" font-size="13" fill="#333">LD/PACK/ST warp11</text>
+<line x1="132" y1="818" x2="5412.0" y2="818" stroke="#ccd5e0" stroke-width="1"/>
+<rect x="132.0" y="64" width="277.7" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="270.8" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i56 p0</text>
+<text x="270.8" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1157 cyc</text>
+<text x="270.8" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.841 TB/s</text>
+<rect x="466.3" y="128" width="351.6" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="642.1" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i57 p1</text>
+<text x="642.1" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1465 cyc</text>
+<text x="642.1" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">3.823 TB/s</text>
+<rect x="650.4" y="64" width="260.2" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="780.5" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i56 p0</text>
+<text x="780.5" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1084 cyc</text>
+<text x="780.5" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">661.4 TFLOP/s</text>
+<rect x="925.4" y="64" width="265.2" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="1058.0" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i58 p0</text>
+<text x="1058.0" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1105 cyc</text>
+<text x="1058.0" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.069 TB/s</text>
+<rect x="1045.9" y="128" width="254.6" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="1173.2" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i57 p1</text>
+<text x="1173.2" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1061 cyc</text>
+<text x="1173.2" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">675.8 TFLOP/s</text>
+<rect x="1054.3" y="448" width="13.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1060.9" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1055.3" y="512" width="11.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1061.2" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1057.9" y="320" width="12.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1063.9" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1061.0" y="384" width="12.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1067.2" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1088.6" y="448" width="208.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1192.9" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i56 p0</text>
+<text x="1192.9" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">869 cyc</text>
+<text x="1192.9" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1088.6" y="448" width="208.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1192.9" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i56 p0</text>
+<text x="1192.9" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">869 cyc</text>
+<text x="1192.9" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.806 TB/s</text>
+<rect x="1088.6" y="448" width="208.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1192.9" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i56 p0</text>
+<text x="1192.9" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">869 cyc</text>
+<text x="1192.9" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1089.4" y="512" width="217.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1197.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i56 p0</text>
+<text x="1197.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">904 cyc</text>
+<text x="1197.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1089.4" y="512" width="217.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1197.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i56 p0</text>
+<text x="1197.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">904 cyc</text>
+<text x="1197.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.775 TB/s</text>
+<rect x="1089.4" y="512" width="217.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1197.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i56 p0</text>
+<text x="1197.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">904 cyc</text>
+<text x="1197.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1090.1" y="320" width="212.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1196.2" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i56 p0</text>
+<text x="1196.2" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">884 cyc</text>
+<text x="1196.2" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1090.1" y="320" width="212.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1196.2" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i56 p0</text>
+<text x="1196.2" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">884 cyc</text>
+<text x="1196.2" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.792 TB/s</text>
+<rect x="1090.1" y="320" width="212.2" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1196.2" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i56 p0</text>
+<text x="1196.2" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">884 cyc</text>
+<text x="1196.2" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1091.8" y="384" width="206.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1194.8" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i56 p0</text>
+<text x="1194.8" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">859 cyc</text>
+<text x="1194.8" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1091.8" y="384" width="206.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1194.8" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i56 p0</text>
+<text x="1194.8" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">859 cyc</text>
+<text x="1194.8" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.815 TB/s</text>
+<rect x="1091.8" y="384" width="206.2" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1194.8" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i56 p0</text>
+<text x="1194.8" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">859 cyc</text>
+<text x="1194.8" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1113.6" y="192" width="285.8" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="1256.5" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i56 p0</text>
+<text x="1256.5" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1191 cyc</text>
+<text x="1256.5" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.703 TB/s</text>
+<rect x="1313.8" y="128" width="348.0" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="1487.8" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i59 p1</text>
+<text x="1487.8" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1450 cyc</text>
+<text x="1487.8" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">3.863 TB/s</text>
+<rect x="1380.5" y="448" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1383.5" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1386.0" y="384" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1388.9" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1387.0" y="320" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1389.8" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1392.2" y="640" width="14.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1399.7" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1393.0" y="512" width="8.4" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1397.2" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1393.2" y="576" width="15.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1400.8" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1394.4" y="768" width="14.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1401.8" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1400.2" y="704" width="15.4" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1407.8" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1423.9" y="640" width="251.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1549.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i57 p1</text>
+<text x="1549.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1049 cyc</text>
+<text x="1549.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1423.9" y="640" width="251.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1549.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i57 p1</text>
+<text x="1549.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1049 cyc</text>
+<text x="1549.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.667 TB/s</text>
+<rect x="1423.9" y="640" width="251.8" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1549.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i57 p1</text>
+<text x="1549.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1049 cyc</text>
+<text x="1549.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1425.1" y="576" width="253.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1551.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i57 p1</text>
+<text x="1551.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1054 cyc</text>
+<text x="1551.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1425.1" y="576" width="253.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1551.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i57 p1</text>
+<text x="1551.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1054 cyc</text>
+<text x="1551.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.664 TB/s</text>
+<rect x="1425.1" y="576" width="253.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1551.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i57 p1</text>
+<text x="1551.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1054 cyc</text>
+<text x="1551.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1425.4" y="256" width="307.2" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="1579.0" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i57 p1</text>
+<text x="1579.0" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1280 cyc</text>
+<text x="1579.0" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.376 TB/s</text>
+<rect x="1427.8" y="768" width="241.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1548.5" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i57 p1</text>
+<text x="1548.5" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1006 cyc</text>
+<text x="1548.5" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1427.8" y="768" width="241.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1548.5" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i57 p1</text>
+<text x="1548.5" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1006 cyc</text>
+<text x="1548.5" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.696 TB/s</text>
+<rect x="1427.8" y="768" width="241.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1548.5" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i57 p1</text>
+<text x="1548.5" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1006 cyc</text>
+<text x="1548.5" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1441.7" y="704" width="256.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1569.8" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i57 p1</text>
+<text x="1569.8" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1068 cyc</text>
+<text x="1569.8" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1441.7" y="704" width="256.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1569.8" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i57 p1</text>
+<text x="1569.8" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1068 cyc</text>
+<text x="1569.8" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.656 TB/s</text>
+<rect x="1441.7" y="704" width="256.3" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1569.8" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i57 p1</text>
+<text x="1569.8" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1068 cyc</text>
+<text x="1569.8" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1446.5" y="320" width="299.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1596.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i56 p0</text>
+<text x="1596.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1246 cyc</text>
+<text x="1596.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1446.5" y="320" width="299.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1596.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i56 p0</text>
+<text x="1596.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1246 cyc</text>
+<text x="1596.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.562 TB/s</text>
+<rect x="1446.5" y="320" width="299.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1596.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i56 p0</text>
+<text x="1596.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1246 cyc</text>
+<text x="1596.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1446.7" y="384" width="309.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1601.3" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i56 p0</text>
+<text x="1601.3" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1288 cyc</text>
+<text x="1601.3" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1446.7" y="384" width="309.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1601.3" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i56 p0</text>
+<text x="1601.3" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1288 cyc</text>
+<text x="1601.3" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.544 TB/s</text>
+<rect x="1446.7" y="384" width="309.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1601.3" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i56 p0</text>
+<text x="1601.3" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1288 cyc</text>
+<text x="1601.3" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1450.8" y="448" width="312.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1607.0" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i56 p0</text>
+<text x="1607.0" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1302 cyc</text>
+<text x="1607.0" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1450.8" y="448" width="312.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1607.0" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i56 p0</text>
+<text x="1607.0" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1302 cyc</text>
+<text x="1607.0" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.538 TB/s</text>
+<rect x="1450.8" y="448" width="312.5" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1607.0" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i56 p0</text>
+<text x="1607.0" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1302 cyc</text>
+<text x="1607.0" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1454.2" y="512" width="289.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="1598.6" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i56 p0</text>
+<text x="1598.6" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1204 cyc</text>
+<text x="1598.6" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1454.2" y="512" width="289.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="1598.6" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i56 p0</text>
+<text x="1598.6" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1204 cyc</text>
+<text x="1598.6" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.582 TB/s</text>
+<rect x="1454.2" y="512" width="289.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="1598.6" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i56 p0</text>
+<text x="1598.6" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1204 cyc</text>
+<text x="1598.6" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1485.8" y="64" width="260.4" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="1616.0" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i58 p0</text>
+<text x="1616.0" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1085 cyc</text>
+<text x="1616.0" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">660.8 TFLOP/s</text>
+<rect x="1537.2" y="192" width="83.5" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="1579.0" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i56 p0</text>
+<text x="1579.0" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">348 cyc</text>
+<text x="1579.0" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1030.1 TFLOP/s</text>
+<rect x="1752.2" y="64" width="253.4" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="1879.0" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i60 p0</text>
+<text x="1879.0" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1056 cyc</text>
+<text x="1879.0" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.304 TB/s</text>
+<rect x="1855.0" y="640" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1858.0" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1859.3" y="704" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1862.3" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1860.5" y="576" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1863.4" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1861.0" y="768" width="6.5" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="1864.2" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="1870.3" y="192" width="65.5" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="1903.1" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="1903.1" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i56 p0</text>
+<rect x="1908.7" y="640" width="188.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2002.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i57 p1</text>
+<text x="2002.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">784 cyc</text>
+<text x="2002.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1908.7" y="640" width="188.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2002.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i57 p1</text>
+<text x="2002.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">784 cyc</text>
+<text x="2002.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.893 TB/s</text>
+<rect x="1908.7" y="640" width="188.2" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2002.8" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i57 p1</text>
+<text x="2002.8" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">784 cyc</text>
+<text x="2002.8" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1914.0" y="576" width="202.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2015.2" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i57 p1</text>
+<text x="2015.2" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">843 cyc</text>
+<text x="2015.2" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1914.0" y="576" width="202.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2015.2" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i57 p1</text>
+<text x="2015.2" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">843 cyc</text>
+<text x="2015.2" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.831 TB/s</text>
+<rect x="1914.0" y="576" width="202.3" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2015.2" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i57 p1</text>
+<text x="2015.2" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">843 cyc</text>
+<text x="2015.2" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1915.2" y="704" width="175.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2002.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i57 p1</text>
+<text x="2002.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">731 cyc</text>
+<text x="2002.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1915.2" y="704" width="175.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2002.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i57 p1</text>
+<text x="2002.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">731 cyc</text>
+<text x="2002.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.958 TB/s</text>
+<rect x="1915.2" y="704" width="175.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2002.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i57 p1</text>
+<text x="2002.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">731 cyc</text>
+<text x="2002.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1915.9" y="768" width="205.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2018.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i57 p1</text>
+<text x="2018.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">856 cyc</text>
+<text x="2018.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1915.9" y="768" width="205.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2018.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i57 p1</text>
+<text x="2018.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">856 cyc</text>
+<text x="2018.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.818 TB/s</text>
+<rect x="1915.9" y="768" width="205.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2018.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i57 p1</text>
+<text x="2018.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">856 cyc</text>
+<text x="2018.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="1935.8" y="192" width="59.8" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="1965.7" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="1965.7" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i56 p0</text>
+<rect x="1969.0" y="128" width="259.4" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="2098.7" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i59 p1</text>
+<text x="2098.7" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1081 cyc</text>
+<text x="2098.7" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">663.3 TFLOP/s</text>
+<rect x="1997.8" y="320" width="11.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2003.3" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="1999.7" y="512" width="15.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2007.2" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2007.4" y="384" width="11.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2013.2" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2012.9" y="256" width="88.3" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="2057.0" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i57 p1</text>
+<text x="2057.0" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">368 cyc</text>
+<text x="2057.0" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">974.1 TFLOP/s</text>
+<rect x="2033.5" y="320" width="196.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2131.6" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i58 p0</text>
+<text x="2131.6" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">817 cyc</text>
+<text x="2131.6" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2033.5" y="320" width="196.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2131.6" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i58 p0</text>
+<text x="2131.6" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">817 cyc</text>
+<text x="2131.6" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.857 TB/s</text>
+<rect x="2033.5" y="320" width="196.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2131.6" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i58 p0</text>
+<text x="2131.6" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">817 cyc</text>
+<text x="2131.6" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2034.2" y="512" width="212.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2140.6" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i58 p0</text>
+<text x="2140.6" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">886 cyc</text>
+<text x="2140.6" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2034.2" y="512" width="212.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2140.6" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i58 p0</text>
+<text x="2140.6" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">886 cyc</text>
+<text x="2140.6" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.790 TB/s</text>
+<rect x="2034.2" y="512" width="212.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2140.6" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i58 p0</text>
+<text x="2140.6" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">886 cyc</text>
+<text x="2140.6" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2046.2" y="384" width="187.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2139.7" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i58 p0</text>
+<text x="2139.7" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">779 cyc</text>
+<text x="2139.7" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2046.2" y="384" width="187.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2139.7" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i58 p0</text>
+<text x="2139.7" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">779 cyc</text>
+<text x="2139.7" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.899 TB/s</text>
+<rect x="2046.2" y="384" width="187.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2139.7" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i58 p0</text>
+<text x="2139.7" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">779 cyc</text>
+<text x="2139.7" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2067.8" y="192" width="310.8" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="2223.2" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i58 p0</text>
+<text x="2223.2" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1295 cyc</text>
+<text x="2223.2" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.325 TB/s</text>
+<rect x="2074.3" y="448" width="13.4" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2081.0" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2105.3" y="448" width="171.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2191.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i58 p0</text>
+<text x="2191.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">715 cyc</text>
+<text x="2191.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2105.3" y="448" width="171.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2191.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i58 p0</text>
+<text x="2191.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">715 cyc</text>
+<text x="2191.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.979 TB/s</text>
+<rect x="2105.3" y="448" width="171.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2191.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i58 p0</text>
+<text x="2191.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">715 cyc</text>
+<text x="2191.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2199.6" y="256" width="74.4" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="2236.8" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="2236.8" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i57 p1</text>
+<rect x="2234.6" y="128" width="236.9" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="2353.1" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i61 p1</text>
+<text x="2353.1" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">987 cyc</text>
+<text x="2353.1" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.675 TB/s</text>
+<rect x="2274.0" y="256" width="51.4" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="2299.7" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="2299.7" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i57 p1</text>
+<rect x="2312.2" y="320" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2315.2" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2317.9" y="384" width="7.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2321.4" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2329.9" y="576" width="14.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2337.4" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2333.3" y="512" width="6.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2336.4" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2337.1" y="640" width="14.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2344.6" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2357.3" y="448" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2360.2" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2365.4" y="576" width="269.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2500.0" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i59 p1</text>
+<text x="2500.0" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1121 cyc</text>
+<text x="2500.0" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2365.4" y="576" width="269.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2500.0" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i59 p1</text>
+<text x="2500.0" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1121 cyc</text>
+<text x="2500.0" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.625 TB/s</text>
+<rect x="2365.4" y="576" width="269.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2500.0" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i59 p1</text>
+<text x="2500.0" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1121 cyc</text>
+<text x="2500.0" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2374.1" y="640" width="259.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2503.9" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i59 p1</text>
+<text x="2503.9" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1082 cyc</text>
+<text x="2503.9" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2374.1" y="640" width="259.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2503.9" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i59 p1</text>
+<text x="2503.9" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1082 cyc</text>
+<text x="2503.9" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.647 TB/s</text>
+<rect x="2374.1" y="640" width="259.7" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2503.9" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i59 p1</text>
+<text x="2503.9" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1082 cyc</text>
+<text x="2503.9" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2374.3" y="320" width="265.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2506.8" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i58 p0</text>
+<text x="2506.8" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1104 cyc</text>
+<text x="2506.8" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2374.3" y="320" width="265.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2506.8" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i58 p0</text>
+<text x="2506.8" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1104 cyc</text>
+<text x="2506.8" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.634 TB/s</text>
+<rect x="2374.3" y="320" width="265.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2506.8" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i58 p0</text>
+<text x="2506.8" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1104 cyc</text>
+<text x="2506.8" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2383.0" y="384" width="267.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2516.8" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i58 p0</text>
+<text x="2516.8" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1115 cyc</text>
+<text x="2516.8" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2383.0" y="384" width="267.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2516.8" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i58 p0</text>
+<text x="2516.8" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1115 cyc</text>
+<text x="2516.8" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.628 TB/s</text>
+<rect x="2383.0" y="384" width="267.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2516.8" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i58 p0</text>
+<text x="2516.8" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1115 cyc</text>
+<text x="2516.8" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2391.4" y="768" width="10.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2396.4" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2394.5" y="512" width="268.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2528.5" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i58 p0</text>
+<text x="2528.5" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1117 cyc</text>
+<text x="2528.5" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2394.5" y="512" width="268.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2528.5" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i58 p0</text>
+<text x="2528.5" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1117 cyc</text>
+<text x="2528.5" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.627 TB/s</text>
+<rect x="2394.5" y="512" width="268.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2528.5" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i58 p0</text>
+<text x="2528.5" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1117 cyc</text>
+<text x="2528.5" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2395.4" y="256" width="215.0" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="2503.0" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i59 p1</text>
+<text x="2503.0" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">896 cyc</text>
+<text x="2503.0" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.252 TB/s</text>
+<rect x="2411.8" y="448" width="277.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2550.7" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i58 p0</text>
+<text x="2550.7" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1158 cyc</text>
+<text x="2550.7" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2411.8" y="448" width="277.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2550.7" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i58 p0</text>
+<text x="2550.7" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1158 cyc</text>
+<text x="2550.7" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.605 TB/s</text>
+<rect x="2411.8" y="448" width="277.9" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2550.7" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i58 p0</text>
+<text x="2550.7" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1158 cyc</text>
+<text x="2550.7" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2417.5" y="704" width="15.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2425.1" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2424.0" y="768" width="252.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2550.0" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i59 p1</text>
+<text x="2550.0" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1050 cyc</text>
+<text x="2550.0" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2424.0" y="768" width="252.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2550.0" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i59 p1</text>
+<text x="2550.0" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1050 cyc</text>
+<text x="2550.0" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.667 TB/s</text>
+<rect x="2424.0" y="768" width="252.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2550.0" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i59 p1</text>
+<text x="2550.0" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1050 cyc</text>
+<text x="2550.0" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2444.2" y="64" width="290.9" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="2589.6" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i60 p0</text>
+<text x="2589.6" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1212 cyc</text>
+<text x="2589.6" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">591.6 TFLOP/s</text>
+<rect x="2456.2" y="704" width="244.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2578.4" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i59 p1</text>
+<text x="2578.4" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1019 cyc</text>
+<text x="2578.4" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2456.2" y="704" width="244.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2578.4" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i59 p1</text>
+<text x="2578.4" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1019 cyc</text>
+<text x="2578.4" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.687 TB/s</text>
+<rect x="2456.2" y="704" width="244.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2578.4" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i59 p1</text>
+<text x="2578.4" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1019 cyc</text>
+<text x="2578.4" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2510.2" y="192" width="114.2" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="2567.3" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i58 p0</text>
+<text x="2567.3" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">476 cyc</text>
+<text x="2567.3" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">753.1 TFLOP/s</text>
+<rect x="2751.8" y="64" width="266.6" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="2885.2" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i62 p0</text>
+<text x="2885.2" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1111 cyc</text>
+<text x="2885.2" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.042 TB/s</text>
+<rect x="2757.4" y="640" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2760.2" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2760.7" y="576" width="6.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2763.8" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2797.9" y="768" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2800.8" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2802.5" y="192" width="59.8" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="2832.4" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="2832.4" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i58 p0</text>
+<rect x="2810.6" y="640" width="173.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2897.2" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i59 p1</text>
+<text x="2897.2" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">721 cyc</text>
+<text x="2897.2" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2810.6" y="640" width="173.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2897.2" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i59 p1</text>
+<text x="2897.2" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">721 cyc</text>
+<text x="2897.2" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.971 TB/s</text>
+<rect x="2810.6" y="640" width="173.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2897.2" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i59 p1</text>
+<text x="2897.2" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">721 cyc</text>
+<text x="2897.2" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2817.4" y="576" width="169.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2902.2" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i59 p1</text>
+<text x="2902.2" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">707 cyc</text>
+<text x="2902.2" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2817.4" y="576" width="169.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2902.2" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i59 p1</text>
+<text x="2902.2" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">707 cyc</text>
+<text x="2902.2" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.990 TB/s</text>
+<rect x="2817.4" y="576" width="169.7" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2902.2" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i59 p1</text>
+<text x="2902.2" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">707 cyc</text>
+<text x="2902.2" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2833.4" y="704" width="7.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2837.4" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="2852.2" y="768" width="215.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2960.0" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i59 p1</text>
+<text x="2960.0" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">899 cyc</text>
+<text x="2960.0" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2852.2" y="768" width="215.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2960.0" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i59 p1</text>
+<text x="2960.0" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">899 cyc</text>
+<text x="2960.0" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.779 TB/s</text>
+<rect x="2852.2" y="768" width="215.8" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2960.0" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i59 p1</text>
+<text x="2960.0" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">899 cyc</text>
+<text x="2960.0" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2862.2" y="192" width="52.8" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="2888.6" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="2888.6" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i58 p0</text>
+<rect x="2894.4" y="704" width="207.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="2998.1" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i59 p1</text>
+<text x="2998.1" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">864 cyc</text>
+<text x="2998.1" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2894.4" y="704" width="207.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="2998.1" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i59 p1</text>
+<text x="2998.1" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">864 cyc</text>
+<text x="2998.1" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.810 TB/s</text>
+<rect x="2894.4" y="704" width="207.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="2998.1" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i59 p1</text>
+<text x="2998.1" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">864 cyc</text>
+<text x="2998.1" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2914.8" y="384" width="14.9" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2922.2" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2915.8" y="320" width="19.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2925.4" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2920.6" y="448" width="63.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2952.5" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">LD h0</text>
+<text x="2952.5" y="481" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i60 p0</text>
+<rect x="2921.0" y="512" width="17.3" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="2929.7" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="2936.2" y="256" width="93.8" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="2983.1" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i59 p1</text>
+<text x="2983.1" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">391 cyc</text>
+<text x="2983.1" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">916.8 TFLOP/s</text>
+<rect x="2953.9" y="384" width="192.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3049.9" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i60 p0</text>
+<text x="3049.9" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">800 cyc</text>
+<text x="3049.9" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2953.9" y="384" width="192.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3049.9" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i60 p0</text>
+<text x="3049.9" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">800 cyc</text>
+<text x="3049.9" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.875 TB/s</text>
+<rect x="2953.9" y="384" width="192.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3049.9" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i60 p0</text>
+<text x="3049.9" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">800 cyc</text>
+<text x="3049.9" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2954.6" y="128" width="260.9" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="3085.1" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i61 p1</text>
+<text x="3085.1" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1087 cyc</text>
+<text x="3085.1" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">659.6 TFLOP/s</text>
+<rect x="2957.0" y="320" width="183.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3048.7" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i60 p0</text>
+<text x="3048.7" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">764 cyc</text>
+<text x="3048.7" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2957.0" y="320" width="183.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3048.7" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i60 p0</text>
+<text x="3048.7" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">764 cyc</text>
+<text x="3048.7" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.916 TB/s</text>
+<rect x="2957.0" y="320" width="183.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3048.7" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i60 p0</text>
+<text x="3048.7" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">764 cyc</text>
+<text x="3048.7" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2958.0" y="512" width="203.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3059.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i60 p0</text>
+<text x="3059.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">848 cyc</text>
+<text x="3059.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2958.0" y="512" width="203.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3059.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i60 p0</text>
+<text x="3059.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">848 cyc</text>
+<text x="3059.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.826 TB/s</text>
+<rect x="2958.0" y="512" width="203.5" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3059.8" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i60 p0</text>
+<text x="3059.8" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">848 cyc</text>
+<text x="3059.8" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="2988.5" y="192" width="258.0" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="3117.5" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i60 p0</text>
+<text x="3117.5" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1075 cyc</text>
+<text x="3117.5" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.211 TB/s</text>
+<rect x="3001.9" y="448" width="194.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3099.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i60 p0</text>
+<text x="3099.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">810 cyc</text>
+<text x="3099.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3001.9" y="448" width="194.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3099.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i60 p0</text>
+<text x="3099.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">810 cyc</text>
+<text x="3099.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.864 TB/s</text>
+<rect x="3001.9" y="448" width="194.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3099.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i60 p0</text>
+<text x="3099.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">810 cyc</text>
+<text x="3099.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3187.4" y="256" width="60.7" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="3217.8" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="3217.8" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i59 p1</text>
+<rect x="3223.4" y="320" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3226.3" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3227.0" y="128" width="195.6" height="42" fill="#08b557" stroke="#0f3768" stroke-width="1"/>
+<text x="3324.8" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">K TMA i63 p1</text>
+<text x="3324.8" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">815 cyc</text>
+<text x="3324.8" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.873 TB/s</text>
+<rect x="3230.2" y="384" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3233.2" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3248.2" y="256" width="48.0" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="3272.2" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="3272.2" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i59 p1</text>
+<rect x="3252.5" y="512" width="6.7" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3255.8" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3276.5" y="320" width="228.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3390.6" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i60 p0</text>
+<text x="3390.6" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">951 cyc</text>
+<text x="3390.6" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3276.5" y="320" width="228.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3390.6" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i60 p0</text>
+<text x="3390.6" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">951 cyc</text>
+<text x="3390.6" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.736 TB/s</text>
+<rect x="3276.5" y="320" width="228.2" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3390.6" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i60 p0</text>
+<text x="3390.6" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">951 cyc</text>
+<text x="3390.6" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3284.2" y="448" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3287.2" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3285.4" y="384" width="232.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3401.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i60 p0</text>
+<text x="3401.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">967 cyc</text>
+<text x="3401.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3285.4" y="384" width="232.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3401.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i60 p0</text>
+<text x="3401.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">967 cyc</text>
+<text x="3401.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.724 TB/s</text>
+<rect x="3285.4" y="384" width="232.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3401.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i60 p0</text>
+<text x="3401.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">967 cyc</text>
+<text x="3401.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3303.4" y="768" width="13.7" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3310.2" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3303.8" y="704" width="14.6" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3311.2" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3307.9" y="640" width="12.7" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3314.3" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3308.2" y="512" width="290.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3453.5" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i60 p0</text>
+<text x="3453.5" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1211 cyc</text>
+<text x="3453.5" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3308.2" y="512" width="290.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3453.5" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i60 p0</text>
+<text x="3453.5" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1211 cyc</text>
+<text x="3453.5" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.578 TB/s</text>
+<rect x="3308.2" y="512" width="290.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3453.5" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i60 p0</text>
+<text x="3453.5" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1211 cyc</text>
+<text x="3453.5" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3309.6" y="576" width="17.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3318.1" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3339.8" y="768" width="281.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3480.4" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i61 p1</text>
+<text x="3480.4" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1171 cyc</text>
+<text x="3480.4" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3339.8" y="768" width="281.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3480.4" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i61 p1</text>
+<text x="3480.4" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1171 cyc</text>
+<text x="3480.4" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.598 TB/s</text>
+<rect x="3339.8" y="768" width="281.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3480.4" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i61 p1</text>
+<text x="3480.4" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1171 cyc</text>
+<text x="3480.4" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3342.5" y="640" width="293.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3489.1" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i61 p1</text>
+<text x="3489.1" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1222 cyc</text>
+<text x="3489.1" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3342.5" y="640" width="293.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3489.1" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i61 p1</text>
+<text x="3489.1" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1222 cyc</text>
+<text x="3489.1" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.573 TB/s</text>
+<rect x="3342.5" y="640" width="293.3" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3489.1" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i61 p1</text>
+<text x="3489.1" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1222 cyc</text>
+<text x="3489.1" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3343.4" y="704" width="272.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3479.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i61 p1</text>
+<text x="3479.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1137 cyc</text>
+<text x="3479.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3343.4" y="704" width="272.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3479.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i61 p1</text>
+<text x="3479.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1137 cyc</text>
+<text x="3479.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.616 TB/s</text>
+<rect x="3343.4" y="704" width="272.9" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3479.9" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i61 p1</text>
+<text x="3479.9" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1137 cyc</text>
+<text x="3479.9" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3351.8" y="576" width="259.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3481.3" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i61 p1</text>
+<text x="3481.3" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1079 cyc</text>
+<text x="3481.3" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3351.8" y="576" width="259.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3481.3" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i61 p1</text>
+<text x="3481.3" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1079 cyc</text>
+<text x="3481.3" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.649 TB/s</text>
+<rect x="3351.8" y="576" width="259.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3481.3" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i61 p1</text>
+<text x="3481.3" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1079 cyc</text>
+<text x="3481.3" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3353.3" y="448" width="281.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3493.8" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i60 p0</text>
+<text x="3493.8" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1171 cyc</text>
+<text x="3493.8" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3353.3" y="448" width="281.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3493.8" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i60 p0</text>
+<text x="3493.8" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1171 cyc</text>
+<text x="3493.8" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.598 TB/s</text>
+<rect x="3353.3" y="448" width="281.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3493.8" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i60 p0</text>
+<text x="3493.8" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1171 cyc</text>
+<text x="3493.8" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3371.0" y="256" width="201.8" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="3472.0" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i61 p1</text>
+<text x="3472.0" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">841 cyc</text>
+<text x="3472.0" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">6.660 TB/s</text>
+<rect x="3384.2" y="192" width="140.4" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="3454.4" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i60 p0</text>
+<text x="3454.4" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">585 cyc</text>
+<text x="3454.4" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">612.8 TFLOP/s</text>
+<rect x="3385.2" y="64" width="260.9" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="3515.6" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i62 p0</text>
+<text x="3515.6" y="94" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1087 cyc</text>
+<text x="3515.6" y="104" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">659.6 TFLOP/s</text>
+<rect x="3717.8" y="576" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3720.7" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3733.4" y="192" width="59.5" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="3763.2" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="3763.2" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i60 p0</text>
+<rect x="3735.6" y="640" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3738.5" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3744.0" y="704" width="6.5" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3747.2" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3745.7" y="768" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3748.7" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="3770.6" y="576" width="194.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3867.7" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i61 p1</text>
+<text x="3867.7" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">809 cyc</text>
+<text x="3867.7" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3770.6" y="576" width="194.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3867.7" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i61 p1</text>
+<text x="3867.7" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">809 cyc</text>
+<text x="3867.7" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.865 TB/s</text>
+<rect x="3770.6" y="576" width="194.2" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3867.7" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i61 p1</text>
+<text x="3867.7" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">809 cyc</text>
+<text x="3867.7" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3788.6" y="640" width="198.0" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3887.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i61 p1</text>
+<text x="3887.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">825 cyc</text>
+<text x="3887.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3788.6" y="640" width="198.0" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3887.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i61 p1</text>
+<text x="3887.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">825 cyc</text>
+<text x="3887.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.849 TB/s</text>
+<rect x="3788.6" y="640" width="198.0" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3887.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i61 p1</text>
+<text x="3887.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">825 cyc</text>
+<text x="3887.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3793.0" y="192" width="50.9" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="3818.4" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="3818.4" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i60 p0</text>
+<rect x="3799.0" y="768" width="225.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3911.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i61 p1</text>
+<text x="3911.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">939 cyc</text>
+<text x="3911.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3799.0" y="768" width="225.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3911.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i61 p1</text>
+<text x="3911.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">939 cyc</text>
+<text x="3911.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.746 TB/s</text>
+<rect x="3799.0" y="768" width="225.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3911.6" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i61 p1</text>
+<text x="3911.6" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">939 cyc</text>
+<text x="3911.6" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3802.8" y="704" width="185.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3895.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i61 p1</text>
+<text x="3895.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">773 cyc</text>
+<text x="3895.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3802.8" y="704" width="185.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3895.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i61 p1</text>
+<text x="3895.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">773 cyc</text>
+<text x="3895.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.906 TB/s</text>
+<rect x="3802.8" y="704" width="185.5" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3895.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i61 p1</text>
+<text x="3895.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">773 cyc</text>
+<text x="3895.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3848.6" y="512" width="14.6" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3856.0" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3850.3" y="320" width="10.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3855.4" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3852.0" y="448" width="61.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3882.6" y="466" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">LD h0</text>
+<text x="3882.6" y="481" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="3853.4" y="384" width="11.5" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="3859.2" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="3863.0" y="128" width="244.8" height="42" fill="#4777c3" stroke="#0f3768" stroke-width="1"/>
+<text x="3985.4" y="144" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">QK MMA i63 p1</text>
+<text x="3985.4" y="158" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1020 cyc</text>
+<text x="3985.4" y="168" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">702.9 TFLOP/s</text>
+<rect x="3863.8" y="256" width="85.4" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="3906.5" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i61 p1</text>
+<text x="3906.5" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">356 cyc</text>
+<text x="3906.5" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">1007.0 TFLOP/s</text>
+<rect x="3879.6" y="320" width="194.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3977.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i62 p0</text>
+<text x="3977.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">812 cyc</text>
+<text x="3977.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3879.6" y="320" width="194.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3977.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i62 p0</text>
+<text x="3977.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">812 cyc</text>
+<text x="3977.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.862 TB/s</text>
+<rect x="3879.6" y="320" width="194.9" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3977.0" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i62 p0</text>
+<text x="3977.0" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">812 cyc</text>
+<text x="3977.0" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3885.1" y="512" width="224.4" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3997.3" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i62 p0</text>
+<text x="3997.3" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">935 cyc</text>
+<text x="3997.3" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3885.1" y="512" width="224.4" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3997.3" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i62 p0</text>
+<text x="3997.3" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">935 cyc</text>
+<text x="3997.3" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.749 TB/s</text>
+<rect x="3885.1" y="512" width="224.4" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3997.3" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i62 p0</text>
+<text x="3997.3" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">935 cyc</text>
+<text x="3997.3" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3887.3" y="384" width="211.7" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="3993.1" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i62 p0</text>
+<text x="3993.1" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">882 cyc</text>
+<text x="3993.1" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3887.3" y="384" width="211.7" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="3993.1" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i62 p0</text>
+<text x="3993.1" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">882 cyc</text>
+<text x="3993.1" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.794 TB/s</text>
+<rect x="3887.3" y="384" width="211.7" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="3993.1" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i62 p0</text>
+<text x="3993.1" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">882 cyc</text>
+<text x="3993.1" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3909.1" y="192" width="251.3" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="4034.8" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i62 p0</text>
+<text x="4034.8" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1047 cyc</text>
+<text x="4034.8" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">5.350 TB/s</text>
+<rect x="3937.9" y="448" width="190.3" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4033.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i62 p0</text>
+<text x="4033.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">793 cyc</text>
+<text x="4033.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="3937.9" y="448" width="190.3" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4033.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i62 p0</text>
+<text x="4033.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">793 cyc</text>
+<text x="4033.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.883 TB/s</text>
+<rect x="3937.9" y="448" width="190.3" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4033.1" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i62 p0</text>
+<text x="4033.1" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">793 cyc</text>
+<text x="4033.1" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4102.6" y="256" width="61.9" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="4133.5" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="4133.5" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i61 p1</text>
+<rect x="4164.5" y="256" width="48.7" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="4188.8" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="4188.8" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i61 p1</text>
+<rect x="4166.2" y="320" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4169.0" y="345" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4187.0" y="384" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4189.9" y="409" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4203.8" y="512" width="6.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4207.0" y="537" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4213.2" y="448" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4216.2" y="473" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4218.2" y="576" width="19.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4227.8" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="4218.7" y="704" width="70.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4254.1" y="722" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">LD h0</text>
+<text x="4254.1" y="737" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i63 p1</text>
+<rect x="4219.4" y="320" width="256.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4347.8" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i62 p0</text>
+<text x="4347.8" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1070 cyc</text>
+<text x="4347.8" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4219.4" y="320" width="256.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4347.8" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i62 p0</text>
+<text x="4347.8" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1070 cyc</text>
+<text x="4347.8" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.654 TB/s</text>
+<rect x="4219.4" y="320" width="256.8" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4347.8" y="336" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i62 p0</text>
+<text x="4347.8" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1070 cyc</text>
+<text x="4347.8" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4221.6" y="640" width="10.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4226.6" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h0</text>
+<rect x="4223.0" y="768" width="69.1" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4257.6" y="786" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">LD h0</text>
+<text x="4257.6" y="801" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i63 p1</text>
+<rect x="4243.4" y="384" width="309.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4398.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i62 p0</text>
+<text x="4398.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1291 cyc</text>
+<text x="4398.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4243.4" y="384" width="309.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4398.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i62 p0</text>
+<text x="4398.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1291 cyc</text>
+<text x="4398.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.542 TB/s</text>
+<rect x="4243.4" y="384" width="309.8" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4398.4" y="400" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i62 p0</text>
+<text x="4398.4" y="414" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1291 cyc</text>
+<text x="4398.4" y="424" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4248.0" y="640" width="280.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4388.0" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i63 p1</text>
+<text x="4388.0" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1167 cyc</text>
+<text x="4388.0" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4248.0" y="640" width="280.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4388.0" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i63 p1</text>
+<text x="4388.0" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1167 cyc</text>
+<text x="4388.0" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.600 TB/s</text>
+<rect x="4248.0" y="640" width="280.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4388.0" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i63 p1</text>
+<text x="4388.0" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1167 cyc</text>
+<text x="4388.0" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4260.0" y="576" width="325.2" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4422.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i63 p1</text>
+<text x="4422.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1355 cyc</text>
+<text x="4422.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4260.0" y="576" width="325.2" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4422.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i63 p1</text>
+<text x="4422.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1355 cyc</text>
+<text x="4422.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.517 TB/s</text>
+<rect x="4260.0" y="576" width="325.2" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4422.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i63 p1</text>
+<text x="4422.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1355 cyc</text>
+<text x="4422.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4263.4" y="512" width="287.5" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4407.1" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i62 p0</text>
+<text x="4407.1" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1198 cyc</text>
+<text x="4407.1" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4263.4" y="512" width="287.5" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4407.1" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i62 p0</text>
+<text x="4407.1" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1198 cyc</text>
+<text x="4407.1" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.584 TB/s</text>
+<rect x="4263.4" y="512" width="287.5" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4407.1" y="528" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i62 p0</text>
+<text x="4407.1" y="542" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1198 cyc</text>
+<text x="4407.1" y="552" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4268.9" y="448" width="284.6" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4411.2" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i62 p0</text>
+<text x="4411.2" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1186 cyc</text>
+<text x="4411.2" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4268.9" y="448" width="284.6" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4411.2" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i62 p0</text>
+<text x="4411.2" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1186 cyc</text>
+<text x="4411.2" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.590 TB/s</text>
+<rect x="4268.9" y="448" width="284.6" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4411.2" y="464" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i62 p0</text>
+<text x="4411.2" y="478" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1186 cyc</text>
+<text x="4411.2" y="488" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4279.4" y="256" width="276.2" height="42" fill="#00a6a6" stroke="#0f3768" stroke-width="1"/>
+<text x="4417.6" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">V TMA i63 p1</text>
+<text x="4417.6" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1151 cyc</text>
+<text x="4417.6" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">4.867 TB/s</text>
+<rect x="4289.0" y="192" width="89.8" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="4333.9" y="208" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i62 p0</text>
+<text x="4333.9" y="222" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">374 cyc</text>
+<text x="4333.9" y="232" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">958.5 TFLOP/s</text>
+<rect x="4311.6" y="704" width="277.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4450.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i63 p1</text>
+<text x="4450.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1158 cyc</text>
+<text x="4450.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4311.6" y="704" width="277.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4450.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i63 p1</text>
+<text x="4450.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1158 cyc</text>
+<text x="4450.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.605 TB/s</text>
+<rect x="4311.6" y="704" width="277.9" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4450.6" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i63 p1</text>
+<text x="4450.6" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1158 cyc</text>
+<text x="4450.6" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4314.2" y="768" width="265.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4447.2" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h0 i63 p1</text>
+<text x="4447.2" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1108 cyc</text>
+<text x="4447.2" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4314.2" y="768" width="265.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4447.2" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h0 i63 p1</text>
+<text x="4447.2" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1108 cyc</text>
+<text x="4447.2" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.632 TB/s</text>
+<rect x="4314.2" y="768" width="265.9" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4447.2" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h0 i63 p1</text>
+<text x="4447.2" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1108 cyc</text>
+<text x="4447.2" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4664.6" y="640" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4667.5" y="665" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4680.7" y="576" width="5.8" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4683.6" y="601" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4683.8" y="192" width="61.2" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="4714.4" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="4714.4" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="4712.4" y="704" width="6.2" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4715.5" y="729" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4712.9" y="768" width="6.0" height="42" fill="#1f4f7a" stroke="#0f3768" stroke-width="1"/>
+<text x="4715.9" y="793" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">LD h1</text>
+<rect x="4718.2" y="640" width="194.9" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4815.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i63 p1</text>
+<text x="4815.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">812 cyc</text>
+<text x="4815.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4718.2" y="640" width="194.9" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4815.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i63 p1</text>
+<text x="4815.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">812 cyc</text>
+<text x="4815.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.862 TB/s</text>
+<rect x="4718.2" y="640" width="194.9" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4815.6" y="656" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i63 p1</text>
+<text x="4815.6" y="670" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">812 cyc</text>
+<text x="4815.6" y="680" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4733.5" y="576" width="208.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4837.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i63 p1</text>
+<text x="4837.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">867 cyc</text>
+<text x="4837.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4733.5" y="576" width="208.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4837.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i63 p1</text>
+<text x="4837.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">867 cyc</text>
+<text x="4837.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.808 TB/s</text>
+<rect x="4733.5" y="576" width="208.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4837.6" y="592" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i63 p1</text>
+<text x="4837.6" y="606" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">867 cyc</text>
+<text x="4837.6" y="616" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4745.0" y="192" width="51.6" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="4770.8" y="210" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV async tail</text>
+<text x="4770.8" y="225" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i62 p0</text>
+<rect x="4766.6" y="768" width="221.8" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4877.5" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i63 p1</text>
+<text x="4877.5" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">924 cyc</text>
+<text x="4877.5" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4766.6" y="768" width="221.8" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4877.5" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i63 p1</text>
+<text x="4877.5" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">924 cyc</text>
+<text x="4877.5" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.758 TB/s</text>
+<rect x="4766.6" y="768" width="221.8" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4877.5" y="784" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i63 p1</text>
+<text x="4877.5" y="798" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">924 cyc</text>
+<text x="4877.5" y="808" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4777.0" y="704" width="244.1" height="42" fill="#e19b2e" stroke="#0f3768" stroke-width="1"/>
+<text x="4899.0" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PACK h1 i63 p1</text>
+<text x="4899.0" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1017 cyc</text>
+<text x="4899.0" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4777.0" y="704" width="244.1" height="42" fill="#9a6a2f" stroke="#0f3768" stroke-width="1"/>
+<text x="4899.0" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">ST h1 i63 p1</text>
+<text x="4899.0" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1017 cyc</text>
+<text x="4899.0" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">0.688 TB/s</text>
+<rect x="4777.0" y="704" width="244.1" height="42" fill="#c04c84" stroke="#0f3768" stroke-width="1"/>
+<text x="4899.0" y="720" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">SUM h1 i63 p1</text>
+<text x="4899.0" y="734" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">1017 cyc</text>
+<text x="4899.0" y="744" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">reg</text>
+<rect x="4815.1" y="256" width="164.4" height="42" fill="#8c5fbf" stroke="#0f3768" stroke-width="1"/>
+<text x="4897.3" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV MMA h0 i63 p1</text>
+<text x="4897.3" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">685 cyc</text>
+<text x="4897.3" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">523.3 TFLOP/s</text>
+<rect x="5108.4" y="256" width="65.8" height="42" fill="#6f47a3" stroke="#0f3768" stroke-width="1"/>
+<text x="5141.3" y="274" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="white">PV MMA h1</text>
+<text x="5141.3" y="289" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">i63 p1</text>
+<rect x="5174.2" y="256" width="129.6" height="42" fill="#9aa4b2" stroke="#0f3768" stroke-width="1"/>
+<text x="5239.0" y="272" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">PV async tail i63 p1</text>
+<text x="5239.0" y="286" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="white">540 cyc</text>
+<text x="5239.0" y="296" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">async</text>
+</svg>

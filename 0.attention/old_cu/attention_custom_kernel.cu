@@ -1,6 +1,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -346,6 +347,47 @@ __device__ __forceinline__ void tma_load_4d(const CUtensorMap* map,
 #endif
 }
 
+__device__ __forceinline__ void tma_store_fence() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("fence.proxy.async.shared::cta;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void tma_store_4d(const CUtensorMap* map,
+                                             uint32_t src_smem,
+                                             int c,
+                                             int r,
+                                             int d,
+                                             int b) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile(
+      "cp.async.bulk.tensor.4d.global.shared::cta.tile.bulk_group"
+      " [%0, {%2, %3, %4, %5}], [%1];"
+      :
+      : "l"(map), "r"(src_smem), "r"(c), "r"(r), "r"(d), "r"(b)
+      : "memory");
+#else
+  (void)map;
+  (void)src_smem;
+  (void)c;
+  (void)r;
+  (void)d;
+  (void)b;
+#endif
+}
+
+__device__ __forceinline__ void tma_store_commit_group() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("cp.async.bulk.commit_group;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void tma_store_wait_group_read() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("cp.async.bulk.wait_group.read 0;" ::: "memory");
+#endif
+}
+
 __device__ __forceinline__ uint32_t tcgen05_alloc_512cols(uint32_t* smem_out_taddr) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t smem_addr = smem_ptr_u32(smem_out_taddr);
@@ -570,23 +612,25 @@ __device__ __forceinline__ uint32_t tcgen05_ld_32x32b_x64_acc(uint32_t taddr) {
 #if ATTENTION_NVCC_MANAGED_LD_REGS
 // Experimental path: keep the tcgen05 load in PTX, but expose the 64 loaded
 // values to nvcc so it owns the exp2/pack/store live ranges.
-#define NVCC_LD_REG_OUTPUTS_0_63                                             \
-  "=&r"(r[0]), "=&r"(r[1]), "=&r"(r[2]), "=&r"(r[3]), "=&r"(r[4]),       \
-      "=&r"(r[5]), "=&r"(r[6]), "=&r"(r[7]), "=&r"(r[8]), "=&r"(r[9]),    \
-      "=&r"(r[10]), "=&r"(r[11]), "=&r"(r[12]), "=&r"(r[13]),             \
-      "=&r"(r[14]), "=&r"(r[15]), "=&r"(r[16]), "=&r"(r[17]),             \
-      "=&r"(r[18]), "=&r"(r[19]), "=&r"(r[20]), "=&r"(r[21]),             \
-      "=&r"(r[22]), "=&r"(r[23]), "=&r"(r[24]), "=&r"(r[25]),             \
-      "=&r"(r[26]), "=&r"(r[27]), "=&r"(r[28]), "=&r"(r[29]),             \
-      "=&r"(r[30]), "=&r"(r[31]), "=&r"(r[32]), "=&r"(r[33]),             \
-      "=&r"(r[34]), "=&r"(r[35]), "=&r"(r[36]), "=&r"(r[37]),             \
-      "=&r"(r[38]), "=&r"(r[39]), "=&r"(r[40]), "=&r"(r[41]),             \
-      "=&r"(r[42]), "=&r"(r[43]), "=&r"(r[44]), "=&r"(r[45]),             \
-      "=&r"(r[46]), "=&r"(r[47]), "=&r"(r[48]), "=&r"(r[49]),             \
-      "=&r"(r[50]), "=&r"(r[51]), "=&r"(r[52]), "=&r"(r[53]),             \
-      "=&r"(r[54]), "=&r"(r[55]), "=&r"(r[56]), "=&r"(r[57]),             \
-      "=&r"(r[58]), "=&r"(r[59]), "=&r"(r[60]), "=&r"(r[61]),             \
-      "=&r"(r[62]), "=&r"(r[63])
+#define NVCC_LD_REG_OUTPUTS_ARRAY(a)                                         \
+  "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
+      "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
+      "=&r"(a[10]), "=&r"(a[11]), "=&r"(a[12]), "=&r"(a[13]),             \
+      "=&r"(a[14]), "=&r"(a[15]), "=&r"(a[16]), "=&r"(a[17]),             \
+      "=&r"(a[18]), "=&r"(a[19]), "=&r"(a[20]), "=&r"(a[21]),             \
+      "=&r"(a[22]), "=&r"(a[23]), "=&r"(a[24]), "=&r"(a[25]),             \
+      "=&r"(a[26]), "=&r"(a[27]), "=&r"(a[28]), "=&r"(a[29]),             \
+      "=&r"(a[30]), "=&r"(a[31]), "=&r"(a[32]), "=&r"(a[33]),             \
+      "=&r"(a[34]), "=&r"(a[35]), "=&r"(a[36]), "=&r"(a[37]),             \
+      "=&r"(a[38]), "=&r"(a[39]), "=&r"(a[40]), "=&r"(a[41]),             \
+      "=&r"(a[42]), "=&r"(a[43]), "=&r"(a[44]), "=&r"(a[45]),             \
+      "=&r"(a[46]), "=&r"(a[47]), "=&r"(a[48]), "=&r"(a[49]),             \
+      "=&r"(a[50]), "=&r"(a[51]), "=&r"(a[52]), "=&r"(a[53]),             \
+      "=&r"(a[54]), "=&r"(a[55]), "=&r"(a[56]), "=&r"(a[57]),             \
+      "=&r"(a[58]), "=&r"(a[59]), "=&r"(a[60]), "=&r"(a[61]),             \
+      "=&r"(a[62]), "=&r"(a[63])
+
+#define NVCC_LD_REG_OUTPUTS_0_63 NVCC_LD_REG_OUTPUTS_ARRAY(r)
 
 #define NVCC_LD_REG_OPERANDS_0_63                                            \
   "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, "  \
@@ -624,7 +668,8 @@ __device__ __forceinline__ uint32_t tcgen05_ld_x64_wait_pack_store_nvcc(
     int consumer_warp,
     int consumer_half,
     uint64_t* p_done_barrier,
-    bool arrive_p_done) {
+    bool arrive_p_done,
+    float* row_sum_pipe) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
   const int row = consumer_warp * 32 + lane;
@@ -675,6 +720,14 @@ __device__ __forceinline__ uint32_t tcgen05_ld_x64_wait_pack_store_nvcc(
                       exp2_pack_hi16_update(r[58], r[59]),
                       exp2_pack_hi16_update(r[60], r[61]),
                       exp2_pack_hi16_update(r[62], r[63]));
+  if (row_sum_pipe != nullptr) {
+    float half_sum = 0.0f;
+#pragma unroll
+    for (int i = 0; i < 64; ++i) {
+      half_sum += __uint_as_float(r[i] & 0xffff0000u);
+    }
+    row_sum_pipe[row] += half_sum;
+  }
   return r[0] ^ r[15] ^ r[31] ^ r[47] ^ r[63];
 #else
   (void)src_taddr;
@@ -683,22 +736,37 @@ __device__ __forceinline__ uint32_t tcgen05_ld_x64_wait_pack_store_nvcc(
   (void)consumer_half;
   (void)p_done_barrier;
   (void)arrive_p_done;
+  (void)row_sum_pipe;
   return 0;
 #endif
 }
 #endif
 
 #if ATTENTION_STORE_OUTPUT
-__device__ __forceinline__ void store_tmem_x64_pipe_output(uint32_t src_taddr,
-                                                           float* pipe_output,
-                                                           int pipe,
-                                                           int consumer_warp,
-                                                           int consumer_half) {
+__device__ __forceinline__ float bf16_bits_to_float_device(uint16_t bits) {
+  return __uint_as_float(static_cast<uint32_t>(bits) << 16);
+}
+
+__device__ __forceinline__ uint16_t float_to_bf16_bits_device(float value) {
+  uint32_t bits = __float_as_uint(value);
+  const uint32_t lsb = (bits >> 16) & 1u;
+  bits += 0x7fffu + lsb;
+  return static_cast<uint16_t>(bits >> 16);
+}
+
+__device__ __forceinline__ uint32_t pack_bf16_pair_device(float lo, float hi) {
+  return static_cast<uint32_t>(float_to_bf16_bits_device(lo)) |
+         (static_cast<uint32_t>(float_to_bf16_bits_device(hi)) << 16);
+}
+
+__device__ __noinline__ void store_tmem_x64_accum_output_smem(uint32_t src_taddr,
+                                                              float* output_smem,
+                                                              int consumer_warp,
+                                                              int consumer_half,
+                                                              bool add_to_smem) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
-  float* dst = pipe_output +
-               (static_cast<size_t>(blockIdx.x) * kPipeCount + pipe) * kTileBf16Elems +
-               static_cast<size_t>(consumer_warp * 32 + lane) * kTileN +
+  float* dst = output_smem + static_cast<size_t>(consumer_warp * 32 + lane) * kTileN +
                consumer_half * 64;
   uint32_t r[64];
   asm volatile(
@@ -708,16 +776,30 @@ __device__ __forceinline__ void store_tmem_x64_pipe_output(uint32_t src_taddr,
       : "r"(src_taddr)
       : "memory");
   tcgen05_wait_ld();
+  if (add_to_smem) {
 #pragma unroll
-  for (int i = 0; i < 64; ++i) {
-    dst[i] = __uint_as_float(r[i]);
+    for (int i = 0; i < 64; i += 4) {
+      const float4 prev = reinterpret_cast<float4*>(dst + i)[0];
+      reinterpret_cast<float4*>(dst + i)[0] =
+          make_float4(prev.x + __uint_as_float(r[i + 0]),
+                      prev.y + __uint_as_float(r[i + 1]),
+                      prev.z + __uint_as_float(r[i + 2]),
+                      prev.w + __uint_as_float(r[i + 3]));
+    }
+  } else {
+#pragma unroll
+    for (int i = 0; i < 64; i += 4) {
+      reinterpret_cast<float4*>(dst + i)[0] =
+          make_float4(__uint_as_float(r[i + 0]), __uint_as_float(r[i + 1]),
+                      __uint_as_float(r[i + 2]), __uint_as_float(r[i + 3]));
+    }
   }
 #else
   (void)src_taddr;
-  (void)pipe_output;
-  (void)pipe;
+  (void)output_smem;
   (void)consumer_warp;
   (void)consumer_half;
+  (void)add_to_smem;
 #endif
 }
 #endif
@@ -999,15 +1081,16 @@ do {                                                                        \
 } while (0)
 
 #if ATTENTION_NVCC_MANAGED_LD_REGS
-#define TCGEN05_LD_X64_WAIT_PACK_STORE(src_taddr, s_smem, consumer_warp, consumer_half, p_done_barrier, arrive_p_done, acc_out) \
+#define TCGEN05_LD_X64_WAIT_PACK_STORE(src_taddr, s_smem, consumer_warp, consumer_half, p_done_barrier, arrive_p_done, row_sum_pipe, acc_out) \
 do {                                                                        \
   (acc_out) = tcgen05_ld_x64_wait_pack_store_nvcc(                          \
       (src_taddr), (s_smem), (consumer_warp), (consumer_half),              \
-      (p_done_barrier), (arrive_p_done));                                   \
+      (p_done_barrier), (arrive_p_done), (row_sum_pipe));                   \
 } while (0)
 #else
-#define TCGEN05_LD_X64_WAIT_PACK_STORE(src_taddr, s_smem, consumer_warp, consumer_half, p_done_barrier, arrive_p_done, acc_out) \
+#define TCGEN05_LD_X64_WAIT_PACK_STORE(src_taddr, s_smem, consumer_warp, consumer_half, p_done_barrier, arrive_p_done, row_sum_pipe, acc_out) \
 do {                                                                        \
+  (void)(row_sum_pipe);                                                     \
   const int lane__ = threadIdx.x & 31;                                      \
   const int row__ = (consumer_warp) * 32 + lane__;                          \
   const int col_pair_base__ = (consumer_half) * 32;                         \
@@ -1137,18 +1220,20 @@ __global__ __launch_bounds__(kMainThreads, 1)
 void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                           const __grid_constant__ CUtensorMap k_map,
                           const __grid_constant__ CUtensorMap v_map,
+                          const __grid_constant__ CUtensorMap o_map,
                           uint32_t* __restrict__ sink,
                           int repeats,
                           int k_tiles,
-                          float* __restrict__ pipe_output) {
+                          void* __restrict__ output) {
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)q_map;
   (void)k_map;
   (void)v_map;
+  (void)o_map;
   (void)sink;
   (void)repeats;
   (void)k_tiles;
-  (void)pipe_output;
+  (void)output;
 #else
   extern __shared__ uint32_t smem_raw[];
   const uintptr_t smem_addr =
@@ -1180,6 +1265,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ volatile int pipe0_vtma_local_shared;
 #if ATTENTION_PIPE1_LD_WAIT_PIPE0_CONSUME
   __shared__ int pipe0_consume_phase_count[2];
+#endif
+#if ATTENTION_STORE_OUTPUT
+  __shared__ float row_sum_partial[kPipeCount][kTileM];
 #endif
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
@@ -1213,6 +1301,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
+#if ATTENTION_STORE_OUTPUT
+  for (int i = threadIdx.x; i < kPipeCount * kTileM; i += blockDim.x) {
+    reinterpret_cast<float*>(row_sum_partial)[i] = 0.0f;
+  }
+#endif
   __syncthreads();
 
   if (warp_id == 0) {
@@ -1366,10 +1459,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       uint32_t acc1;
       const uint32_t row_taddr = p_taddr[pipe] +
                                  (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#if ATTENTION_STORE_OUTPUT
+      float* row_sum_pipe = output != nullptr ? row_sum_partial[pipe] : nullptr;
+#else
+      float* row_sum_pipe = nullptr;
+#endif
       TCGEN05_LD_X64_WAIT_PACK_STORE(row_taddr, s_smem[pipe], consumer_warp, 0,
-                                     &p_done[pipe], false, acc0);
+                                     &p_done[pipe], false, row_sum_pipe, acc0);
       TCGEN05_LD_X64_WAIT_PACK_STORE(row_taddr + 64u, s_smem[pipe], consumer_warp, 1,
-                                     &p_done[pipe], true, acc1);
+                                     &p_done[pipe], true, row_sum_pipe, acc1);
       read_acc ^= (acc0 ^ acc1) + static_cast<uint32_t>(iter * 17 + warp_id);
       if (lane == 0) {
         mbarrier_arrive(&s_ready[pipe]);
@@ -1383,7 +1481,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
 
 #if ATTENTION_STORE_OUTPUT
-  if (pipe_output != nullptr) {
+  if (output != nullptr) {
     const int pipe0_local_count = (repeats + 1) / 2;
     const int pipe1_local_count = repeats / 2;
     if (pipe0_local_count > 0) {
@@ -1393,17 +1491,56 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_wait(&pv_done[1], static_cast<uint32_t>((pipe1_local_count - 1) & 1));
     }
     __syncthreads();
-    if (warp_id >= 4 && warp_id < kMainWarps) {
-      const int pipe = (warp_id - 4) / kConsumerWarpsPerPipe;
-      const int consumer_slot = (warp_id - 4) - pipe * kConsumerWarpsPerPipe;
-      const int consumer_warp = consumer_slot;
-      const int local_count = pipe == 0 ? pipe0_local_count : pipe1_local_count;
-      if (local_count > 0) {
-        const uint32_t row_taddr =
-            o_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
-        store_tmem_x64_pipe_output(row_taddr, pipe_output, pipe, consumer_warp, 0);
-        store_tmem_x64_pipe_output(row_taddr + 64u, pipe_output, pipe, consumer_warp, 1);
+    float* output_smem = reinterpret_cast<float*>(q_smem);
+    uint32_t* output_bf16_smem =
+        reinterpret_cast<uint32_t*>(output_smem + kTileBf16Elems);
+    if (pipe0_local_count > 0 && pipe1_local_count > 0 && warp_id >= 4 &&
+        warp_id < 4 + kConsumerWarpsPerPipe) {
+      const int consumer_warp = warp_id - 4;
+      const uint32_t row_taddr0 =
+          o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      const uint32_t row_taddr1 =
+          o_taddr[1] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      store_tmem_x64_accum_output_smem(row_taddr0, output_smem, consumer_warp, 0,
+                                       false);
+      store_tmem_x64_accum_output_smem(row_taddr0 + 64u, output_smem, consumer_warp,
+                                       1, false);
+      store_tmem_x64_accum_output_smem(row_taddr1, output_smem, consumer_warp, 0,
+                                       true);
+      store_tmem_x64_accum_output_smem(row_taddr1 + 64u, output_smem, consumer_warp,
+                                       1, true);
+    } else if (pipe0_local_count > 0 && pipe1_local_count == 0 && warp_id >= 4 &&
+               warp_id < 4 + kConsumerWarpsPerPipe) {
+      const int consumer_warp = warp_id - 4;
+      const uint32_t row_taddr =
+          o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      store_tmem_x64_accum_output_smem(row_taddr, output_smem, consumer_warp, 0,
+                                       false);
+      store_tmem_x64_accum_output_smem(row_taddr + 64u, output_smem, consumer_warp,
+                                       1, false);
+    }
+    __syncthreads();
+    if (warp_id >= 4 && warp_id < 4 + kConsumerWarpsPerPipe) {
+      const int consumer_warp = warp_id - 4;
+      const int row = consumer_warp * 32 + lane;
+      const float denom = row_sum_partial[0][row] + row_sum_partial[1][row];
+      const float inv_sum = denom != 0.0f ? 1.0f / denom : 0.0f;
+      const float* row_src = output_smem + static_cast<size_t>(row) * kTileN;
+      uint32_t* row_dst = output_bf16_smem + static_cast<size_t>(row) * (kTileN / 2);
+#pragma unroll
+      for (int col_pair = 0; col_pair < kTileN / 2; ++col_pair) {
+        const int col = col_pair * 2;
+        row_dst[col_pair] =
+            pack_bf16_pair_device(row_src[col] * inv_sum, row_src[col + 1] * inv_sum);
       }
+    }
+    tma_store_fence();
+    __syncthreads();
+    if (lane0 && warp_id == 0) {
+      tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0,
+                   static_cast<int>(blockIdx.x), 0);
+      tma_store_commit_group();
+      tma_store_wait_group_read();
     }
     __syncthreads();
   }
@@ -2969,6 +3106,52 @@ void encode_atom_tma_map(CUtensorMap* map, void* base, uint64_t physical_rows) {
                "cuTensorMapEncodeTiled(atom)");
 }
 
+void encode_output_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
+  const cuuint64_t global_dim[4] = {kTileN, kTileM, tiles, 1};
+  const cuuint64_t global_stride[3] = {
+      kTileN * sizeof(float),
+      static_cast<cuuint64_t>(kTileN) * kTileM * sizeof(float),
+      static_cast<cuuint64_t>(kTileN) * kTileM * tiles * sizeof(float)};
+  const cuuint32_t box_dim[4] = {kTileN, kTileM, 1, 1};
+  const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
+  driver_check(cuTensorMapEncodeTiled(map,
+                                      CU_TENSOR_MAP_DATA_TYPE_FLOAT32,
+                                      4,
+                                      base,
+                                      global_dim,
+                                      global_stride,
+                                      box_dim,
+                                      elem_stride,
+                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_NONE,
+                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(output)");
+}
+
+void encode_bf16_output_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
+  const cuuint64_t global_dim[4] = {kTileN, kTileM, tiles, 1};
+  const cuuint64_t global_stride[3] = {
+      kTileN * sizeof(uint16_t),
+      static_cast<cuuint64_t>(kTileN) * kTileM * sizeof(uint16_t),
+      static_cast<cuuint64_t>(kTileN) * kTileM * tiles * sizeof(uint16_t)};
+  const cuuint32_t box_dim[4] = {kTileN, kTileM, 1, 1};
+  const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
+  driver_check(cuTensorMapEncodeTiled(map,
+                                      CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
+                                      4,
+                                      base,
+                                      global_dim,
+                                      global_stride,
+                                      box_dim,
+                                      elem_stride,
+                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_NONE,
+                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(output_bf16)");
+}
+
 double tbps_from_bytes(double bytes, double ms) {
   return ms > 0.0 ? bytes / (ms * 1.0e-3) / 1.0e12 : 0.0;
 }
@@ -2981,8 +3164,9 @@ RunResult run_kernel(const Args& args,
                      const CUtensorMap& q_map,
                      const CUtensorMap& k_map,
                      const CUtensorMap& v_map,
+                     const CUtensorMap& o_map,
                      uint32_t* sink,
-                     float* pipe_output,
+                     void* output,
                      int* active_ctas_per_sm) {
   RunResult result{};
   CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel,
@@ -2993,7 +3177,7 @@ RunResult run_kernel(const Args& args,
 
   for (int i = 0; i < args.warmup; ++i) {
     qk_tma_mma_ld_kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
-        q_map, k_map, v_map, sink, args.repeats, args.k_tiles, pipe_output);
+        q_map, k_map, v_map, o_map, sink, args.repeats, args.k_tiles, output);
     result.error = cudaGetLastError();
     if (result.error != cudaSuccess) {
       result.status = "warmup_launch_failed";
@@ -3012,7 +3196,7 @@ RunResult run_kernel(const Args& args,
   CUDA_CHECK(cudaEventRecord(start));
   for (int i = 0; i < args.iters; ++i) {
     qk_tma_mma_ld_kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
-        q_map, k_map, v_map, sink, args.repeats, args.k_tiles, pipe_output);
+        q_map, k_map, v_map, o_map, sink, args.repeats, args.k_tiles, output);
     result.error = cudaGetLastError();
     if (result.error != cudaSuccess) {
       result.status = "timed_launch_failed";
@@ -3327,10 +3511,13 @@ void write_csv(const Args& args,
   const double s_store_bytes = groups * kTileBytes;       // packed BF16 128x128 S.
   const double qk_flops = groups * kMmasPerTile * kFlopsPerMma;
   const double pv_flops = qk_flops;
-  const char* mode = "qk_pack_smem_pv_2pipe";
+  const char* mode = args.store_output ? "qk_pack_smem_pv_2pipe_bf16_output"
+                                       : "qk_pack_smem_pv_2pipe";
+  const int threads_per_cta = kMainThreads;
+  const int dynamic_smem_bytes = kDynamicSmemBytes;
 #if ATTENTION_PV_PINGPONG_DEP
   const char* notes =
-      "smem_q_k2_v2_s2_tmem_p2_o2_warp0_1_qk_warp2_3_pv_pipe_consumers_x64_exp2_pack_store_x2_p_done_after_ld_pv_pingpong_dep";
+      "smem_q_k2_v2_s2_tmem_p2_o2_warp0_1_qk_warp2_3_pv_pipe_consumers_x64_exp2_pack_store_x2_p_done_after_ld_pv_pingpong_dep_bf16_output_when_enabled";
 #elif ATTENTION_PIPE1_PV_WAIT_PIPE0_VTMA
   const char* notes =
       "smem_q_k2_v2_s2_tmem_p2_o2_warp0_1_qk_warp2_3_pv_pipe_consumers_x64_exp2_pack_store_x2_p_done_after_ld_pipe1_pv_wait_pipe0_next_vtma";
@@ -3349,8 +3536,9 @@ void write_csv(const Args& args,
                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%.6f,%.0f,%.0f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
                "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%llu,%s,%s,%s\n",
                mode, args.blocks, args.k_tiles, args.k_tiles, args.blocks, kTileM, kTileN, kMmaK, kMmasPerTile, args.blocks,
-               args.repeats, args.k_tiles, args.warmup, args.iters, kMainThreads, active,
-               kDynamicSmemBytes, kTmemAllocCols, kTmemUsedCols, 256, 256, "smem", result.ms, groups, total_mmas,
+               args.repeats, args.k_tiles, args.warmup, args.iters, threads_per_cta, active,
+               dynamic_smem_bytes, kTmemAllocCols, kTmemUsedCols, 256, 256,
+               args.store_output ? "bf16_tma" : "smem", result.ms, groups, total_mmas,
                q_tma_bytes / 1.0e9, k_tma_bytes / 1.0e9, v_tma_bytes / 1.0e9,
                (q_tma_bytes + k_tma_bytes + v_tma_bytes) / 1.0e9,
                p_read_bytes / 1.0e9, s_store_bytes / 1.0e9,
@@ -3515,6 +3703,11 @@ void write_trace_csv(const Args& args, const RunResult& result, const TraceRecor
 int main(int argc, char** argv) {
   Args args;
   parse_args(argc, argv, &args);
+#if ATTENTION_STORE_OUTPUT
+  if (args.store_output) {
+    args.repeats = args.k_tiles;
+  }
+#endif
 
   int device = 0;
   CUDA_CHECK(cudaGetDevice(&device));
@@ -3542,7 +3735,7 @@ int main(int argc, char** argv) {
   uint32_t* d_k = nullptr;
   uint32_t* d_v = nullptr;
   uint32_t* d_sink = nullptr;
-  float* d_pipe_output = nullptr;
+  uint32_t* d_output = nullptr;
   CycleTotals* d_cycle_totals = nullptr;
   TraceRecord* d_trace_records = nullptr;
   CUDA_CHECK(cudaMalloc(&d_q, q_words * sizeof(uint32_t)));
@@ -3551,10 +3744,9 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaMalloc(&d_sink, args.blocks * sizeof(uint32_t)));
   if (args.store_output) {
 #if ATTENTION_STORE_OUTPUT
-    const size_t output_elems =
-        static_cast<size_t>(args.blocks) * kPipeCount * kTileBf16Elems;
-    CUDA_CHECK(cudaMalloc(&d_pipe_output, output_elems * sizeof(float)));
-    CUDA_CHECK(cudaMemset(d_pipe_output, 0, output_elems * sizeof(float)));
+    const size_t output_words = static_cast<size_t>(args.blocks) * kTileWords;
+    CUDA_CHECK(cudaMalloc(&d_output, output_words * sizeof(uint32_t)));
+    CUDA_CHECK(cudaMemset(d_output, 0, output_words * sizeof(uint32_t)));
 #else
     std::fprintf(stderr,
                  "--store-output requires compiling with -DATTENTION_STORE_OUTPUT=1\n");
@@ -3578,10 +3770,13 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  CUtensorMap q_map{}, k_map{}, v_map{};
+  CUtensorMap q_map{}, k_map{}, v_map{}, o_map{};
   encode_atom_tma_map(&q_map, d_q, static_cast<uint64_t>(args.blocks) * 64);
   encode_atom_tma_map(&k_map, d_k, static_cast<uint64_t>(args.k_tiles) * 64);
   encode_atom_tma_map(&v_map, d_v, static_cast<uint64_t>(args.k_tiles) * 64);
+  if (d_output) {
+    encode_bf16_output_tma_map(&o_map, d_output, static_cast<uint64_t>(args.blocks));
+  }
 
   int active = 0;
   RunResult result{};
@@ -3625,7 +3820,7 @@ int main(int argc, char** argv) {
                           cudaMemcpyDeviceToHost));
     write_cycle_csv(args, active, result, h_totals);
   } else {
-    result = run_kernel(args, q_map, k_map, v_map, d_sink, d_pipe_output, &active);
+    result = run_kernel(args, q_map, k_map, v_map, o_map, d_sink, d_output, &active);
     const uint64_t sink_checksum =
         result.error == cudaSuccess ? checksum_sink(d_sink, args.blocks) : 0ull;
     write_csv(args, active, result, sink_checksum);
@@ -3635,7 +3830,7 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaFree(d_k));
   CUDA_CHECK(cudaFree(d_v));
   CUDA_CHECK(cudaFree(d_sink));
-  if (d_pipe_output) CUDA_CHECK(cudaFree(d_pipe_output));
+  if (d_output) CUDA_CHECK(cudaFree(d_output));
   CUDA_CHECK(cudaFree(d_cycle_totals));
   CUDA_CHECK(cudaFree(d_trace_records));
   return result.error == cudaSuccess ? 0 : 1;

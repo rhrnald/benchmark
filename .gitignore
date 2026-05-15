@@ -16,6 +16,12 @@
 *.qdrep
 *.sqlite
 
+# Generated benchmark reports
+*.csv
+*.log
+*.svg
+!0.attention/best.svg
+
 # Python environments and caches
 __pycache__/
 *.py[cod]
@@ -42,6 +48,7 @@ venv/
 /flashattention_custom/fa4-src/assets/*.png
 
 # Local benchmark executables emitted outside build/
+/build_*/
 /blackwell_pipeline_overlap_bench
 /mma_four_warpgroups_consume_bench
 /qk_two_producer_consume_pipeline
