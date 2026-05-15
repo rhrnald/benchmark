@@ -2,10 +2,11 @@
 
 This directory contains the current fused Blackwell attention benchmark.
 
-- `main.cu`: current fastest fused attention path
+- `main.cu`: minimal current fastest fused attention path
 - `Makefile`: local build, run, validation, and trace plot entrypoint
 - `run.py`: small wrapper for benchmark and trace commands
 - `plot_attention_trace.py`: cycle timeline SVG renderer
+- `old_cu/main_full.cu`: pre-cleanup full source with compile-time experiment options
 - `old_cu/`: older exploratory CUDA kernels kept for reference
 - `log/`: ignored local benchmark logs, CSV files, and SVG plots
 
@@ -35,11 +36,11 @@ warmup=3
 iters=10
 ```
 
-The expected result on the current system is about `1595 TFLOP/s` total. The
+The expected result on the current system is about `1594 TFLOP/s` total. The
 latest checked run was:
 
 ```text
-total_TFLOP_per_s=1594.803 status=ok
+total_TFLOP_per_s=1593.769 status=ok
 ```
 
 The benchmark CSV is written to:
