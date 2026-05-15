@@ -1,4 +1,0 @@
-case,median_tflops,min_tflops,max_tflops,median_ms
-head_tmp,1574.487,1573.449,1574.661,5.58664
-new_default,1574.257,1573.967,1574.257,5.587456
-early_p_ld,1534.054,1532.767,1534.194,5.733888

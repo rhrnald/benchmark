@@ -1,5 +1,5 @@
 // Test-only snapshot of the 2-pipe 4-sync pingpong experiment.
-// Keep production experiments in attention_fused_real_attention.cu.
+// Keep production experiments in main.cu.
 #include <cuda.h>
 #include <cuda_runtime.h>
 

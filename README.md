@@ -1,14 +1,14 @@
 # Blackwell Attention Microbenchmarks
 
 This workspace contains CUDA microbenchmarks for SM100/Blackwell primitives. The
-current primary target is the fused attention pipeline in
-`0.attention/attention_fused_clean.cu`. The older exploratory kernel files are
-kept in `0.attention/old_cu/` for reference, but the default Makefile target
-builds only the current fastest clean file.
+current primary target is the fused attention pipeline in `0.attention/main.cu`.
+The older exploratory kernel files are kept in `0.attention/old_cu/` for
+reference, and generated CSV/SVG reports are kept locally under
+`0.attention/log/`.
 
-## Fast Attention Path
+## Main Attention Path
 
-Build the current fastest attention benchmark without output-store code:
+Build the current attention benchmark:
 
 ```bash
 make attention_custom_kernel_fastest \
@@ -19,24 +19,23 @@ Run the full-size benchmark:
 
 ```bash
 ./build/0.attention/attention_custom_kernel \
-  --blocks 4096 --repeats 8192 --k-tiles 8192 --warmup 2 --iters 3 \
-  --csv /tmp/attention_fastest.csv
+  --blocks 4096 --k-tiles 256 --warmup 3 --iters 10 \
+  --csv /tmp/attention_main.csv
 ```
 
-Expected shape on the current system is about 1722 TFLOP/s total with producer
-regs `128`, consumer regs `184`, NVCC-managed TMEM load registers, and
-`ATTENTION_STORE_OUTPUT=0`. `make` and `make run` now use only this path; the
+Expected shape on the current system is about 1595 TFLOP/s total for the
+BF16-output benchmark with producer regs `120`, consumer regs `184`, and the
+default dependency mask `0x00f`. `make` and `make run` use this path; the
 default benchmark CSV is written under `/tmp` so generated logs/CSV/SVG do not
 enter the repo.
 
-## Output Store and Validation Path
+## Validation Path
 
-The validation/output build uses the same fused `qk_tma_mma_ld_kernel`, not a
-separate scalar attention kernel. With `ATTENTION_STORE_OUTPUT=1`, the kernel
-accumulates BF16 softmax row sums while packing `S`, waits for both PV pipes,
-loads the two TMEM output accumulators, sums them into shared memory, normalizes
-by the row sum, packs final `O[128,128]` to BF16, and stores it to global memory
-with TMA.
+The validation build uses the same fused `qk_tma_mma_ld_kernel`, not a separate
+scalar attention kernel. The kernel accumulates BF16 softmax row sums while
+packing `S`, waits for both PV pipes, loads the two TMEM output accumulators,
+sums them into shared memory, normalizes by the row sum, packs final
+`O[128,128]` to BF16, and stores it to global memory with TMA.
 
 ```bash
 make attention_custom_kernel_store_output \
@@ -51,7 +50,7 @@ Run end-to-end validation:
 ```bash
 ./build/0.attention/attention_validation \
   --validate --pattern rank1 --k-tiles 4 \
-  --csv /tmp/attention_fused_clean_validate_rank1_k4.csv
+  --csv /tmp/attention_main_validate_rank1_k4.csv
 ```
 
 The validation path compares the fused kernel's normalized BF16 output against a
@@ -74,17 +73,16 @@ Run end-to-end validation:
 ```bash
 ./build/0.attention/attention_validation_actual \
   --validate --pattern rank1 --k-tiles 4 \
-  --csv /tmp/attention_fused_clean_validate_rank1_k4.csv
+  --csv /tmp/attention_main_validate_rank1_k4.csv
 ```
 
-The output-enabled path uses `repeats == k_tiles` for actual attention
-semantics and stores `O[blocks,128,128]` BF16. The output-store benchmark is the
-same kernel compiled with `ATTENTION_STORE_OUTPUT=1`:
+The benchmark path uses `repeats == k_tiles` for actual attention semantics and
+stores `O[blocks,128,128]` BF16:
 
 ```bash
 ./build/0.attention/attention_validation_actual \
-  --store-output --blocks 4096 --k-tiles 8192 --warmup 1 --iters 3 \
-  --csv /tmp/attention_fused_clean_output_perf.csv
+  --blocks 4096 --k-tiles 256 --warmup 3 --iters 10 \
+  --csv /tmp/attention_main_output_perf.csv
 ```
 
 ## Trace Plots

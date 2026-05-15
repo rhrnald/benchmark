@@ -20,7 +20,7 @@
 *.csv
 *.log
 *.svg
-!0.attention/best.svg
+/0.attention/log/
 
 # Python environments and caches
 __pycache__/
