@@ -2,6 +2,17 @@
 
 // Low-level PTX and Blackwell wrapper helpers for the attention kernel.
 
+#ifndef ATTENTION_SETMAXNREG_PRODUCER
+#define ATTENTION_SETMAXNREG_PRODUCER 120
+#endif
+
+#ifndef ATTENTION_SETMAXNREG_CONSUMER
+#define ATTENTION_SETMAXNREG_CONSUMER 192
+#endif
+
+#define ATTENTION_STRINGIFY_IMPL(x) #x
+#define ATTENTION_STRINGIFY(x) ATTENTION_STRINGIFY_IMPL(x)
+
 __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
   uint32_t addr;
   asm volatile("{ .reg .u64 u64addr; cvta.to.shared.u64 u64addr, %1; cvt.u32.u64 %0, u64addr; }"
@@ -115,7 +126,7 @@ __host__ __device__ __forceinline__ uint32_t make_qk_idesc() {
 __device__ __forceinline__ void setmaxnreg_dec_producer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("setmaxnreg.dec.sync.aligned.u32 "
-               "120" ";"
+               ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_PRODUCER) ";"
                ::: "memory");
 #endif
 }
@@ -123,7 +134,7 @@ __device__ __forceinline__ void setmaxnreg_dec_producer() {
 __device__ __forceinline__ void setmaxnreg_inc_consumer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("setmaxnreg.inc.sync.aligned.u32 "
-               "184" ";"
+               ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_CONSUMER) ";"
                ::: "memory");
 #endif
 }
@@ -446,6 +457,46 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
       "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
       "}, [%64];"                                                          \
       : TCGEN05_LD_X64_OUTPUTS(out_regs)                                   \
+      : "r"(src_taddr)                                                    \
+      : "memory")
+
+#define TCGEN05_LD_X32_OUTPUTS(a)                                            \
+  "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
+      "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
+      "=&r"(a[10]), "=&r"(a[11]), "=&r"(a[12]), "=&r"(a[13]),             \
+      "=&r"(a[14]), "=&r"(a[15]), "=&r"(a[16]), "=&r"(a[17]),             \
+      "=&r"(a[18]), "=&r"(a[19]), "=&r"(a[20]), "=&r"(a[21]),             \
+      "=&r"(a[22]), "=&r"(a[23]), "=&r"(a[24]), "=&r"(a[25]),             \
+      "=&r"(a[26]), "=&r"(a[27]), "=&r"(a[28]), "=&r"(a[29]),             \
+      "=&r"(a[30]), "=&r"(a[31])
+
+#define TCGEN05_LD_X32_OPERANDS                                              \
+  "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, "  \
+  "%16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, "  \
+  "%30, %31"
+
+#define TCGEN05_LD_X32(src_taddr, out_regs)                                \
+  asm volatile(                                                            \
+      "tcgen05.ld.sync.aligned.32x32b.x32.b32 {" TCGEN05_LD_X32_OPERANDS   \
+      "}, [%32];"                                                          \
+      : TCGEN05_LD_X32_OUTPUTS(out_regs)                                   \
+      : "r"(src_taddr)                                                    \
+      : "memory")
+
+#define TCGEN05_LD_X16_OUTPUTS(a)                                            \
+  "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
+      "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
+      "=&r"(a[10]), "=&r"(a[11]), "=&r"(a[12]), "=&r"(a[13]),             \
+      "=&r"(a[14]), "=&r"(a[15])
+
+#define TCGEN05_LD_X16_OPERANDS                                              \
+  "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15"
+
+#define TCGEN05_LD_X16(src_taddr, out_regs)                                \
+  asm volatile(                                                            \
+      "tcgen05.ld.sync.aligned.32x32b.x16.b32 {" TCGEN05_LD_X16_OPERANDS   \
+      "}, [%16];"                                                          \
+      : TCGEN05_LD_X16_OUTPUTS(out_regs)                                   \
       : "r"(src_taddr)                                                    \
       : "memory")
 
@@ -850,6 +901,102 @@ __device__ __forceinline__ uint32_t pack_bf16_pair_device(float lo, float hi) {
          (static_cast<uint32_t>(float_to_bf16_bits_device(hi)) << 16);
 }
 
+__device__ __noinline__ void store_tmem_x32_pair_norm_bf16_smem(
+    uint32_t src0_taddr,
+    uint32_t src1_taddr,
+    uint32_t* dst_bf16_smem,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r0[32];
+  uint32_t r1[32];
+  TCGEN05_LD_X32(src0_taddr, r0);
+  TCGEN05_LD_X32(src1_taddr, r1);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 32; i += 2) {
+    const float lo =
+        (__uint_as_float(r0[i]) + __uint_as_float(r1[i])) * inv_sum;
+    const float hi =
+        (__uint_as_float(r0[i + 1]) + __uint_as_float(r1[i + 1])) * inv_sum;
+    dst_bf16_smem[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+#else
+  (void)src0_taddr;
+  (void)src1_taddr;
+  (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x32_norm_bf16_smem(
+    uint32_t src_taddr,
+    uint32_t* dst_bf16_smem,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r[32];
+  TCGEN05_LD_X32(src_taddr, r);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 32; i += 2) {
+    const float lo = __uint_as_float(r[i]) * inv_sum;
+    const float hi = __uint_as_float(r[i + 1]) * inv_sum;
+    dst_bf16_smem[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+#else
+  (void)src_taddr;
+  (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x16_pair_norm_bf16_smem(
+    uint32_t src0_taddr,
+    uint32_t src1_taddr,
+    uint32_t* dst_bf16_smem,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r0[16];
+  uint32_t r1[16];
+  TCGEN05_LD_X16(src0_taddr, r0);
+  TCGEN05_LD_X16(src1_taddr, r1);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    const float lo =
+        (__uint_as_float(r0[i]) + __uint_as_float(r1[i])) * inv_sum;
+    const float hi =
+        (__uint_as_float(r0[i + 1]) + __uint_as_float(r1[i + 1])) * inv_sum;
+    dst_bf16_smem[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+#else
+  (void)src0_taddr;
+  (void)src1_taddr;
+  (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x16_norm_bf16_smem(
+    uint32_t src_taddr,
+    uint32_t* dst_bf16_smem,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r[16];
+  TCGEN05_LD_X16(src_taddr, r);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    const float lo = __uint_as_float(r[i]) * inv_sum;
+    const float hi = __uint_as_float(r[i + 1]) * inv_sum;
+    dst_bf16_smem[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+#else
+  (void)src_taddr;
+  (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
 __device__ __noinline__ void store_tmem_x64_accum_output_smem(uint32_t src_taddr,
                                                               float* output_smem,
                                                               int consumer_warp,
@@ -888,6 +1035,3 @@ __device__ __noinline__ void store_tmem_x64_accum_output_smem(uint32_t src_taddr
   (void)add_to_smem;
 #endif
 }
-
-
-
