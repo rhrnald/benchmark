@@ -560,6 +560,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
   __shared__ unsigned long long clock_trace_base_shared;
   __shared__ unsigned long long q_tma_start_shared;
+  __shared__ unsigned long long tail_total_start_shared;
+  __shared__ unsigned long long tma_store_start_shared;
 #else
   ClockTraceRecord* clock_trace = nullptr;
   const int clock_trace_iters = 0;
@@ -592,8 +594,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
-  for (int i = threadIdx.x; i < kPipeCount * kTileM; i += blockDim.x) {
-    reinterpret_cast<float*>(row_sum_partial)[i] = 0.0f;
+  if (output != nullptr && loop_repeats < kPipeCount) {
+    for (int i = threadIdx.x; i < kPipeCount * kTileM; i += blockDim.x) {
+      reinterpret_cast<float*>(row_sum_partial)[i] = 0.0f;
+    }
   }
   __syncthreads();
 #if ATTENTION_CLOCK_TRACE
@@ -659,17 +663,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         q_tma_start_shared, lane);
   }
 
+#if ATTENTION_CLOCK_TRACE
+  const bool trace_cta = clock_trace != nullptr && blockIdx.x == 0;
+  const int trace_extra_base = clock_trace_iters * kClockTraceSlotsPerIter;
+#else
+  const bool trace_cta = false;
+  const int trace_extra_base = 0;
+#endif
+
   if (output != nullptr) {
 #if ATTENTION_CLOCK_TRACE
-    const bool trace_cta = clock_trace != nullptr && blockIdx.x == 0;
-    const int trace_extra_base = clock_trace_iters * kClockTraceSlotsPerIter;
     const unsigned long long tail_total_start =
         trace_cta && threadIdx.x == 0 ? clock64() : 0ull;
+    if (trace_cta && threadIdx.x == 0) {
+      tail_total_start_shared = tail_total_start;
+    }
     const unsigned long long tail_wait_start =
         trace_cta && threadIdx.x == 0 ? tail_total_start : 0ull;
-#else
-    const bool trace_cta = false;
-    const int trace_extra_base = 0;
 #endif
     const int pipe0_local_count =
         (loop_repeats + 1) / 2;
@@ -756,30 +766,16 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     tma_store_fence();
     __syncthreads();
-    const unsigned long long store_start =
-        trace_cta && threadIdx.x == 0 ? clock64() : 0ull;
+#if ATTENTION_CLOCK_TRACE
+    if (trace_cta && threadIdx.x == 0) {
+      tma_store_start_shared = clock64();
+    }
+#endif
     if (lane0 && warp_id == 0) {
       tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0,
                    static_cast<int>(blockIdx.x), 0);
       tma_store_commit_group();
-      tma_store_wait_group_read();
     }
-    if (trace_cta && threadIdx.x == 0) {
-      const unsigned long long store_end = clock64();
-      write_clock_trace_record(clock_trace, trace_extra_base + 9,
-                               kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
-                               store_start, store_end, clock_trace_base);
-    }
-#if ATTENTION_CLOCK_TRACE
-    __syncthreads();
-    if (trace_cta && threadIdx.x == 0) {
-      const unsigned long long tail_total_end = clock64();
-      write_clock_trace_record(clock_trace, trace_extra_base + 10,
-                               kClockTraceTailTotal, loop_repeats, -1, 0, -1, -1,
-                               tail_total_start, tail_total_end,
-                               clock_trace_base);
-    }
-#endif
   }
 
   if (threadIdx.x == 0) {
@@ -790,5 +786,21 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
   __syncthreads();
   if (warp_id == 0) tcgen05_relinquish_alloc_permit();
+  if (output != nullptr && lane0 && warp_id == 0) {
+    tma_store_wait_group_read();
+  }
+#if ATTENTION_CLOCK_TRACE
+  if (output != nullptr && trace_cta && threadIdx.x == 0) {
+    const unsigned long long store_end = clock64();
+    write_clock_trace_record(clock_trace, trace_extra_base + 9,
+                             kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
+                             tma_store_start_shared, store_end,
+                             clock_trace_base);
+    write_clock_trace_record(clock_trace, trace_extra_base + 10,
+                             kClockTraceTailTotal, loop_repeats, -1, 0, -1, -1,
+                             tail_total_start_shared, store_end,
+                             clock_trace_base);
+  }
+#endif
 #endif
 }
