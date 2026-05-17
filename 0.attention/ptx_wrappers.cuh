@@ -427,6 +427,12 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
 #endif
 }
 
+__device__ __forceinline__ void tcgen05_wait_st() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("tcgen05.wait::st.sync.aligned;" ::: "memory");
+#endif
+}
+
 #define TCGEN05_LD_X64_OUTPUTS(a)                                            \
   "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
       "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
@@ -483,6 +489,28 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
       : "r"(src_taddr)                                                    \
       : "memory")
 
+#define TCGEN05_ST_X32_INPUTS(a)                                             \
+  "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(a[4]), "r"(a[5]),   \
+      "r"(a[6]), "r"(a[7]), "r"(a[8]), "r"(a[9]), "r"(a[10]),          \
+      "r"(a[11]), "r"(a[12]), "r"(a[13]), "r"(a[14]), "r"(a[15]),       \
+      "r"(a[16]), "r"(a[17]), "r"(a[18]), "r"(a[19]), "r"(a[20]),       \
+      "r"(a[21]), "r"(a[22]), "r"(a[23]), "r"(a[24]), "r"(a[25]),       \
+      "r"(a[26]), "r"(a[27]), "r"(a[28]), "r"(a[29]), "r"(a[30]),       \
+      "r"(a[31])
+
+#define TCGEN05_ST_X32_OPERANDS                                              \
+  "%1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, " \
+  "%17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, %30, "  \
+  "%31, %32"
+
+#define TCGEN05_ST_X32(dst_taddr, in_regs)                                  \
+  asm volatile(                                                             \
+      "tcgen05.st.sync.aligned.32x32b.x32.b32 [%0], {"                      \
+      TCGEN05_ST_X32_OPERANDS "};"                                          \
+      :                                                                     \
+      : "r"(dst_taddr), TCGEN05_ST_X32_INPUTS(in_regs)                     \
+      : "memory")
+
 #define TCGEN05_LD_X16_OUTPUTS(a)                                            \
   "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
       "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
@@ -507,9 +535,25 @@ __device__ __forceinline__ uint32_t exp2_approx_bits_cpp(uint32_t x) {
   return __float_as_uint(out);
 }
 
+__device__ __forceinline__ float exp2_approx_float_cpp(float x) {
+  float out;
+  asm volatile("ex2.approx.ftz.f32 %0, %1;" : "=f"(out) : "f"(x));
+  return out;
+}
+
 __device__ __forceinline__ uint32_t exp2_approx_bits_scaled_cpp(uint32_t x,
                                                                 float scale) {
   const float in = __uint_as_float(x) * scale;
+  float out;
+  asm volatile("ex2.approx.ftz.f32 %0, %1;" : "=f"(out) : "f"(in));
+  return __float_as_uint(out);
+}
+
+__device__ __forceinline__ uint32_t exp2_approx_bits_scaled_shifted_cpp(
+    uint32_t x,
+    float scale,
+    float row_max_shift) {
+  const float in = __uint_as_float(x) * scale - row_max_shift;
   float out;
   asm volatile("ex2.approx.ftz.f32 %0, %1;" : "=f"(out) : "f"(in));
   return __float_as_uint(out);
@@ -521,6 +565,54 @@ __device__ __forceinline__ void exp2_emulation_2_bits_scaled_cpp(
     float scale) {
   const float x = __uint_as_float(lo_src) * scale;
   const float y = __uint_as_float(hi_src) * scale;
+  uint32_t out_x;
+  uint32_t out_y;
+  asm volatile(
+      "{\n\t"
+      ".reg .f32 f1, f2, f3, f4, f5, f6, f7;\n\t"
+      ".reg .b64 l1, l2, l3, l4, l5, l6, l7, l8, l9, l10;\n\t"
+      ".reg .s32 r1, r2, r3, r4, r5, r6, r7, r8;\n\t"
+      "max.ftz.f32 f1, %2, 0fC2FE0000;\n\t"
+      "max.ftz.f32 f2, %3, 0fC2FE0000;\n\t"
+      "mov.b64 l1, {f1, f2};\n\t"
+      "mov.f32 f3, 0f4B400000;\n\t"
+      "mov.b64 l2, {f3, f3};\n\t"
+      "add.rm.ftz.f32x2 l7, l1, l2;\n\t"
+      "sub.rn.ftz.f32x2 l8, l7, l2;\n\t"
+      "sub.rn.ftz.f32x2 l9, l1, l8;\n\t"
+      "mov.f32 f7, 0f3D9DF09D;\n\t"
+      "mov.b64 l6, {f7, f7};\n\t"
+      "mov.f32 f6, 0f3E6906A4;\n\t"
+      "mov.b64 l5, {f6, f6};\n\t"
+      "mov.f32 f5, 0f3F31F519;\n\t"
+      "mov.b64 l4, {f5, f5};\n\t"
+      "mov.f32 f4, 0f3F800000;\n\t"
+      "mov.b64 l3, {f4, f4};\n\t"
+      "fma.rn.ftz.f32x2 l10, l9, l6, l5;\n\t"
+      "fma.rn.ftz.f32x2 l10, l10, l9, l4;\n\t"
+      "fma.rn.ftz.f32x2 l10, l10, l9, l3;\n\t"
+      "mov.b64 {r1, r2}, l7;\n\t"
+      "mov.b64 {r3, r4}, l10;\n\t"
+      "shl.b32 r5, r1, 23;\n\t"
+      "add.s32 r7, r5, r3;\n\t"
+      "shl.b32 r6, r2, 23;\n\t"
+      "add.s32 r8, r6, r4;\n\t"
+      "mov.b32 %0, r7;\n\t"
+      "mov.b32 %1, r8;\n\t"
+      "}\n"
+      : "=r"(out_x), "=r"(out_y)
+      : "f"(x), "f"(y));
+  lo_src = out_x;
+  hi_src = out_y;
+}
+
+__device__ __forceinline__ void exp2_emulation_2_bits_scaled_shifted_cpp(
+    uint32_t& lo_src,
+    uint32_t& hi_src,
+    float scale,
+    float row_max_shift) {
+  const float x = __uint_as_float(lo_src) * scale - row_max_shift;
+  const float y = __uint_as_float(hi_src) * scale - row_max_shift;
   uint32_t out_x;
   uint32_t out_y;
   asm volatile(
@@ -583,6 +675,24 @@ __device__ __forceinline__ uint32_t exp2_pack_hi16_update_scaled(
   return (lo_src >> 16) | (hi_src & 0xffff0000u);
 }
 
+__device__ __forceinline__ uint32_t exp2_pack_hi16_update_scaled_shifted(
+    uint32_t& lo_src,
+    uint32_t& hi_src,
+    float scale,
+    float row_max_shift,
+    int pair_index) {
+  if ((pair_index % kEx2EmuFreq) >= (kEx2EmuFreq - kEx2EmuRes)) {
+    exp2_emulation_2_bits_scaled_shifted_cpp(lo_src, hi_src, scale,
+                                             row_max_shift);
+  } else {
+    lo_src = exp2_approx_bits_scaled_shifted_cpp(lo_src, scale,
+                                                 row_max_shift);
+    hi_src = exp2_approx_bits_scaled_shifted_cpp(hi_src, scale,
+                                                 row_max_shift);
+  }
+  return (lo_src >> 16) | (hi_src & 0xffff0000u);
+}
+
 __device__ __forceinline__ float bf16x2_sum_device(uint32_t packed) {
   const float lo = __uint_as_float((packed & 0x0000ffffu) << 16);
   const float hi = __uint_as_float(packed & 0xffff0000u);
@@ -625,6 +735,89 @@ __device__ __forceinline__ float pack_store_x64_loop(uint32_t* smem_base,
     }
   }
   return sum;
+}
+
+__device__ __forceinline__ float row_max_x64_scaled(uint32_t (&r)[64],
+                                                    float score_to_exp2_scale) {
+  float row_max = -3.4028234663852886e+38f;
+#pragma unroll
+  for (int i = 0; i < 64; ++i) {
+    row_max = fmaxf(row_max, __uint_as_float(r[i]) * score_to_exp2_scale);
+  }
+  return row_max;
+}
+
+template <bool kDoSum>
+__device__ __forceinline__ float pack_store_x64_loop_shifted(
+    uint32_t* smem_base,
+    uint32_t (&r)[64],
+    float score_to_exp2_scale,
+    float row_max_shift) {
+  float sum = 0.0f;
+#pragma unroll
+  for (int group = 0; group < 8; ++group) {
+    alignas(16) uint32_t p[4];
+    const int r_base = group * 8;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      p[i] = exp2_pack_hi16_update_scaled_shifted(
+          r[r_base + i * 2], r[r_base + i * 2 + 1], score_to_exp2_scale,
+          row_max_shift, group * 4 + i);
+    }
+    const int word_offset = (group >> 1) * 1024 + (group & 1) * 32;
+    reinterpret_cast<uint4*>(smem_base + word_offset)[0] =
+        reinterpret_cast<uint4*>(p)[0];
+    if constexpr (kDoSum) {
+#pragma unroll
+      for (int i = 0; i < 4; ++i) {
+        sum += bf16x2_sum_device(p[i]);
+      }
+    }
+  }
+  return sum;
+}
+
+struct PackStoreX64LoopResult {
+  float sum;
+  float row_max;
+};
+
+template <bool kDoSum, bool kDoMax>
+__device__ __forceinline__ PackStoreX64LoopResult
+pack_store_x64_loop_result(uint32_t* smem_base,
+                           uint32_t (&r)[64],
+                           float score_to_exp2_scale) {
+  float sum = 0.0f;
+  float row_max = -3.4028234663852886e+38f;
+#pragma unroll
+  for (int group = 0; group < 8; ++group) {
+    alignas(16) uint32_t p[4];
+    const int r_base = group * 8;
+#pragma unroll
+    for (int i = 0; i < 4; ++i) {
+      if constexpr (kDoMax) {
+        const float lo =
+            __uint_as_float(r[r_base + i * 2]) * score_to_exp2_scale;
+        const float hi =
+            __uint_as_float(r[r_base + i * 2 + 1]) * score_to_exp2_scale;
+        row_max = fmaxf(row_max, fmaxf(lo, hi));
+      }
+      p[i] = exp2_pack_hi16_update_scaled(r[r_base + i * 2],
+                                          r[r_base + i * 2 + 1],
+                                          score_to_exp2_scale,
+                                          group * 4 + i);
+    }
+    const int word_offset = (group >> 1) * 1024 + (group & 1) * 32;
+    reinterpret_cast<uint4*>(smem_base + word_offset)[0] =
+        reinterpret_cast<uint4*>(p)[0];
+    if constexpr (kDoSum) {
+#pragma unroll
+      for (int i = 0; i < 4; ++i) {
+        sum += bf16x2_sum_device(p[i]);
+      }
+    }
+  }
+  return {sum, row_max};
 }
 
 #if ATTENTION_CLOCK_TRACE
@@ -884,6 +1077,239 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
 #endif
 }
 
+__device__ __forceinline__ float tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+    uint32_t src_taddr,
+    float score_to_exp2_scale) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r[64];
+  TCGEN05_LD_X64(src_taddr, r);
+  tcgen05_wait_ld();
+  return row_max_x64_scaled(r, score_to_exp2_scale);
+#else
+  (void)src_taddr;
+  (void)score_to_exp2_scale;
+  return -3.4028234663852886e+38f;
+#endif
+}
+
+__device__ __forceinline__ float
+tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+    uint32_t src_taddr,
+    uint32_t* s_smem,
+    int consumer_warp,
+    int consumer_half,
+    uint64_t* p_done_barrier,
+    bool arrive_p_done,
+    float score_to_exp2_scale,
+    float row_max_shift,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int row = consumer_warp * 32 + lane;
+  const int col_pair_base = consumer_half * 32;
+  uint32_t* smem_base = s_smem + s_store_word_offset(row, col_pair_base);
+  uint32_t r[64];
+
+#if ATTENTION_CLOCK_TRACE
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+  const unsigned long long ld_start = trace_lane ? clock64() : 0ull;
+#endif
+  TCGEN05_LD_X64(src_taddr, r);
+  tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long ld_end = clock64();
+    const int slot =
+        trace_slot_base + kClockTraceLdBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, slot, kClockTraceLd, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, ld_start, ld_end, clock_trace_base);
+  }
+#endif
+  if (arrive_p_done && lane == 0) {
+    mbarrier_arrive(p_done_barrier);
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  const unsigned long long pack_start = trace_lane ? clock64() : 0ull;
+#endif
+  const float row_sum = pack_store_x64_loop_shifted<true>(
+      smem_base, r, score_to_exp2_scale, row_max_shift);
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long pack_end = clock64();
+    const int pack_slot = trace_slot_base + kClockTracePackStoreBase +
+                          consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, pack_slot, kClockTracePack, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int store_slot =
+        trace_slot_base + kClockTraceStoreBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, store_slot, kClockTraceStore, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int sum_slot =
+        trace_slot_base + kClockTraceRowSumBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, sum_slot, kClockTraceRowSum, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+  }
+#endif
+  return row_sum;
+#else
+  (void)src_taddr;
+  (void)s_smem;
+  (void)consumer_warp;
+  (void)consumer_half;
+  (void)p_done_barrier;
+  (void)arrive_p_done;
+  (void)score_to_exp2_scale;
+  (void)row_max_shift;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+  return 0.0f;
+#endif
+}
+
+__device__ __forceinline__ PackStoreX64LoopResult
+tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
+    uint32_t src_taddr,
+    uint32_t* s_smem,
+    int consumer_warp,
+    int consumer_half,
+    uint64_t* p_done_barrier,
+    bool arrive_p_done,
+    float score_to_exp2_scale,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int row = consumer_warp * 32 + lane;
+  const int col_pair_base = consumer_half * 32;
+  uint32_t* smem_base = s_smem + s_store_word_offset(row, col_pair_base);
+  uint32_t r[64];
+
+#if ATTENTION_CLOCK_TRACE
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+  const unsigned long long ld_start = trace_lane ? clock64() : 0ull;
+#endif
+  TCGEN05_LD_X64(src_taddr, r);
+  tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long ld_end = clock64();
+    const int slot =
+        trace_slot_base + kClockTraceLdBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, slot, kClockTraceLd, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, ld_start, ld_end, clock_trace_base);
+  }
+#endif
+  if (arrive_p_done && lane == 0) {
+    mbarrier_arrive(p_done_barrier);
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  const unsigned long long pack_start = trace_lane ? clock64() : 0ull;
+#endif
+  PackStoreX64LoopResult result =
+      pack_store_x64_loop_result<true, true>(smem_base, r,
+                                             score_to_exp2_scale);
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long pack_end = clock64();
+    const int pack_slot = trace_slot_base + kClockTracePackStoreBase +
+                          consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, pack_slot, kClockTracePack, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int store_slot =
+        trace_slot_base + kClockTraceStoreBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, store_slot, kClockTraceStore, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int sum_slot =
+        trace_slot_base + kClockTraceRowSumBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, sum_slot, kClockTraceRowSum, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+  }
+#endif
+  return result;
+#else
+  (void)src_taddr;
+  (void)s_smem;
+  (void)consumer_warp;
+  (void)consumer_half;
+  (void)p_done_barrier;
+  (void)arrive_p_done;
+  (void)score_to_exp2_scale;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+  return {0.0f, -3.4028234663852886e+38f};
+#endif
+}
+
+__device__ __noinline__ void scale_tmem_x32_accum(uint32_t taddr,
+                                                  float scale) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r[32];
+  TCGEN05_LD_X32(taddr, r);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 32; ++i) {
+    r[i] = __float_as_uint(__uint_as_float(r[i]) * scale);
+  }
+  TCGEN05_ST_X32(taddr, r);
+  tcgen05_wait_st();
+#else
+  (void)taddr;
+  (void)scale;
+#endif
+}
+
+__device__ __noinline__ void scale_tmem_x128_accum(uint32_t row_block_taddr,
+                                                   float scale) {
+#pragma unroll
+  for (int chunk = 0; chunk < 4; ++chunk) {
+    scale_tmem_x32_accum(row_block_taddr + static_cast<uint32_t>(chunk * 32),
+                         scale);
+  }
+}
+
 
 __device__ __forceinline__ float bf16_bits_to_float_device(uint16_t bits) {
   return __uint_as_float(static_cast<uint32_t>(bits) << 16);
@@ -924,6 +1350,40 @@ __device__ __noinline__ void store_tmem_x32_pair_norm_bf16_smem(
   (void)src0_taddr;
   (void)src1_taddr;
   (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x32_pair_scale_norm_bf16_smem(
+    uint32_t src0_taddr,
+    uint32_t src1_taddr,
+    uint32_t* dst_bf16_smem,
+    float scale0,
+    float scale1,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r0[32];
+  uint32_t r1[32];
+  TCGEN05_LD_X32(src0_taddr, r0);
+  TCGEN05_LD_X32(src1_taddr, r1);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 32; i += 2) {
+    const float lo =
+        (__uint_as_float(r0[i]) * scale0 + __uint_as_float(r1[i]) * scale1) *
+        inv_sum;
+    const float hi =
+        (__uint_as_float(r0[i + 1]) * scale0 +
+         __uint_as_float(r1[i + 1]) * scale1) *
+        inv_sum;
+    dst_bf16_smem[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+#else
+  (void)src0_taddr;
+  (void)src1_taddr;
+  (void)dst_bf16_smem;
+  (void)scale0;
+  (void)scale1;
   (void)inv_sum;
 #endif
 }
@@ -972,6 +1432,40 @@ __device__ __noinline__ void store_tmem_x16_pair_norm_bf16_smem(
   (void)src0_taddr;
   (void)src1_taddr;
   (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x16_pair_scale_norm_bf16_smem(
+    uint32_t src0_taddr,
+    uint32_t src1_taddr,
+    uint32_t* dst_bf16_smem,
+    float scale0,
+    float scale1,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r0[16];
+  uint32_t r1[16];
+  TCGEN05_LD_X16(src0_taddr, r0);
+  TCGEN05_LD_X16(src1_taddr, r1);
+  tcgen05_wait_ld();
+#pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    const float lo =
+        (__uint_as_float(r0[i]) * scale0 + __uint_as_float(r1[i]) * scale1) *
+        inv_sum;
+    const float hi =
+        (__uint_as_float(r0[i + 1]) * scale0 +
+         __uint_as_float(r1[i + 1]) * scale1) *
+        inv_sum;
+    dst_bf16_smem[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+#else
+  (void)src0_taddr;
+  (void)src1_taddr;
+  (void)dst_bf16_smem;
+  (void)scale0;
+  (void)scale1;
   (void)inv_sum;
 #endif
 }

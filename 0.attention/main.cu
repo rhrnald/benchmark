@@ -19,6 +19,38 @@
 #define ATTENTION_CLOCK_TRACE_PACK_GROUP -1
 #endif
 
+#ifndef ATTENTION_ROW_MAX_ONLY
+#define ATTENTION_ROW_MAX_ONLY 0
+#endif
+
+#ifndef ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#define ATTENTION_FIRST_ITER_ROW_MAX_SHIFT 1
+#endif
+
+#ifndef ATTENTION_FIRST_ITER_APPLY_SHIFT
+#define ATTENTION_FIRST_ITER_APPLY_SHIFT ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#endif
+
+#ifndef ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+#define ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE ATTENTION_FIRST_ITER_APPLY_SHIFT
+#endif
+
+#ifndef ATTENTION_FIRST_ITER_COMPUTE_MAX
+#define ATTENTION_FIRST_ITER_COMPUTE_MAX ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#endif
+
+#ifndef ATTENTION_ROW_SUM_RARE_UPDATE
+#define ATTENTION_ROW_SUM_RARE_UPDATE 1
+#endif
+
+#ifndef ATTENTION_ROW_SUM_UPDATE_LIMIT
+#define ATTENTION_ROW_SUM_UPDATE_LIMIT 256.0f
+#endif
+
+#ifndef ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS
+#define ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS 1
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                         \
     cudaError_t err__ = (stmt);                                                \
@@ -505,13 +537,42 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
   const double pv_flops = qk_flops;
   const int kv_tile_sets = (args.blocks + args.k_tiles - 1) / args.k_tiles;
   const int kv_total_tiles = kv_tile_sets * args.k_tiles;
-  const char* mode = "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output";
+  const char* mode =
+#if ATTENTION_ROW_SUM_RARE_UPDATE
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_row_sum_rare_update";
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && !ATTENTION_FIRST_ITER_COMPUTE_MAX
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_first_iter_branch_only";
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && ATTENTION_FIRST_ITER_APPLY_SHIFT && ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_pipe_shift_epilogue_scale";
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && ATTENTION_FIRST_ITER_APPLY_SHIFT
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_first_iter_shift_no_epilogue_scale";
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_first_iter_max_only";
+#elif ATTENTION_ROW_MAX_ONLY
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_row_max_only";
+#else
+      "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output";
+#endif
   char notes[256];
   std::snprintf(
       notes, sizeof(notes),
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_major_k_"
       "v_contiguous_k16_sw128_mn_major_dep_masked_"
       "split_s_ready_bf16_output"
+#if ATTENTION_ROW_SUM_RARE_UPDATE
+      "_row_sum_rare_update"
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && !ATTENTION_FIRST_ITER_COMPUTE_MAX
+      "_first_iter_branch_only"
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && ATTENTION_FIRST_ITER_APPLY_SHIFT && ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+      "_pipe_shift_epilogue_scale"
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && ATTENTION_FIRST_ITER_APPLY_SHIFT
+      "_first_iter_shift_no_epilogue_scale"
+#elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+      "_first_iter_max_only"
+#endif
+#if ATTENTION_ROW_MAX_ONLY
+      "_row_max_only"
+#endif
       "_dep_default_mask_0x%03x"
       ,
       0x00f
