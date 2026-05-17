@@ -5,6 +5,38 @@
 #define ATTENTION_EPILOGUE_CHUNK_COLS 16
 #endif
 
+#ifndef ATTENTION_ROW_MAX_ONLY
+#define ATTENTION_ROW_MAX_ONLY 0
+#endif
+
+#ifndef ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#define ATTENTION_FIRST_ITER_ROW_MAX_SHIFT 1
+#endif
+
+#ifndef ATTENTION_FIRST_ITER_APPLY_SHIFT
+#define ATTENTION_FIRST_ITER_APPLY_SHIFT ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#endif
+
+#ifndef ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+#define ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE ATTENTION_FIRST_ITER_APPLY_SHIFT
+#endif
+
+#ifndef ATTENTION_FIRST_ITER_COMPUTE_MAX
+#define ATTENTION_FIRST_ITER_COMPUTE_MAX ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#endif
+
+#ifndef ATTENTION_ROW_SUM_RARE_UPDATE
+#define ATTENTION_ROW_SUM_RARE_UPDATE 1
+#endif
+
+#ifndef ATTENTION_ROW_SUM_UPDATE_LIMIT
+#define ATTENTION_ROW_SUM_UPDATE_LIMIT 256.0f
+#endif
+
+#ifndef ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS
+#define ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS 1
+#endif
+
 __global__ void fill_packed_bf16(uint32_t* ptr, size_t words, uint32_t seed) {
   const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < words) {
@@ -441,6 +473,97 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
 }
 
+#if ATTENTION_ROW_SUM_RARE_UPDATE
+struct RowSumUpdateH0Result {
+  float row_sum;
+  float row_sum_reg;
+  float row_max;
+};
+
+struct RowSumUpdateH1Result {
+  float row_sum0;
+  float row_sum1;
+  float row_sum_reg;
+  float row_max;
+};
+
+__device__ __noinline__ RowSumUpdateH0Result
+attention_row_sum_update_h0_cold(uint32_t row_taddr,
+                                 uint32_t* s_smem,
+                                 uint64_t* p_done_barrier,
+                                 uint32_t row_o_taddr,
+                                 int pipe,
+                                 int consumer_warp,
+                                 int iter,
+                                 bool trigger_update,
+                                 float row_sum,
+                                 float row_sum_reg,
+                                 float row_max,
+                                 float score_to_exp2_scale,
+                                 bool do_row_sum,
+                                 ClockTraceRecord* clock_trace,
+                                 int clock_trace_iters,
+                                 int clock_trace_start,
+                                 unsigned long long clock_trace_base) {
+  const float new_row_max =
+      tcgen05_ld_x64_wait_row_max_scaled_nvcc(row_taddr, score_to_exp2_scale);
+  const bool update = trigger_update && new_row_max > row_max;
+  if (__any_sync(0xffffffffu, update)) {
+    const float accum_scale =
+        update ? exp2_approx_float_cpp(row_max - new_row_max) : 1.0f;
+    if (do_row_sum) {
+      row_sum_reg *= accum_scale;
+      scale_tmem_x128_accum(row_o_taddr, accum_scale);
+    }
+    row_max = update ? new_row_max : row_max;
+    row_sum = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+        row_taddr, s_smem, consumer_warp, 0, p_done_barrier, false,
+        score_to_exp2_scale, row_max, clock_trace, clock_trace_iters,
+        clock_trace_start, clock_trace_base, iter, pipe);
+  }
+  return {row_sum, row_sum_reg, row_max};
+}
+
+__device__ __noinline__ RowSumUpdateH1Result
+attention_row_sum_update_h1_cold(uint32_t row_taddr,
+                                 uint32_t* s_smem,
+                                 uint64_t* p_done_barrier,
+                                 uint32_t row_o_taddr,
+                                 int pipe,
+                                 int consumer_warp,
+                                 int iter,
+                                 bool trigger_update,
+                                 float row_sum0,
+                                 float row_sum1,
+                                 float row_sum_reg,
+                                 float row_max,
+                                 float score_to_exp2_scale,
+                                 bool do_row_sum,
+                                 ClockTraceRecord* clock_trace,
+                                 int clock_trace_iters,
+                                 int clock_trace_start,
+                                 unsigned long long clock_trace_base) {
+  const float new_row_max =
+      tcgen05_ld_x64_wait_row_max_scaled_nvcc(row_taddr, score_to_exp2_scale);
+  const bool update = trigger_update && new_row_max > row_max;
+  if (__any_sync(0xffffffffu, update)) {
+    const float accum_scale =
+        update ? exp2_approx_float_cpp(row_max - new_row_max) : 1.0f;
+    if (do_row_sum) {
+      row_sum_reg *= accum_scale;
+      row_sum0 *= accum_scale;
+      scale_tmem_x128_accum(row_o_taddr, accum_scale);
+    }
+    row_max = update ? new_row_max : row_max;
+    row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+        row_taddr, s_smem, consumer_warp, 1, p_done_barrier, false,
+        score_to_exp2_scale, row_max, clock_trace, clock_trace_iters,
+        clock_trace_start, clock_trace_base, iter, pipe);
+  }
+  return {row_sum0, row_sum1, row_sum_reg, row_max};
+}
+#endif
+
 __device__ __forceinline__ void attention_consumer_pipe_role(
     uint32_t* const (&s_smem)[kPipeCount],
     uint64_t (&qk_done)[kPipeCount],
@@ -448,7 +571,9 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     uint64_t (&s_ready)[kPipeCount][2],
     uint64_t (&pv_done)[kPipeCount],
     float (&row_sum_partial)[kPipeCount][kTileM],
+    float* row_max_scratch,
     const uint32_t (&p_taddr)[kPipeCount],
+    const uint32_t (&o_taddr)[kPipeCount],
     int pipe,
     int consumer_warp,
     int loop_repeats,
@@ -462,8 +587,186 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
   const bool lane0 = lane == 0;
   const int row = consumer_warp * 32 + lane;
   float row_sum_reg = 0.0f;
+#if ATTENTION_FIRST_ITER_ROW_MAX_SHIFT || ATTENTION_ROW_MAX_ONLY
+  float row_max_reg = -3.4028234663852886e+38f;
+#endif
   int iter = pipe;
   int local = 0;
+#if ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#if ATTENTION_ROW_SUM_RARE_UPDATE
+  const uint32_t row_o_taddr =
+      o_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#endif
+#if ATTENTION_ROW_SUM_RARE_UPDATE
+  const float row_sum_update_limit =
+      static_cast<float>(ATTENTION_ROW_SUM_UPDATE_LIMIT);
+#endif
+  if (iter < loop_repeats) {
+    mbarrier_wait(&qk_done[pipe], 0);
+    const uint32_t row_taddr =
+        p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#if ATTENTION_FIRST_ITER_COMPUTE_MAX
+    row_max_reg = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+        row_taddr, score_to_exp2_scale);
+    row_max_reg =
+        fmaxf(row_max_reg,
+              tcgen05_ld_x64_wait_row_max_scaled_nvcc(row_taddr + 64u,
+                                                      score_to_exp2_scale));
+#else
+    row_max_reg = 0.0f;
+#endif
+#if ATTENTION_FIRST_ITER_APPLY_SHIFT
+    const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+        row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+        score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
+        clock_trace_start, clock_trace_base, iter, pipe);
+#else
+    const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
+        row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+        score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
+        clock_trace_base, iter, pipe);
+#endif
+    if (lane0) {
+      mbarrier_arrive(&s_ready[pipe][0]);
+    }
+#if ATTENTION_FIRST_ITER_APPLY_SHIFT
+    const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+        row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
+        score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
+        clock_trace_start, clock_trace_base, iter, pipe);
+#else
+    const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
+        row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
+        score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
+        clock_trace_base, iter, pipe);
+#endif
+    if (lane0) {
+      mbarrier_arrive(&s_ready[pipe][1]);
+    }
+    if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
+    iter += kActivePipeStride;
+    local = 1;
+  }
+#if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS > 0
+#pragma unroll
+  for (int prefix_check = 0;
+       prefix_check < ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS; ++prefix_check) {
+    if (iter < loop_repeats) {
+      const uint32_t phase = static_cast<uint32_t>(local & 1);
+      mbarrier_wait(&qk_done[pipe], phase);
+      mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+      const uint32_t row_taddr =
+          p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+          row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+          score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
+          clock_trace_start, clock_trace_base, iter, pipe);
+      const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
+      if (__any_sync(0xffffffffu, trigger_h0_update)) {
+        RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
+            row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+            consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
+            row_max_reg, score_to_exp2_scale, do_row_sum, clock_trace,
+            clock_trace_iters, clock_trace_start, clock_trace_base);
+        row_sum0 = update_result.row_sum;
+        row_sum_reg = update_result.row_sum_reg;
+        row_max_reg = update_result.row_max;
+      }
+      if (lane0) {
+        mbarrier_arrive(&s_ready[pipe][0]);
+      }
+      float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+          row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
+          score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
+          clock_trace_start, clock_trace_base, iter, pipe);
+      const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
+      if (__any_sync(0xffffffffu, trigger_h1_update)) {
+        RowSumUpdateH1Result update_result = attention_row_sum_update_h1_cold(
+            row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+            consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
+            row_sum_reg, row_max_reg, score_to_exp2_scale, do_row_sum,
+            clock_trace, clock_trace_iters, clock_trace_start,
+            clock_trace_base);
+        row_sum0 = update_result.row_sum0;
+        row_sum1 = update_result.row_sum1;
+        row_sum_reg = update_result.row_sum_reg;
+        row_max_reg = update_result.row_max;
+      }
+      if (lane0) {
+        mbarrier_arrive(&s_ready[pipe][1]);
+      }
+      if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
+      iter += kActivePipeStride;
+      ++local;
+    }
+  }
+#endif
+  for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
+    const uint32_t phase = static_cast<uint32_t>(local & 1);
+    mbarrier_wait(&qk_done[pipe], phase);
+    mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+    const uint32_t row_taddr =
+        p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#if ATTENTION_FIRST_ITER_APPLY_SHIFT
+    float row_sum0;
+    float row_sum1;
+    row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+        row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+        score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
+        clock_trace_start, clock_trace_base, iter, pipe);
+#if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
+    const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
+    if (__any_sync(0xffffffffu, trigger_h0_update)) {
+      RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
+          row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+          consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
+          row_max_reg, score_to_exp2_scale, do_row_sum, clock_trace,
+          clock_trace_iters, clock_trace_start, clock_trace_base);
+      row_sum0 = update_result.row_sum;
+      row_sum_reg = update_result.row_sum_reg;
+      row_max_reg = update_result.row_max;
+    }
+#endif
+#else
+    const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
+        row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+        score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
+        clock_trace_base, iter, pipe);
+#endif
+    if (lane0) {
+      mbarrier_arrive(&s_ready[pipe][0]);
+    }
+#if ATTENTION_FIRST_ITER_APPLY_SHIFT
+    row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+        row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
+        score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
+        clock_trace_start, clock_trace_base, iter, pipe);
+#if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
+    const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
+    if (__any_sync(0xffffffffu, trigger_h1_update)) {
+      RowSumUpdateH1Result update_result = attention_row_sum_update_h1_cold(
+          row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+          consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
+          row_sum_reg, row_max_reg, score_to_exp2_scale, do_row_sum,
+          clock_trace, clock_trace_iters, clock_trace_start, clock_trace_base);
+      row_sum0 = update_result.row_sum0;
+      row_sum1 = update_result.row_sum1;
+      row_sum_reg = update_result.row_sum_reg;
+      row_max_reg = update_result.row_max;
+    }
+#endif
+#else
+    const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
+        row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
+        score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
+        clock_trace_base, iter, pipe);
+#endif
+    if (lane0) {
+      mbarrier_arrive(&s_ready[pipe][1]);
+    }
+    if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
+  }
+#else
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     mbarrier_wait(&qk_done[pipe], phase);
@@ -472,25 +775,54 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     }
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#if ATTENTION_ROW_MAX_ONLY
+    const PackStoreX64LoopResult h0_result =
+        tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
+            row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+            score_to_exp2_scale, clock_trace, clock_trace_iters,
+            clock_trace_start, clock_trace_base, iter, pipe);
+    row_max_reg = fmaxf(row_max_reg, h0_result.row_max);
+    const float row_sum0 = h0_result.sum;
+#else
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
         clock_trace_base, iter, pipe);
+#endif
     if (lane0) {
       mbarrier_arrive(&s_ready[pipe][0]);
     }
+#if ATTENTION_ROW_MAX_ONLY
+    const PackStoreX64LoopResult h1_result =
+        tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
+            row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe],
+            true, score_to_exp2_scale, clock_trace, clock_trace_iters,
+            clock_trace_start, clock_trace_base, iter, pipe);
+    row_max_reg = fmaxf(row_max_reg, h1_result.row_max);
+    const float row_sum1 = h1_result.sum;
+#else
     const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
         clock_trace_base, iter, pipe);
+#endif
     if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
     if (lane0) {
       mbarrier_arrive(&s_ready[pipe][1]);
     }
   }
+#endif
+#if ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+  if (do_row_sum && row_max_scratch != nullptr) {
+    row_max_scratch[pipe * kTileM + row] = row_max_reg;
+  }
+#endif
   if (do_row_sum) {
     row_sum_partial[pipe][row] = row_sum_reg;
   }
+#if ATTENTION_ROW_MAX_ONLY
+  asm volatile("" :: "f"(row_max_reg) : "memory");
+#endif
 }
 
 template <int kFixedRepeats = 0, int kFixedKTiles = 0>
@@ -616,6 +948,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const uint32_t tmem_base = tmem_base_shared;
   const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
   const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
+  float* row_max_scratch =
+      output != nullptr
+          ? reinterpret_cast<float*>(output) +
+                static_cast<size_t>(blockIdx.x) * kTileWords
+          : nullptr;
   const int q_contig_row = static_cast<int>(blockIdx.x) * kTileM;
   const int kv_tile_base =
       kv_tile_base_for_block<kFixedKTiles>(static_cast<int>(blockIdx.x),
@@ -640,8 +977,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
     attention_consumer_pipe_role(
-        s_smem, qk_done, p_done, s_ready, pv_done, row_sum_partial, p_taddr,
-        pipe, consumer_warp, loop_repeats, score_to_exp2_scale,
+        s_smem, qk_done, p_done, s_ready, pv_done, row_sum_partial,
+        row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
+        score_to_exp2_scale,
         output != nullptr, clock_trace, clock_trace_iters, clock_trace_start,
         clock_trace_base, lane);
   }
@@ -713,7 +1051,21 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const int consumer_warp = epilogue_slot & (kConsumerWarpsPerPipe - 1);
       const int consumer_half = epilogue_slot / kConsumerWarpsPerPipe;
       const int row = consumer_warp * 32 + lane;
+#if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+      const float row_max0 = row_max_scratch[row];
+      const float row_max1 =
+          pipe1_local_count > 0 ? row_max_scratch[kTileM + row] : row_max0;
+      const float common_row_max = fmaxf(row_max0, row_max1);
+      const float pipe0_scale = exp2_approx_float_cpp(row_max0 - common_row_max);
+      const float pipe1_scale =
+          pipe1_local_count > 0
+              ? exp2_approx_float_cpp(row_max1 - common_row_max)
+              : 0.0f;
+      const float denom = row_sum_partial[0][row] * pipe0_scale +
+                          row_sum_partial[1][row] * pipe1_scale;
+#else
       const float denom = row_sum_partial[0][row] + row_sum_partial[1][row];
+#endif
       const float inv_sum = denom != 0.0f ? 1.0f / denom : 0.0f;
       const uint32_t row_taddr0 =
           o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16) +
@@ -729,9 +1081,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       for (int chunk = 0; chunk < 4; ++chunk) {
         const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 16);
         if (pipe1_local_count > 0) {
+#if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+          store_tmem_x16_pair_scale_norm_bf16_smem(
+              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+              row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
+#else
           store_tmem_x16_pair_norm_bf16_smem(
               row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
               row_dst + chunk * 8, inv_sum);
+#endif
         } else {
           store_tmem_x16_norm_bf16_smem(row_taddr0 + chunk_offset,
                                         row_dst + chunk * 8, inv_sum);
@@ -739,10 +1097,19 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
 #elif ATTENTION_EPILOGUE_CHUNK_COLS == 32
       if (pipe1_local_count > 0) {
+#if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+        store_tmem_x32_pair_scale_norm_bf16_smem(
+            row_taddr0, row_taddr1, row_dst, pipe0_scale, pipe1_scale,
+            inv_sum);
+        store_tmem_x32_pair_scale_norm_bf16_smem(
+            row_taddr0 + 32u, row_taddr1 + 32u, row_dst + 16,
+            pipe0_scale, pipe1_scale, inv_sum);
+#else
         store_tmem_x32_pair_norm_bf16_smem(row_taddr0, row_taddr1, row_dst,
                                            inv_sum);
         store_tmem_x32_pair_norm_bf16_smem(row_taddr0 + 32u, row_taddr1 + 32u,
                                            row_dst + 16, inv_sum);
+#endif
       } else {
         store_tmem_x32_norm_bf16_smem(row_taddr0, row_dst, inv_sum);
         store_tmem_x32_norm_bf16_smem(row_taddr0 + 32u, row_dst + 16,
