@@ -19,6 +19,10 @@
 #define ATTENTION_CLOCK_TRACE_PACK_GROUP -1
 #endif
 
+#ifndef ATTENTION_CLOCK_TRACE_REDUNDANT_PACK_STAGES
+#define ATTENTION_CLOCK_TRACE_REDUNDANT_PACK_STAGES 0
+#endif
+
 #ifndef ATTENTION_ROW_MAX_ONLY
 #define ATTENTION_ROW_MAX_ONLY 0
 #endif
@@ -51,6 +55,30 @@
 #define ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS 1
 #endif
 
+#ifndef ATTENTION_CONSUMER_FIRST_WARPS
+#define ATTENTION_CONSUMER_FIRST_WARPS 0
+#endif
+
+#ifndef ATTENTION_CONTROL_WARP_OVERRIDE
+#define ATTENTION_CONTROL_WARP_OVERRIDE -1
+#endif
+
+#ifndef ATTENTION_SINGLE_PIPE0
+#define ATTENTION_SINGLE_PIPE0 0
+#endif
+
+#ifndef ATTENTION_DEP_SWEEP
+#define ATTENTION_DEP_SWEEP 0
+#endif
+
+#ifndef ATTENTION_DEP_DEFAULT_MASK
+#define ATTENTION_DEP_DEFAULT_MASK 0x00f
+#endif
+
+#ifndef ATTENTION_DEP_MASK
+#define ATTENTION_DEP_MASK ATTENTION_DEP_DEFAULT_MASK
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                         \
     cudaError_t err__ = (stmt);                                                \
@@ -67,14 +95,27 @@ static constexpr int kWarpSize = 32;
 static constexpr int kWarps = 16;
 static constexpr int kThreads = kWarps * kWarpSize;
 static constexpr int kPipeCount = 2;
-static constexpr int kActivePipeStride = kPipeCount;
+static constexpr int kActivePipeCount = ATTENTION_SINGLE_PIPE0 ? 1 : kPipeCount;
+static constexpr int kActivePipeStride = kActivePipeCount;
 static constexpr int kConsumerWarpsPerPipe = 4;
 static constexpr int kTraceConsumerLanesPerPipe = kConsumerWarpsPerPipe * 2;
 static constexpr int kClockTraceSyncCount = 4;
-static constexpr int kActiveConsumerPipeCount = kPipeCount;
+static constexpr int kActiveConsumerPipeCount = kActivePipeCount;
 static constexpr int kProducerWarpCount = 4;
-static constexpr int kConsumerBaseWarp = 4;
-static constexpr int kMainWarps = kProducerWarpCount + kPipeCount * kConsumerWarpsPerPipe;
+static constexpr bool kConsumerFirstWarps = ATTENTION_CONSUMER_FIRST_WARPS != 0;
+static constexpr int kConsumerBaseWarp = kConsumerFirstWarps ? 0 : 4;
+static constexpr int kQkBaseWarp =
+    kConsumerFirstWarps ? kPipeCount * kConsumerWarpsPerPipe : 0;
+static constexpr int kPvBaseWarp = kQkBaseWarp + kPipeCount;
+static constexpr int kDefaultControlWarp = kQkBaseWarp;
+static constexpr int kControlWarp =
+    ATTENTION_CONTROL_WARP_OVERRIDE >= 0 ? ATTENTION_CONTROL_WARP_OVERRIDE
+                                         : kDefaultControlWarp;
+static constexpr int kProducerWarpLimit = kPvBaseWarp + kActivePipeCount;
+static constexpr int kConsumerWarpLimit =
+    kConsumerBaseWarp + kActiveConsumerPipeCount * kConsumerWarpsPerPipe;
+static constexpr int kMainWarps =
+    kProducerWarpLimit > kConsumerWarpLimit ? kProducerWarpLimit : kConsumerWarpLimit;
 static constexpr int kMainThreads = kMainWarps * kWarpSize;
 static constexpr int kTileM = 128;
 static constexpr int kTileN = 128;
@@ -101,6 +142,43 @@ static constexpr float kLog2E = 1.44269504088896340736f;
 static constexpr double kFlopsPerMma =
     2.0 * static_cast<double>(kTileM) * static_cast<double>(kTileN) *
     static_cast<double>(kMmaK);
+
+enum AttentionDepBit {
+  kDepQkPipe1WaitsPipe0 = 0,
+  kDepQkPipe0WaitsPipe1 = 1,
+  kDepPvPipe1WaitsPipe0 = 2,
+  kDepPvPipe0WaitsPipe1 = 3,
+  kDepVTmaWaitsQk = 4,
+  kDepVTmaWaitsK = 5,
+  kDepSumH0WaitsV = 6,
+  kDepSumH1WaitsV = 7,
+  kDepNextKTmaWaitsS1 = 8,
+  kDepNextKTmaWaitsPv = 9,
+  kDepKTmaPipe1WaitsPipe0 = 10,
+  kDepKTmaPipe0WaitsPipe1 = 11,
+  kDepVTmaPipe1WaitsPipe0 = 12,
+  kDepVTmaPipe0WaitsPipe1 = 13,
+  kDepSumH0Pipe1WaitsPipe0 = 14,
+  kDepSumH0Pipe0WaitsPipe1 = 15,
+  kDepSumH1Pipe1WaitsPipe0 = 16,
+  kDepSumH1Pipe0WaitsPipe1 = 17,
+};
+
+static constexpr int kAttentionDepMask =
+#if ATTENTION_DEP_SWEEP
+    ATTENTION_DEP_MASK;
+#else
+    ATTENTION_DEP_DEFAULT_MASK;
+#endif
+
+template <int Bit, bool DefaultEnabled>
+__host__ __device__ __forceinline__ constexpr bool attention_dep_enabled() {
+#if ATTENTION_DEP_SWEEP
+  return (ATTENTION_DEP_MASK & (1 << Bit)) != 0;
+#else
+  return (ATTENTION_DEP_DEFAULT_MASK & (1 << Bit)) != 0;
+#endif
+}
 
 
 template <int kFixedKTiles>
@@ -170,8 +248,10 @@ struct ClockTraceRecord {
 
 struct TraceRecord {
   unsigned long long tma_start = 0;
+  unsigned long long tma_issue_end = 0;
   unsigned long long tma_end = 0;
   unsigned long long mma_start = 0xffffffffffffffffull;
+  unsigned long long mma_issue_end = 0;
   unsigned long long mma_end = 0xffffffffffffffffull;
   unsigned long long ld_start = 0xffffffffffffffffull;
   unsigned long long ld_end = 0;
@@ -190,6 +270,7 @@ struct TraceRecord {
   unsigned long long st_start = 0xffffffffffffffffull;
   unsigned long long st_end = 0;
   unsigned long long v_tma_start = 0;
+  unsigned long long v_tma_issue_end = 0;
   unsigned long long v_tma_end = 0;
   unsigned long long pv_start = 0xffffffffffffffffull;
   unsigned long long pv_end = 0;
@@ -226,6 +307,9 @@ enum ClockTraceStage {
   kClockTracePvMmaH1 = 16,
   kClockTraceSync = 17,
   kClockTracePackDetail = 18,
+  kClockTraceKTmaIssue = 19,
+  kClockTraceQkMmaIssue = 20,
+  kClockTraceVTmaIssue = 21,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -235,6 +319,9 @@ static constexpr int kClockTraceRowSumBase = 24;
 static constexpr int kClockTraceStoreBase = 32;
 static constexpr int kClockTraceSyncBase = 40;
 static constexpr int kClockTracePackDetailBase = 52;
+static constexpr int kClockTraceKTmaIssueSlot = 7;
+static constexpr int kClockTraceQkMmaIssueSlot = 44;
+static constexpr int kClockTraceVTmaIssueSlot = 45;
 static constexpr int kClockTraceExtraSlots = 32;
 
 #include "ptx_wrappers.cuh"
@@ -573,9 +660,16 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
 #if ATTENTION_ROW_MAX_ONLY
       "_row_max_only"
 #endif
+      "_qk_commit_%d_pv_commit_%d_regs_p%d_c%d"
+#if ATTENTION_DEP_SWEEP
+      "_dep_sweep_mask_0x%03x"
+#else
       "_dep_default_mask_0x%03x"
+#endif
       ,
-      0x00f
+      ATTENTION_QK_COMMIT_AFTER_ISSUES, ATTENTION_PV_COMMIT_AFTER_ISSUES,
+      ATTENTION_SETMAXNREG_PRODUCER, ATTENTION_SETMAXNREG_CONSUMER,
+      kAttentionDepMask
   );
   char output_shape[64];
   std::snprintf(output_shape, sizeof(output_shape), "O[%d,128,128]_bf16", args.blocks);
@@ -671,6 +765,12 @@ const char* clock_trace_stage_name(int stage) {
       return "sync";
     case kClockTracePackDetail:
       return "pack_detail";
+    case kClockTraceKTmaIssue:
+      return "k_tma_issue";
+    case kClockTraceQkMmaIssue:
+      return "qk_mma_issue";
+    case kClockTraceVTmaIssue:
+      return "v_tma_issue";
     default:
       return "unknown";
   }
@@ -778,16 +878,25 @@ void write_clock_trace_csv(const Args& args,
         out.tma_start = r.start;
         out.tma_end = r.end;
         break;
+      case kClockTraceKTmaIssue:
+        out.tma_issue_end = r.end;
+        break;
       case kClockTraceQkMma:
         out.pipe = static_cast<unsigned int>(r.pipe);
         out.warp_id = static_cast<unsigned int>(r.warp_id);
         out.mma_start = r.start;
         out.mma_end = r.end;
         break;
+      case kClockTraceQkMmaIssue:
+        out.mma_issue_end = r.end;
+        break;
       case kClockTraceVTma:
         out.pipe = static_cast<unsigned int>(r.pipe);
         out.v_tma_start = r.start;
         out.v_tma_end = r.end;
+        break;
+      case kClockTraceVTmaIssue:
+        out.v_tma_issue_end = r.end;
         break;
       case kClockTracePvMma:
         out.pv_start = r.start;
@@ -843,15 +952,33 @@ void write_clock_trace_csv(const Args& args,
     }
   }
 
+  for (TraceRecord& r : rows) {
+    for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
+      if (trace_cycles(r.pack_warp_start[w], r.pack_warp_end[w]) == 0) continue;
+      if (trace_cycles(r.st_warp_start[w], r.st_warp_end[w]) == 0) {
+        r.st_warp_start[w] = r.pack_warp_start[w];
+        r.st_warp_end[w] = r.pack_warp_end[w];
+        merge_trace_range(&r.st_start, &r.st_end, r.st_warp_start[w],
+                          r.st_warp_end[w]);
+      }
+      if (trace_cycles(r.sum_warp_start[w], r.sum_warp_end[w]) == 0) {
+        r.sum_warp_start[w] = r.pack_warp_start[w];
+        r.sum_warp_end[w] = r.pack_warp_end[w];
+      }
+    }
+  }
+
   FILE* csv = std::fopen(args.csv, "w");
   if (!csv) {
     std::perror(args.csv);
     std::exit(1);
   }
   std::fprintf(csv,
-               "mode,elapsed_ms,iter,pipe,warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
+               "mode,elapsed_ms,iter,pipe,warp_id,tma_start,tma_issue_end,tma_issue_cycles,"
+               "tma_end,tma_cycles,mma_start,mma_issue_end,mma_issue_cycles,mma_end,"
                "mma_cycles,ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
-               "st_start,st_end,st_cycles,v_tma_start,v_tma_end,v_tma_cycles,"
+               "st_start,st_end,st_cycles,v_tma_start,v_tma_issue_end,v_tma_issue_cycles,"
+               "v_tma_end,v_tma_cycles,"
                "pv_start,pv_end,pv_cycles,pv_warp_id,pv_h0_start,pv_h0_end,"
                "pv_h0_cycles,pv_h0_warp_id,pv_h1_start,pv_h1_end,pv_h1_cycles,"
                "pv_h1_warp_id,total_start,total_end,total_cycles");
@@ -895,16 +1022,20 @@ void write_clock_trace_csv(const Args& args,
                  std::max(trace_end_or_zero(r.pv_start, r.pv_end),
                           trace_end_or_zero(r.mma_start, r.mma_end)));
     std::fprintf(csv,
-                 "%s,%.6f,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,"
-                 "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
+                 "%s,%.6f,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
-                 mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_start, r.tma_end,
-                 trace_cycles(r.tma_start, r.tma_end), mma_start,
+                 mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_start,
+                 r.tma_issue_end, trace_cycles(r.tma_start, r.tma_issue_end),
+                 r.tma_end, trace_cycles(r.tma_start, r.tma_end), mma_start,
+                 r.mma_issue_end, trace_cycles(r.mma_start, r.mma_issue_end),
                  trace_end_or_zero(r.mma_start, r.mma_end),
                  trace_cycles(r.mma_start, r.mma_end), ld_start, r.ld_end,
                  trace_cycles(r.ld_start, r.ld_end), pack_start, r.pack_end,
                  trace_cycles(r.pack_start, r.pack_end), st_start, r.st_end,
-                 trace_cycles(r.st_start, r.st_end), r.v_tma_start, r.v_tma_end,
+                 trace_cycles(r.st_start, r.st_end), r.v_tma_start,
+                 r.v_tma_issue_end,
+                 trace_cycles(r.v_tma_start, r.v_tma_issue_end), r.v_tma_end,
                  trace_cycles(r.v_tma_start, r.v_tma_end), pv_start, r.pv_end,
                  trace_cycles(r.pv_start, r.pv_end), r.pv_warp_id, pv_h0_start,
                  r.pv_h0_end, trace_cycles(r.pv_h0_start, r.pv_h0_end),

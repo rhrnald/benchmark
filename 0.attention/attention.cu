@@ -37,6 +37,120 @@
 #define ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS 1
 #endif
 
+#ifndef ATTENTION_QK_COMMIT_AFTER_ISSUES
+#define ATTENTION_QK_COMMIT_AFTER_ISSUES 6
+#endif
+
+#ifndef ATTENTION_PV_COMMIT_AFTER_ISSUES
+#define ATTENTION_PV_COMMIT_AFTER_ISSUES 5
+#endif
+
+#ifndef ATTENTION_PIPE1_H0_DELAY_NOPS
+#define ATTENTION_PIPE1_H0_DELAY_NOPS 0
+#endif
+
+#ifndef ATTENTION_PIPE1_H0_DELAY_IADD
+#define ATTENTION_PIPE1_H0_DELAY_IADD 0
+#endif
+
+__device__ __forceinline__ void attention_pipe1_h0_delay(int pipe) {
+#if ATTENTION_PIPE1_H0_DELAY_NOPS > 0 || ATTENTION_PIPE1_H0_DELAY_IADD > 0
+  if (pipe == 1) {
+#if ATTENTION_PIPE1_H0_DELAY_NOPS > 0
+    asm volatile("nanosleep.u32 "
+                 ATTENTION_STRINGIFY(ATTENTION_PIPE1_H0_DELAY_NOPS) ";"
+                 ::: "memory");
+#endif
+#if ATTENTION_PIPE1_H0_DELAY_IADD > 0
+    uint32_t delay_reg = 0;
+#pragma unroll
+    for (int i = 0; i < ATTENTION_PIPE1_H0_DELAY_IADD; ++i) {
+      asm volatile("add.u32 %0, %0, 1;" : "+r"(delay_reg));
+    }
+    asm volatile("" :: "r"(delay_reg));
+#endif
+  }
+#else
+  (void)pipe;
+#endif
+}
+
+__device__ __forceinline__ void attention_wait_v_tma_deps(
+    uint64_t (&qk_done)[kPipeCount],
+    uint64_t (&k_ready)[kPipeCount],
+    uint64_t (&v_ready)[kPipeCount],
+    int pipe,
+    int local,
+    uint32_t phase) {
+  if constexpr (attention_dep_enabled<kDepVTmaWaitsQk, false>()) {
+    mbarrier_wait(&qk_done[pipe], phase);
+  }
+  if constexpr (attention_dep_enabled<kDepVTmaWaitsK, false>()) {
+    mbarrier_wait(&k_ready[pipe], phase);
+  }
+  if constexpr (kActivePipeCount > 1) {
+    if (pipe == 0) {
+      if constexpr (attention_dep_enabled<kDepVTmaPipe0WaitsPipe1, false>()) {
+        if (local > 0) {
+          mbarrier_wait(&v_ready[1], static_cast<uint32_t>((local - 1) & 1));
+        }
+      }
+    } else {
+      if constexpr (attention_dep_enabled<kDepVTmaPipe1WaitsPipe0, false>()) {
+        mbarrier_wait(&v_ready[0], phase);
+      }
+    }
+  }
+}
+
+__device__ __forceinline__ void attention_wait_sum_h0_deps(
+    uint64_t (&v_ready)[kPipeCount],
+    uint64_t (&s_ready)[kPipeCount][2],
+    int pipe,
+    int local,
+    uint32_t phase) {
+  if constexpr (attention_dep_enabled<kDepSumH0WaitsV, false>()) {
+    mbarrier_wait(&v_ready[pipe], phase);
+  }
+  if constexpr (kActivePipeCount > 1) {
+    if (pipe == 0) {
+      if constexpr (attention_dep_enabled<kDepSumH0Pipe0WaitsPipe1, false>()) {
+        if (local > 0) {
+          mbarrier_wait(&s_ready[1][0], static_cast<uint32_t>((local - 1) & 1));
+        }
+      }
+    } else {
+      if constexpr (attention_dep_enabled<kDepSumH0Pipe1WaitsPipe0, false>()) {
+        mbarrier_wait(&s_ready[0][0], phase);
+      }
+    }
+  }
+}
+
+__device__ __forceinline__ void attention_wait_sum_h1_deps(
+    uint64_t (&v_ready)[kPipeCount],
+    uint64_t (&s_ready)[kPipeCount][2],
+    int pipe,
+    int local,
+    uint32_t phase) {
+  if constexpr (attention_dep_enabled<kDepSumH1WaitsV, false>()) {
+    mbarrier_wait(&v_ready[pipe], phase);
+  }
+  if constexpr (kActivePipeCount > 1) {
+    if (pipe == 0) {
+      if constexpr (attention_dep_enabled<kDepSumH1Pipe0WaitsPipe1, false>()) {
+        if (local > 0) {
+          mbarrier_wait(&s_ready[1][1], static_cast<uint32_t>((local - 1) & 1));
+        }
+      }
+    } else {
+      if constexpr (attention_dep_enabled<kDepSumH1Pipe1WaitsPipe0, false>()) {
+        mbarrier_wait(&s_ready[0][1], phase);
+      }
+    }
+  }
+}
+
 __global__ void fill_packed_bf16(uint32_t* ptr, size_t words, uint32_t seed) {
   const size_t i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < words) {
@@ -178,6 +292,8 @@ __device__ __forceinline__ void attention_pv_pipe_role(
     uint32_t* const (&s_smem)[kPipeCount],
     uint64_t (&v_ready)[kPipeCount],
     uint64_t (&s_ready)[kPipeCount][2],
+    uint64_t (&qk_done)[kPipeCount],
+    uint64_t (&k_ready)[kPipeCount],
     uint64_t (&pv_done)[kPipeCount],
     const uint32_t (&o_taddr)[kPipeCount],
     int pipe,
@@ -189,7 +305,7 @@ __device__ __forceinline__ void attention_pv_pipe_role(
     int clock_trace_start,
     unsigned long long clock_trace_base,
     int lane) {
-  const int role_warp_id = 2 + pipe;
+  const int role_warp_id = kPvBaseWarp + pipe;
   const bool lane0 = lane == 0;
 #if !ATTENTION_CLOCK_TRACE
   (void)role_warp_id;
@@ -220,16 +336,20 @@ __device__ __forceinline__ void attention_pv_pipe_role(
         trace_idx < clock_trace_iters;
     const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
     unsigned long long v_tma_start = 0ull;
+    unsigned long long v_tma_issue_end = 0ull;
 #endif
     if (local > 0) {
       mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
     }
+    attention_wait_v_tma_deps(qk_done, k_ready, v_ready, pipe, local, phase);
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter && lane0) v_tma_start = clock64();
 #endif
     issue_v_tma_tile(v_map, v_smem[pipe], &v_ready[pipe], global_v_tile,
                      lane0);
-    mbarrier_wait(&s_ready[pipe][0], phase);
+#if ATTENTION_CLOCK_TRACE
+    if (trace_iter && lane0) v_tma_issue_end = clock64();
+#endif
     mbarrier_wait(&v_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter) {
@@ -237,29 +357,56 @@ __device__ __forceinline__ void attention_pv_pipe_role(
       write_clock_trace_record(clock_trace, trace_slot_base + 3,
                                kClockTraceVTma, iter, pipe, role_warp_id, -1, -1,
                                v_tma_start, v_tma_end, clock_trace_base);
+      write_clock_trace_record(clock_trace,
+                               trace_slot_base + kClockTraceVTmaIssueSlot,
+                               kClockTraceVTmaIssue, iter, pipe, role_warp_id,
+                               -1, -1, v_tma_start, v_tma_issue_end,
+                               clock_trace_base);
     }
 #endif
-    if (pipe == 0) {
-      if (local > 0) {
-        mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+    mbarrier_wait(&s_ready[pipe][0], phase);
+    if constexpr (kActivePipeCount > 1) {
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepPvPipe0WaitsPipe1, true>()) {
+          if (local > 0) {
+            mbarrier_wait(&pv_done[1], static_cast<uint32_t>((local - 1) & 1));
+          }
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepPvPipe1WaitsPipe0, true>()) {
+          mbarrier_wait(&pv_done[0], phase);
+        }
       }
-    } else {
-      mbarrier_wait(&pv_done[0], phase);
     }
+#if ATTENTION_CLOCK_TRACE
+    unsigned long long pv_mma_start = 0ull;
+#endif
     if (lane0) {
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
-        begin_clock_trace_record(clock_trace, trace_slot_base + 4,
-                                 kClockTracePvMma, iter, pipe, role_warp_id, -1,
-                                 -1, clock64(), clock_trace_base);
+        pv_mma_start = clock64();
       }
       const unsigned long long pv_h0_start =
           trace_iter ? clock64() : 0ull;
 #endif
+      if constexpr (ATTENTION_PV_COMMIT_AFTER_ISSUES <= kMmasPerTile / 2) {
 #pragma unroll
-      for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
-        tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                            local != 0 || mma != 0);
+        for (int mma = 0; mma < ATTENTION_PV_COMMIT_AFTER_ISSUES; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              local != 0 || mma != 0);
+        }
+        tcgen05_commit(&pv_done[pipe]);
+#pragma unroll
+        for (int mma = ATTENTION_PV_COMMIT_AFTER_ISSUES; mma < kMmasPerTile / 2; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              local != 0 || mma != 0);
+        }
+      } else {
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              local != 0 || mma != 0);
+        }
       }
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
@@ -275,10 +422,24 @@ __device__ __forceinline__ void attention_pv_pipe_role(
       const unsigned long long pv_h1_start =
           trace_iter ? clock64() : 0ull;
 #endif
+      if constexpr (ATTENTION_PV_COMMIT_AFTER_ISSUES > kMmasPerTile / 2) {
 #pragma unroll
-      for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
-        tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
-                            true);
+        for (int mma = kMmasPerTile / 2; mma < ATTENTION_PV_COMMIT_AFTER_ISSUES; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              true);
+        }
+        tcgen05_commit(&pv_done[pipe]);
+#pragma unroll
+        for (int mma = ATTENTION_PV_COMMIT_AFTER_ISSUES; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              true);
+        }
+      } else {
+#pragma unroll
+        for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(o_taddr[pipe], s_desc[mma], v_desc[mma], idesc,
+                              true);
+        }
       }
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
@@ -287,12 +448,14 @@ __device__ __forceinline__ void attention_pv_pipe_role(
                                  1, pv_h1_start, clock64(), clock_trace_base);
       }
 #endif
-      tcgen05_commit(&pv_done[pipe]);
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
         mbarrier_wait(&pv_done[pipe], phase);
-        end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
-                               clock_trace_base);
+        const unsigned long long pv_mma_end = clock64();
+        write_clock_trace_record(clock_trace, trace_slot_base + 4,
+                                 kClockTracePvMma, iter, pipe, role_warp_id,
+                                 -1, -1, pv_mma_start, pv_mma_end,
+                                 clock_trace_base);
       }
 #endif
     }
@@ -308,6 +471,8 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     uint64_t (&k_ready)[kPipeCount],
     uint64_t (&qk_done)[kPipeCount],
     uint64_t (&p_done)[kPipeCount],
+    uint64_t (&s_ready)[kPipeCount][2],
+    uint64_t (&pv_done)[kPipeCount],
     const uint32_t (&p_taddr)[kPipeCount],
     int pipe,
     int loop_repeats,
@@ -319,7 +484,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     unsigned long long clock_trace_base,
     unsigned long long q_tma_start_shared,
     int lane) {
-  const int role_warp_id = pipe;
+  const int role_warp_id = kQkBaseWarp + pipe;
   const bool lane0 = lane == 0;
 #if !ATTENTION_CLOCK_TRACE
   (void)role_warp_id;
@@ -338,6 +503,11 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     }
   }
   mbarrier_wait(q_ready, 0);
+#if ATTENTION_CLOCK_TRACE
+  unsigned long long pending_qk_mma_start = 0ull;
+  int pending_qk_trace_slot = -1;
+  int pending_qk_iter = -1;
+#endif
 #if ATTENTION_CLOCK_TRACE
   if (pipe == 0) {
     if (blockIdx.x == 0 && lane0 && clock_trace != nullptr) {
@@ -362,12 +532,23 @@ __device__ __forceinline__ void attention_qk_pipe_role(
         trace_idx < clock_trace_iters;
     const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
     unsigned long long k_tma_start = 0ull;
+    unsigned long long k_tma_issue_end = 0ull;
 #endif
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter && lane0) k_tma_start = clock64();
 #endif
+    if constexpr (kActivePipeCount > 1) {
+      if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
+        if (pipe != 0) {
+          mbarrier_wait(&k_ready[0], phase);
+        }
+      }
+    }
     issue_k_tma_tile(k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
                      lane0);
+#if ATTENTION_CLOCK_TRACE
+    if (trace_iter && lane0) k_tma_issue_end = clock64();
+#endif
     mbarrier_wait(&k_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter) {
@@ -375,25 +556,52 @@ __device__ __forceinline__ void attention_qk_pipe_role(
       write_clock_trace_record(clock_trace, trace_slot_base + 1,
                                kClockTraceKTma, iter, pipe, role_warp_id, -1, -1,
                                k_tma_start, k_tma_end, clock_trace_base);
+      write_clock_trace_record(clock_trace,
+                               trace_slot_base + kClockTraceKTmaIssueSlot,
+                               kClockTraceKTmaIssue, iter, pipe, role_warp_id,
+                               -1, -1, k_tma_start, k_tma_issue_end,
+                               clock_trace_base);
     }
 #endif
-    if (pipe != 0) {
-      mbarrier_wait(&qk_done[0], phase);
+    if constexpr (kActivePipeCount > 1) {
+      if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
+        if (pipe != 0) {
+          mbarrier_wait(&qk_done[0], phase);
+        }
+      }
     }
     if (lane0) {
 #if ATTENTION_CLOCK_TRACE
+      unsigned long long qk_mma_start = 0ull;
       if (trace_iter) {
-        begin_clock_trace_record(clock_trace, trace_slot_base + 2,
-                                 kClockTraceQkMma, iter, pipe, role_warp_id, -1,
-                                 -1, clock64(), clock_trace_base);
+        qk_mma_start = clock64();
+        pending_qk_mma_start = qk_mma_start;
+        pending_qk_trace_slot = trace_slot_base + 2;
+        pending_qk_iter = iter;
       }
 #endif
 #pragma unroll
-      for (int mma = 0; mma < kMmasPerTile; ++mma) {
+      for (int mma = 0; mma < ATTENTION_QK_COMMIT_AFTER_ISSUES; ++mma) {
         tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
                             mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+      for (int mma = ATTENTION_QK_COMMIT_AFTER_ISSUES; mma < kMmasPerTile; ++mma) {
+        tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
+                            mma != 0);
+      }
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        const unsigned long long qk_mma_issue_end = clock64();
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base +
+                                     kClockTraceQkMmaIssueSlot,
+                                 kClockTraceQkMmaIssue, iter, pipe,
+                                 role_warp_id, -1, -1, qk_mma_start,
+                                 qk_mma_issue_end, clock_trace_base);
+      }
+#endif
     }
     iter += kActivePipeStride;
     ++local;
@@ -410,23 +618,44 @@ __device__ __forceinline__ void attention_qk_pipe_role(
         trace_idx < clock_trace_iters;
     const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
     unsigned long long k_tma_start = 0ull;
+    unsigned long long k_tma_issue_end = 0ull;
 #endif
     mbarrier_wait(&qk_done[pipe], prev_phase);
 #if ATTENTION_CLOCK_TRACE
-    const int done_iter = iter - kActivePipeStride;
-    const int done_trace_idx = done_iter - clock_trace_start;
-    if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-        done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
-      end_clock_trace_record(clock_trace,
-                             done_trace_idx * kClockTraceSlotsPerIter + 2,
-                             clock64(), clock_trace_base);
+    if (pending_qk_trace_slot >= 0 &&
+        clock_trace != nullptr && blockIdx.x == 0 && lane0) {
+      write_clock_trace_record(clock_trace, pending_qk_trace_slot,
+                               kClockTraceQkMma, pending_qk_iter, pipe,
+                               role_warp_id, -1, -1, pending_qk_mma_start,
+                               clock64(), clock_trace_base);
+      pending_qk_trace_slot = -1;
     }
 #endif
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter && lane0) k_tma_start = clock64();
 #endif
+    if constexpr (attention_dep_enabled<kDepNextKTmaWaitsS1, false>()) {
+      mbarrier_wait(&s_ready[pipe][1], prev_phase);
+    }
+    if constexpr (attention_dep_enabled<kDepNextKTmaWaitsPv, false>()) {
+      mbarrier_wait(&pv_done[pipe], prev_phase);
+    }
+    if constexpr (kActivePipeCount > 1) {
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepKTmaPipe0WaitsPipe1, false>()) {
+          mbarrier_wait(&k_ready[1], prev_phase);
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepKTmaPipe1WaitsPipe0, false>()) {
+          mbarrier_wait(&k_ready[0], phase);
+        }
+      }
+    }
     issue_k_tma_tile(k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
                      lane0);
+#if ATTENTION_CLOCK_TRACE
+    if (trace_iter && lane0) k_tma_issue_end = clock64();
+#endif
     mbarrier_wait(&k_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter) {
@@ -434,40 +663,68 @@ __device__ __forceinline__ void attention_qk_pipe_role(
       write_clock_trace_record(clock_trace, trace_slot_base + 1,
                                kClockTraceKTma, iter, pipe, role_warp_id, -1, -1,
                                k_tma_start, k_tma_end, clock_trace_base);
+      write_clock_trace_record(clock_trace,
+                               trace_slot_base + kClockTraceKTmaIssueSlot,
+                               kClockTraceKTmaIssue, iter, pipe, role_warp_id,
+                               -1, -1, k_tma_start, k_tma_issue_end,
+                               clock_trace_base);
     }
 #endif
     mbarrier_wait(&p_done[pipe], prev_phase);
-    if (pipe == 0) {
-      mbarrier_wait(&qk_done[1], prev_phase);
-    } else {
-      mbarrier_wait(&qk_done[0], phase);
+    if constexpr (kActivePipeCount > 1) {
+      if (pipe == 0) {
+        if constexpr (attention_dep_enabled<kDepQkPipe0WaitsPipe1, true>()) {
+          mbarrier_wait(&qk_done[1], prev_phase);
+        }
+      } else {
+        if constexpr (attention_dep_enabled<kDepQkPipe1WaitsPipe0, true>()) {
+          mbarrier_wait(&qk_done[0], phase);
+        }
+      }
     }
     if (lane0) {
 #if ATTENTION_CLOCK_TRACE
+      unsigned long long qk_mma_start = 0ull;
       if (trace_iter) {
-        begin_clock_trace_record(clock_trace, trace_slot_base + 2,
-                                 kClockTraceQkMma, iter, pipe, role_warp_id, -1,
-                                 -1, clock64(), clock_trace_base);
+        qk_mma_start = clock64();
+        pending_qk_mma_start = qk_mma_start;
+        pending_qk_trace_slot = trace_slot_base + 2;
+        pending_qk_iter = iter;
       }
 #endif
 #pragma unroll
-      for (int mma = 0; mma < kMmasPerTile; ++mma) {
+      for (int mma = 0; mma < ATTENTION_QK_COMMIT_AFTER_ISSUES; ++mma) {
         tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
                             mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+      for (int mma = ATTENTION_QK_COMMIT_AFTER_ISSUES; mma < kMmasPerTile; ++mma) {
+        tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
+                            mma != 0);
+      }
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        const unsigned long long qk_mma_issue_end = clock64();
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base +
+                                     kClockTraceQkMmaIssueSlot,
+                                 kClockTraceQkMmaIssue, iter, pipe,
+                                 role_warp_id, -1, -1, qk_mma_start,
+                                 qk_mma_issue_end, clock_trace_base);
+      }
+#endif
     }
   }
 #if ATTENTION_CLOCK_TRACE
   if (local > 0) {
     mbarrier_wait(&qk_done[pipe], static_cast<uint32_t>((local - 1) & 1));
-    const int done_iter = iter - kActivePipeStride;
-    const int done_trace_idx = done_iter - clock_trace_start;
-    if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
-        done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
-      end_clock_trace_record(clock_trace,
-                             done_trace_idx * kClockTraceSlotsPerIter + 2,
-                             clock64(), clock_trace_base);
+    if (pending_qk_trace_slot >= 0 &&
+        clock_trace != nullptr && blockIdx.x == 0 && lane0) {
+      write_clock_trace_record(clock_trace, pending_qk_trace_slot,
+                               kClockTraceQkMma, pending_qk_iter, pipe,
+                               role_warp_id, -1, -1, pending_qk_mma_start,
+                               clock64(), clock_trace_base);
     }
   }
 #endif
@@ -569,6 +826,7 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     uint64_t (&qk_done)[kPipeCount],
     uint64_t (&p_done)[kPipeCount],
     uint64_t (&s_ready)[kPipeCount][2],
+    uint64_t (&v_ready)[kPipeCount],
     uint64_t (&pv_done)[kPipeCount],
     float (&row_sum_partial)[kPipeCount][kTileM],
     float* row_max_scratch,
@@ -602,7 +860,8 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
       static_cast<float>(ATTENTION_ROW_SUM_UPDATE_LIMIT);
 #endif
   if (iter < loop_repeats) {
-    mbarrier_wait(&qk_done[pipe], 0);
+    const uint32_t phase = 0;
+    mbarrier_wait(&qk_done[pipe], phase);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_COMPUTE_MAX
@@ -615,6 +874,8 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
 #else
     row_max_reg = 0.0f;
 #endif
+    attention_pipe1_h0_delay(pipe);
+    attention_wait_sum_h0_deps(v_ready, s_ready, pipe, local, phase);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
@@ -629,6 +890,7 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     if (lane0) {
       mbarrier_arrive(&s_ready[pipe][0]);
     }
+    attention_wait_sum_h1_deps(v_ready, s_ready, pipe, local, phase);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
@@ -657,6 +919,8 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
       mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
       const uint32_t row_taddr =
           p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      attention_pipe1_h0_delay(pipe);
+      attention_wait_sum_h0_deps(v_ready, s_ready, pipe, local, phase);
       float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
           row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
           score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
@@ -675,6 +939,7 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
       if (lane0) {
         mbarrier_arrive(&s_ready[pipe][0]);
       }
+      attention_wait_sum_h1_deps(v_ready, s_ready, pipe, local, phase);
       float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
           row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
           score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
@@ -707,6 +972,8 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+    attention_pipe1_h0_delay(pipe);
+    attention_wait_sum_h0_deps(v_ready, s_ready, pipe, local, phase);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     float row_sum0;
     float row_sum1;
@@ -736,6 +1003,7 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     if (lane0) {
       mbarrier_arrive(&s_ready[pipe][0]);
     }
+    attention_wait_sum_h1_deps(v_ready, s_ready, pipe, local, phase);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
@@ -775,6 +1043,8 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     }
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+    attention_pipe1_h0_delay(pipe);
+    attention_wait_sum_h0_deps(v_ready, s_ready, pipe, local, phase);
 #if ATTENTION_ROW_MAX_ONLY
     const PackStoreX64LoopResult h0_result =
         tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
@@ -792,6 +1062,7 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     if (lane0) {
       mbarrier_arrive(&s_ready[pipe][0]);
     }
+    attention_wait_sum_h1_deps(v_ready, s_ready, pipe, local, phase);
 #if ATTENTION_ROW_MAX_ONLY
     const PackStoreX64LoopResult h1_result =
         tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
@@ -906,10 +1177,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const int warp_id = threadIdx.x >> 5;
   const bool lane0 = lane == 0;
 
-  if (warp_id < kProducerWarpCount) {
-    setmaxnreg_dec_producer();
-  } else {
+  const bool consumer_role_warp =
+      warp_id >= kConsumerBaseWarp &&
+      warp_id < kConsumerBaseWarp +
+                    kActiveConsumerPipeCount * kConsumerWarpsPerPipe;
+  if (consumer_role_warp) {
     setmaxnreg_inc_consumer();
+  } else {
+    setmaxnreg_dec_producer();
   }
 
   if (threadIdx.x == 0) {
@@ -939,7 +1214,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __syncthreads();
 #endif
   const unsigned long long clock_trace_base = clock_trace_base_shared;
-  if (warp_id == 0) {
+  if (warp_id == kControlWarp) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
     if (lane == 0) tmem_base_shared = taddr;
   }
@@ -958,7 +1233,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       kv_tile_base_for_block<kFixedKTiles>(static_cast<int>(blockIdx.x),
                                            loop_k_tiles);
 
-  if (warp_id == 0) {
+  if (warp_id == kQkBaseWarp) {
 #if ATTENTION_CLOCK_TRACE
     if (lane0) q_tma_start_shared = clock64();
 #endif
@@ -977,27 +1252,27 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
     attention_consumer_pipe_role(
-        s_smem, qk_done, p_done, s_ready, pv_done, row_sum_partial,
+        s_smem, qk_done, p_done, s_ready, v_ready, pv_done, row_sum_partial,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
         score_to_exp2_scale,
         output != nullptr, clock_trace, clock_trace_iters, clock_trace_start,
         clock_trace_base, lane);
   }
 
-  if (warp_id == 2 || warp_id == 3) {
-    const int pipe = warp_id - 2;
+  if (warp_id >= kPvBaseWarp && warp_id < kPvBaseWarp + kActivePipeCount) {
+    const int pipe = warp_id - kPvBaseWarp;
     attention_pv_pipe_role<kFixedKTiles>(
-        &v_map, v_smem, s_smem, v_ready, s_ready, pv_done, o_taddr, pipe,
-        loop_repeats, loop_k_tiles, kv_tile_base, clock_trace,
+        &v_map, v_smem, s_smem, v_ready, s_ready, qk_done, k_ready, pv_done,
+        o_taddr, pipe, loop_repeats, loop_k_tiles, kv_tile_base, clock_trace,
         clock_trace_iters, clock_trace_start, clock_trace_base, lane);
   }
 
-  if (warp_id == 0 || warp_id == 1) {
-    const int pipe = warp_id;
+  if (warp_id >= kQkBaseWarp && warp_id < kQkBaseWarp + kActivePipeCount) {
+    const int pipe = warp_id - kQkBaseWarp;
     attention_qk_pipe_role<kFixedKTiles>(
         &k_map, q_smem, k_smem, &q_ready, k_ready, qk_done, p_done,
-        p_taddr, pipe, loop_repeats, loop_k_tiles, kv_tile_base, clock_trace,
-        clock_trace_iters, clock_trace_start, clock_trace_base,
+        s_ready, pv_done, p_taddr, pipe, loop_repeats, loop_k_tiles,
+        kv_tile_base, clock_trace, clock_trace_iters, clock_trace_start, clock_trace_base,
         q_tma_start_shared, lane);
   }
 
@@ -1020,8 +1295,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         trace_cta && threadIdx.x == 0 ? tail_total_start : 0ull;
 #endif
     const int pipe0_local_count =
-        (loop_repeats + 1) / 2;
-    const int pipe1_local_count = loop_repeats / 2;
+        kActivePipeCount == 1 ? loop_repeats : (loop_repeats + 1) / 2;
+    const int pipe1_local_count =
+        kActivePipeCount == 1 ? 0 : loop_repeats / 2;
     if (pipe0_local_count > 0) {
       mbarrier_wait(&pv_done[0], static_cast<uint32_t>((pipe0_local_count - 1) & 1));
     }
@@ -1040,7 +1316,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     uint32_t* output_bf16_smem = reinterpret_cast<uint32_t*>(q_smem);
     const bool epilogue_warp =
         warp_id >= kConsumerBaseWarp &&
-        warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe;
+        warp_id < kConsumerBaseWarp +
+                      kActiveConsumerPipeCount * kConsumerWarpsPerPipe;
     const bool trace_epilogue =
         trace_cta && lane0 && warp_id >= kConsumerBaseWarp &&
         warp_id < kConsumerBaseWarp + kConsumerWarpsPerPipe;
@@ -1049,7 +1326,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (pipe0_local_count > 0 && epilogue_warp) {
       const int epilogue_slot = warp_id - kConsumerBaseWarp;
       const int consumer_warp = epilogue_slot & (kConsumerWarpsPerPipe - 1);
-      const int consumer_half = epilogue_slot / kConsumerWarpsPerPipe;
       const int row = consumer_warp * 32 + lane;
 #if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
       const float row_max0 = row_max_scratch[row];
@@ -1061,63 +1337,75 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           pipe1_local_count > 0
               ? exp2_approx_float_cpp(row_max1 - common_row_max)
               : 0.0f;
-      const float denom = row_sum_partial[0][row] * pipe0_scale +
-                          row_sum_partial[1][row] * pipe1_scale;
+      float denom = row_sum_partial[0][row] * pipe0_scale;
+      if (pipe1_local_count > 0) {
+        denom += row_sum_partial[1][row] * pipe1_scale;
+      }
 #else
-      const float denom = row_sum_partial[0][row] + row_sum_partial[1][row];
+      float denom = row_sum_partial[0][row];
+      if (pipe1_local_count > 0) {
+        denom += row_sum_partial[1][row];
+      }
 #endif
       const float inv_sum = denom != 0.0f ? 1.0f / denom : 0.0f;
-      const uint32_t row_taddr0 =
-          o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16) +
-          static_cast<uint32_t>(consumer_half * 64);
-      const uint32_t row_taddr1 =
-          o_taddr[1] + (static_cast<uint32_t>(consumer_warp * 32) << 16) +
-          static_cast<uint32_t>(consumer_half * 64);
-      uint32_t* row_dst =
-          output_bf16_smem + static_cast<size_t>(row) * (kTileN / 2) +
-          consumer_half * (kTileN / 4);
+      const int first_consumer_half = epilogue_slot / kConsumerWarpsPerPipe;
+      const int consumer_half_count = kActivePipeCount == 1 ? 2 : 1;
+#pragma unroll
+      for (int half_iter = 0; half_iter < consumer_half_count; ++half_iter) {
+        const int consumer_half =
+            kActivePipeCount == 1 ? half_iter : first_consumer_half;
+        const uint32_t row_taddr0 =
+            o_taddr[0] + (static_cast<uint32_t>(consumer_warp * 32) << 16) +
+            static_cast<uint32_t>(consumer_half * 64);
+        const uint32_t row_taddr1 =
+            o_taddr[1] + (static_cast<uint32_t>(consumer_warp * 32) << 16) +
+            static_cast<uint32_t>(consumer_half * 64);
+        uint32_t* row_dst =
+            output_bf16_smem + static_cast<size_t>(row) * (kTileN / 2) +
+            consumer_half * (kTileN / 4);
 #if ATTENTION_EPILOGUE_CHUNK_COLS == 16
 #pragma unroll
-      for (int chunk = 0; chunk < 4; ++chunk) {
-        const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 16);
+        for (int chunk = 0; chunk < 4; ++chunk) {
+          const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 16);
+          if (pipe1_local_count > 0) {
+#if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+            store_tmem_x16_pair_scale_norm_bf16_smem(
+                row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+                row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
+#else
+            store_tmem_x16_pair_norm_bf16_smem(
+                row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+                row_dst + chunk * 8, inv_sum);
+#endif
+          } else {
+            store_tmem_x16_norm_bf16_smem(row_taddr0 + chunk_offset,
+                                          row_dst + chunk * 8, inv_sum);
+          }
+        }
+#elif ATTENTION_EPILOGUE_CHUNK_COLS == 32
         if (pipe1_local_count > 0) {
 #if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
-          store_tmem_x16_pair_scale_norm_bf16_smem(
-              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
-              row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
+          store_tmem_x32_pair_scale_norm_bf16_smem(
+              row_taddr0, row_taddr1, row_dst, pipe0_scale, pipe1_scale,
+              inv_sum);
+          store_tmem_x32_pair_scale_norm_bf16_smem(
+              row_taddr0 + 32u, row_taddr1 + 32u, row_dst + 16,
+              pipe0_scale, pipe1_scale, inv_sum);
 #else
-          store_tmem_x16_pair_norm_bf16_smem(
-              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
-              row_dst + chunk * 8, inv_sum);
+          store_tmem_x32_pair_norm_bf16_smem(row_taddr0, row_taddr1, row_dst,
+                                             inv_sum);
+          store_tmem_x32_pair_norm_bf16_smem(row_taddr0 + 32u, row_taddr1 + 32u,
+                                             row_dst + 16, inv_sum);
 #endif
         } else {
-          store_tmem_x16_norm_bf16_smem(row_taddr0 + chunk_offset,
-                                        row_dst + chunk * 8, inv_sum);
+          store_tmem_x32_norm_bf16_smem(row_taddr0, row_dst, inv_sum);
+          store_tmem_x32_norm_bf16_smem(row_taddr0 + 32u, row_dst + 16,
+                                        inv_sum);
         }
-      }
-#elif ATTENTION_EPILOGUE_CHUNK_COLS == 32
-      if (pipe1_local_count > 0) {
-#if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
-        store_tmem_x32_pair_scale_norm_bf16_smem(
-            row_taddr0, row_taddr1, row_dst, pipe0_scale, pipe1_scale,
-            inv_sum);
-        store_tmem_x32_pair_scale_norm_bf16_smem(
-            row_taddr0 + 32u, row_taddr1 + 32u, row_dst + 16,
-            pipe0_scale, pipe1_scale, inv_sum);
-#else
-        store_tmem_x32_pair_norm_bf16_smem(row_taddr0, row_taddr1, row_dst,
-                                           inv_sum);
-        store_tmem_x32_pair_norm_bf16_smem(row_taddr0 + 32u, row_taddr1 + 32u,
-                                           row_dst + 16, inv_sum);
-#endif
-      } else {
-        store_tmem_x32_norm_bf16_smem(row_taddr0, row_dst, inv_sum);
-        store_tmem_x32_norm_bf16_smem(row_taddr0 + 32u, row_dst + 16,
-                                      inv_sum);
-      }
 #else
 #error "ATTENTION_EPILOGUE_CHUNK_COLS must be 16 or 32"
 #endif
+      }
     }
     if (trace_epilogue) {
       const unsigned long long epilogue_end = clock64();
@@ -1138,7 +1426,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       tma_store_start_shared = clock64();
     }
 #endif
-    if (lane0 && warp_id == 0) {
+    if (lane0 && warp_id == kControlWarp) {
       tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0,
                    static_cast<int>(blockIdx.x), 0);
       tma_store_commit_group();
@@ -1150,21 +1438,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
   __syncthreads();
 
-  if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
+  if (warp_id == kControlWarp) tcgen05_dealloc_512cols(tmem_base);
   __syncthreads();
-  if (warp_id == 0) tcgen05_relinquish_alloc_permit();
-  if (output != nullptr && lane0 && warp_id == 0) {
+  if (warp_id == kControlWarp) tcgen05_relinquish_alloc_permit();
+  if (output != nullptr && lane0 && warp_id == kControlWarp) {
     tma_store_wait_group_read();
   }
 #if ATTENTION_CLOCK_TRACE
   if (output != nullptr && trace_cta && threadIdx.x == 0) {
     const unsigned long long store_end = clock64();
     write_clock_trace_record(clock_trace, trace_extra_base + 9,
-                             kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
+                             kClockTraceGlobalStore, loop_repeats, -1,
+                             kControlWarp, -1, -1,
                              tma_store_start_shared, store_end,
                              clock_trace_base);
     write_clock_trace_record(clock_trace, trace_extra_base + 10,
-                             kClockTraceTailTotal, loop_repeats, -1, 0, -1, -1,
+                             kClockTraceTailTotal, loop_repeats, -1,
+                             kControlWarp, -1, -1,
                              tail_total_start_shared, store_end,
                              clock_trace_base);
   }
