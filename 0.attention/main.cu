@@ -140,6 +140,7 @@ struct Args {
   // Real attention path.  This is the correctness-oriented implementation:
   // contiguous BF16 Q/K/V/O with shape [B, H, S, D], D fixed to 128.
   bool validation_suite = false;
+  int checksum_repeats = 2;
   int B = 1;
   int Hq = 1;
   int Hkv = 1;
@@ -201,6 +202,7 @@ struct TraceRecord {
   unsigned long long pv_h0_end = 0;
   unsigned long long pv_h1_start = 0xffffffffffffffffull;
   unsigned long long pv_h1_end = 0;
+  int tma_warp_id = -1;
   int pv_warp_id = -1;
   int pv_h0_warp_id = -1;
   int pv_h1_warp_id = -1;
@@ -570,7 +572,7 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
       notes, sizeof(notes),
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_major_k_"
       "v_contiguous_k16_sw128_mn_major_dep_masked_"
-      "split_s_ready_bf16_output"
+      "no_s_ready_bf16_output"
 #if ATTENTION_ROW_SUM_RARE_UPDATE
       "_row_sum_rare_update"
 #elif ATTENTION_FIRST_ITER_ROW_MAX_SHIFT && !ATTENTION_FIRST_ITER_COMPUTE_MAX
@@ -587,7 +589,7 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
 #endif
       "_dep_default_mask_0x%03x"
       ,
-      0x00f
+      0x000
   );
   char output_shape[64];
   std::snprintf(output_shape, sizeof(output_shape), "O[%d,128,128]_bf16", args.blocks);
@@ -794,13 +796,13 @@ void write_clock_trace_csv(const Args& args,
     switch (r.stage) {
       case kClockTraceKTma:
         out.pipe = static_cast<unsigned int>(r.pipe);
-        out.warp_id = static_cast<unsigned int>(r.warp_id);
+        out.tma_warp_id = r.warp_id;
         out.tma_start = r.start;
         out.tma_end = r.end;
         break;
       case kClockTraceKTmaIssue:
         out.pipe = static_cast<unsigned int>(r.pipe);
-        out.warp_id = static_cast<unsigned int>(r.warp_id);
+        out.tma_warp_id = r.warp_id;
         out.tma_start = r.start;
         out.tma_issue_end = r.end;
         break;
@@ -891,7 +893,7 @@ void write_clock_trace_csv(const Args& args,
     std::exit(1);
   }
   std::fprintf(csv,
-               "mode,elapsed_ms,iter,pipe,warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
+               "mode,elapsed_ms,iter,pipe,warp_id,tma_warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
                "mma_cycles,tma_issue_end,tma_issue_cycles,tma_wait_cycles,"
                "mma_issue_end,mma_issue_cycles,mma_wait_cycles,"
                "ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
@@ -924,8 +926,8 @@ void write_clock_trace_csv(const Args& args,
   const char* mode = "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_trace";
   const char* notes =
       "fixed_best_path_qk_contiguous_row_major_2d_sw128_tma_"
-      "v_contiguous_k16_sw128_mn_major_qk_pingpong_dep_pv_pingpong_dep_"
-      "split_s_ready_trace_schema"
+      "v_contiguous_k16_sw128_mn_major_no_cross_pipe_qk_dep_"
+      "no_s_ready_trace_schema"
       ;
   for (const TraceRecord& r : rows) {
     const unsigned long long ld_start = trace_start_or_zero(r.ld_start);
@@ -949,14 +951,15 @@ void write_clock_trace_csv(const Args& args,
     const unsigned long long v_tma_issue_end =
         trace_cycles(r.v_tma_start, r.v_tma_issue_end) > 0 ? r.v_tma_issue_end : 0ull;
     std::fprintf(csv,
-                 "%s,%.6f,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,"
+                 "%s,%.6f,%u,%u,%u,%d,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
-                 mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_start, r.tma_end,
-                 trace_cycles(r.tma_start, r.tma_end), mma_start,
+                 mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_warp_id,
+                 r.tma_start, r.tma_end, trace_cycles(r.tma_start, r.tma_end),
+                 mma_start,
                  trace_end_or_zero(r.mma_start, r.mma_end),
                  trace_cycles(r.mma_start, r.mma_end), tma_issue_end,
                  trace_cycles(r.tma_start, r.tma_issue_end),
@@ -1393,14 +1396,58 @@ struct CompareResult {
   float max_abs;
   float max_rel;
   size_t bad_count;
+  uint64_t checksum;
+  uint64_t repeat_checksum;
+  bool checksum_stable;
 };
+
+uint64_t validation_checksum_bytes(const void* data, size_t bytes) {
+  const uint8_t* p = static_cast<const uint8_t*>(data);
+  uint64_t hash = 1469598103934665603ull;
+  for (size_t i = 0; i < bytes; ++i) {
+    hash ^= static_cast<uint64_t>(p[i]);
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+template <typename T>
+uint64_t validation_checksum_vector(const std::vector<T>& values) {
+  return values.empty()
+             ? validation_checksum_bytes(nullptr, 0)
+             : validation_checksum_bytes(values.data(), values.size() * sizeof(T));
+}
+
+void set_validation_checksum(CompareResult* r, uint64_t checksum) {
+  r->checksum = checksum;
+  r->repeat_checksum = checksum;
+  r->checksum_stable = true;
+}
+
+template <typename Fn>
+CompareResult run_validation_repeated(Fn run_once, int repeats) {
+  const int count = std::max(1, repeats);
+  CompareResult out = run_once();
+  for (int i = 1; i < count; ++i) {
+    CompareResult next = run_once();
+    out.ok = out.ok && next.ok;
+    out.max_abs = std::max(out.max_abs, next.max_abs);
+    out.max_rel = std::max(out.max_rel, next.max_rel);
+    out.bad_count += next.bad_count;
+    out.repeat_checksum = next.checksum;
+    out.checksum_stable = out.checksum_stable && next.checksum_stable &&
+                          out.checksum == next.checksum;
+  }
+  out.ok = out.ok && out.checksum_stable;
+  return out;
+}
 
 CompareResult compare_float(const char* stage,
                             const std::vector<float>& got,
                             const std::vector<float>& expected,
                             float abs_tol,
                             float rel_tol) {
-  CompareResult r{std::string(stage), true, 0.0f, 0.0f, 0};
+  CompareResult r{std::string(stage), true, 0.0f, 0.0f, 0, 0, 0, true};
   for (size_t i = 0; i < got.size(); ++i) {
     const float diff = std::fabs(got[i] - expected[i]);
     const float rel = diff / std::max(std::fabs(expected[i]), 1.0e-6f);
@@ -1417,13 +1464,14 @@ CompareResult compare_float(const char* stage,
 CompareResult compare_bf16_words(const char* stage,
                                  const std::vector<uint32_t>& got,
                                  const std::vector<uint32_t>& expected) {
-  CompareResult r{std::string(stage), true, 0.0f, 0.0f, 0};
+  CompareResult r{std::string(stage), true, 0.0f, 0.0f, 0, 0, 0, true};
   for (size_t i = 0; i < got.size(); ++i) {
     if (got[i] != expected[i]) {
       r.ok = false;
       ++r.bad_count;
     }
   }
+  set_validation_checksum(&r, validation_checksum_vector(got));
   return r;
 }
 
@@ -1433,10 +1481,14 @@ void write_validation_csv(const char* path, const std::vector<CompareResult>& re
     std::perror(path);
     std::exit(1);
   }
-  std::fprintf(csv, "stage,status,max_abs,max_rel,bad_count\n");
+  std::fprintf(csv,
+               "stage,status,max_abs,max_rel,bad_count,checksum,repeat_checksum,checksum_stable\n");
   for (const CompareResult& r : results) {
-    std::fprintf(csv, "%s,%s,%g,%g,%zu\n", r.stage.c_str(), r.ok ? "ok" : "fail",
-                 r.max_abs, r.max_rel, r.bad_count);
+    std::fprintf(csv, "%s,%s,%g,%g,%zu,%016llx,%016llx,%s\n",
+                 r.stage.c_str(), r.ok ? "ok" : "fail", r.max_abs, r.max_rel,
+                 r.bad_count, static_cast<unsigned long long>(r.checksum),
+                 static_cast<unsigned long long>(r.repeat_checksum),
+                 r.checksum_stable ? "yes" : "no");
   }
   std::fclose(csv);
 }
@@ -1470,6 +1522,8 @@ void parse_args(int argc, char** argv, Args* args) {
     } else if (!std::strcmp(argv[i], "--validate-suite")) {
       args->stage = "fused_validate";
       args->validation_suite = true;
+    } else if (!std::strcmp(argv[i], "--checksum-repeats") && i + 1 < argc) {
+      args->checksum_repeats = std::atoi(argv[++i]);
     } else if (!std::strcmp(argv[i], "--pattern") && i + 1 < argc) {
       args->pattern = argv[++i];
     } else if (!std::strcmp(argv[i], "--csv") && i + 1 < argc) {
@@ -1515,6 +1569,7 @@ void parse_args(int argc, char** argv, Args* args) {
           "  --causal                       bottom-right aligned causal mask\n"
           "  --scale F                      softmax scale; default is 1/sqrt(D)\n"
           "  --pattern constant|rank1|onehot|random\n"
+          "  --checksum-repeats N           rerun each validation case and require matching output checksum; default 2\n"
           "  --csv PATH\n",
           argv[0]);
       std::exit(0);
@@ -1532,6 +1587,7 @@ void parse_args(int argc, char** argv, Args* args) {
   if (args->Sq < 1) args->Sq = 1;
   if (args->Skv < 1) args->Skv = 1;
   if (args->D < 1) args->D = 1;
+  if (args->checksum_repeats < 1) args->checksum_repeats = 1;
   if (args->clock_trace_start < 0) args->clock_trace_start = 0;
   if (args->clock_trace_iters < 1) args->clock_trace_iters = 1;
   if (args->clock_trace_start >= args->k_tiles) args->clock_trace_start = args->k_tiles - 1;
@@ -1633,7 +1689,9 @@ CompareResult run_real_attention_case(const Args& args, const std::string& label
   // BF16 output plus different CPU/GPU reduction orders makes bit-exact comparison
   // inappropriate.  These tolerances catch real algorithmic errors while allowing
   // expected BF16 quantization and exp/dot ordering differences.
-  return compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
+  CompareResult result = compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
+  set_validation_checksum(&result, validation_checksum_vector(h_o));
+  return result;
 }
 
 bool prepare_fused_real_attention_args(const Args& args, Args* out) {
@@ -1756,7 +1814,9 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   std::snprintf(stage, sizeof(stage),
                 "%s_fused_B1_H1_Sq128_Skv%d_D128_noncausal_scale%.6g_pattern_%s",
                 label.c_str(), args.Skv, scale, args.pattern.c_str());
-  return compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
+  CompareResult result = compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
+  set_validation_checksum(&result, validation_checksum_vector(h_o));
+  return result;
 }
 
 int run_fused_real_validation(const Args& args) {
@@ -1788,18 +1848,26 @@ int run_fused_real_validation(const Args& args) {
       case_args.pattern = c.pattern;
       Args prepared;
       if (!prepare_fused_real_attention_args(case_args, &prepared)) return 2;
-      results.push_back(run_fused_real_attention_case(prepared, c.label));
+      results.push_back(run_validation_repeated(
+          [&]() { return run_fused_real_attention_case(prepared, c.label); },
+          args.checksum_repeats));
     }
   } else {
     Args prepared;
     if (!prepare_fused_real_attention_args(args, &prepared)) return 2;
-    results.push_back(run_fused_real_attention_case(prepared, "real_attention"));
+    results.push_back(run_validation_repeated(
+        [&]() { return run_fused_real_attention_case(prepared, "real_attention"); },
+        args.checksum_repeats));
   }
 
   write_validation_csv(args.csv, results);
   for (const CompareResult& r : results) {
-    std::printf("%s status=%s max_abs=%g max_rel=%g bad=%zu\n", r.stage.c_str(),
-                r.ok ? "ok" : "fail", r.max_abs, r.max_rel, r.bad_count);
+    std::printf("%s status=%s max_abs=%g max_rel=%g bad=%zu checksum=%016llx "
+                "repeat_checksum=%016llx checksum_stable=%s\n",
+                r.stage.c_str(), r.ok ? "ok" : "fail", r.max_abs, r.max_rel,
+                r.bad_count, static_cast<unsigned long long>(r.checksum),
+                static_cast<unsigned long long>(r.repeat_checksum),
+                r.checksum_stable ? "yes" : "no");
   }
   const bool ok = std::all_of(results.begin(), results.end(),
                               [](const CompareResult& r) { return r.ok; });
@@ -1834,17 +1902,25 @@ int run_scalar_real_validation(const Args& args) {
       case_args.causal = c.causal;
       case_args.pattern = c.pattern;
       if (!validate_real_attention_args(case_args)) return 2;
-      results.push_back(run_real_attention_case(case_args, c.label));
+      results.push_back(run_validation_repeated(
+          [&]() { return run_real_attention_case(case_args, c.label); },
+          args.checksum_repeats));
     }
   } else {
     if (!validate_real_attention_args(args)) return 2;
-    results.push_back(run_real_attention_case(args, "real_attention"));
+    results.push_back(run_validation_repeated(
+        [&]() { return run_real_attention_case(args, "real_attention"); },
+        args.checksum_repeats));
   }
 
   write_validation_csv(args.csv, results);
   for (const CompareResult& r : results) {
-    std::printf("%s status=%s max_abs=%g max_rel=%g bad=%zu\n", r.stage.c_str(),
-                r.ok ? "ok" : "fail", r.max_abs, r.max_rel, r.bad_count);
+    std::printf("%s status=%s max_abs=%g max_rel=%g bad=%zu checksum=%016llx "
+                "repeat_checksum=%016llx checksum_stable=%s\n",
+                r.stage.c_str(), r.ok ? "ok" : "fail", r.max_abs, r.max_rel,
+                r.bad_count, static_cast<unsigned long long>(r.checksum),
+                static_cast<unsigned long long>(r.repeat_checksum),
+                r.checksum_stable ? "yes" : "no");
   }
   const bool ok = std::all_of(results.begin(), results.end(),
                               [](const CompareResult& r) { return r.ok; });
