@@ -36,6 +36,8 @@ def rate_text(stage, cycles, clock_mhz, sms, ld_warps):
         return "reg"
     if stage == "PVTAIL":
         return "async"
+    if stage == "WAIT":
+        return "wait"
     bytes_per_stage = K_BYTES if stage == "ST" else (LD_X64X2_BYTES_PER_WARP * ld_warps)
     value = bytes_per_stage * hz / cycles / 1.0e12 * sms
     return f"{value:.3f} TB/s"
@@ -106,10 +108,27 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         and row.get("st_start", "0") not in ("", "0")
         and row.get("st_end", "0") not in ("", "0")
     )
-    stages = [
-        ("K TMA", "tma_start", "tma_end", "#08b557"),
-        ("QK MMA", "mma_start", "mma_end", "#4777c3"),
-    ]
+    stages = []
+    tma_issue_end = _int_field(row, "tma_issue_end", 0)
+    tma_start_raw = _int_field(row, "tma_start", 0)
+    tma_end_raw = _int_field(row, "tma_end", 0)
+    if tma_start_raw and tma_issue_end and tma_end_raw and tma_start_raw < tma_issue_end < tma_end_raw:
+        stages += [
+            ("K TMA issue", "tma_start", "tma_issue_end", "#08b557"),
+            ("K TMA wait", "tma_issue_end", "tma_end", "#9aa0a6"),
+        ]
+    else:
+        stages.append(("K TMA", "tma_start", "tma_end", "#08b557"))
+    mma_issue_end = _int_field(row, "mma_issue_end", 0)
+    mma_start_raw = _int_field(row, "mma_start", 0)
+    mma_end_raw = _int_field(row, "mma_end", 0)
+    if mma_start_raw and mma_issue_end and mma_end_raw and mma_start_raw < mma_issue_end < mma_end_raw:
+        stages += [
+            ("QK MMA issue", "mma_start", "mma_issue_end", "#4777c3"),
+            ("QK MMA tail", "mma_issue_end", "mma_end", "#9aa0a6"),
+        ]
+    else:
+        stages.append(("QK MMA", "mma_start", "mma_end", "#4777c3"))
     if has_split_ld:
         stages += [
             ("LD", "ld_start", "ld_end", "#1f4f7a"),
@@ -118,16 +137,37 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         ]
     else:
         stages.append(("PACK", "ld_start", "ld_end", "#1f4f7a"))
-    stages.append(("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"))
+    v_tma_issue_end = _int_field(row, "v_tma_issue_end", 0)
+    v_tma_start_raw = _int_field(row, "v_tma_start", 0)
+    v_tma_end_raw = _int_field(row, "v_tma_end", 0)
+    if v_tma_start_raw and v_tma_issue_end and v_tma_end_raw and v_tma_start_raw < v_tma_issue_end < v_tma_end_raw:
+        stages += [
+            ("V TMA issue", "v_tma_start", "v_tma_issue_end", "#00a6a6"),
+            ("V TMA wait", "v_tma_issue_end", "v_tma_end", "#9aa0a6"),
+        ]
+    else:
+        stages.append(("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"))
     has_split_pv = row.get("pv_h0_start", "0") not in ("", "0") and row.get("pv_h1_start", "0") not in ("", "0")
     if has_split_pv:
         stages += [
             ("PV MMA h0", "pv_h0_start", "pv_h0_end", "#8c5fbf"),
             ("PV MMA h1", "pv_h1_start", "pv_h1_end", "#6f47a3"),
-            ("PV async tail", "pv_h1_end", "pv_end", "#9aa4b2"),
         ]
+        pv_end_raw = _int_field(row, "pv_end", 0)
+        pv_h1_end_raw = _int_field(row, "pv_h1_end", 0)
+        if pv_h1_end_raw and pv_end_raw and pv_h1_end_raw < pv_end_raw:
+            stages.append(("PV MMA tail", "pv_h1_end", "pv_end", "#9aa0a6"))
     else:
-        stages.append(("PV MMA", "pv_start", "pv_end", "#8c5fbf"))
+        pv_issue_end = _int_field(row, "pv_issue_end", 0)
+        pv_start_raw = _int_field(row, "pv_start", 0)
+        pv_end_raw = _int_field(row, "pv_end", 0)
+        if pv_start_raw and pv_issue_end and pv_end_raw and pv_start_raw < pv_issue_end < pv_end_raw:
+            stages += [
+                ("PV MMA issue", "pv_start", "pv_issue_end", "#8c5fbf"),
+                ("PV MMA tail", "pv_issue_end", "pv_end", "#9aa0a6"),
+            ]
+        else:
+            stages.append(("PV MMA", "pv_start", "pv_end", "#8c5fbf"))
     out = []
     prev_split_end = None
     for name, start_key, end_key, color in stages:
@@ -142,13 +182,15 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         if end <= start:
             continue
         cycles = end - start
-        if name.startswith("PV MMA h"):
+        if name.endswith("wait") or name.endswith("tail"):
+            rate_kind = "WAIT"
+        elif name.startswith("PV MMA h"):
             rate_kind = "MMA4"
         elif name == "PV async tail":
             rate_kind = "PVTAIL"
-        elif name.endswith("MMA"):
+        elif "MMA" in name:
             rate_kind = "MMA"
-        elif name.endswith("TMA"):
+        elif "TMA" in name:
             rate_kind = "TMA"
         else:
             rate_kind = name
@@ -171,12 +213,12 @@ def _int_field(row, key, default=None):
 
 def pv_stage_warp(row, name):
     pipe = int(row["pipe"])
-    if name == "V TMA":
+    if name.startswith("V TMA"):
         return 2 + pipe
     if name == "PV MMA h0":
         return _int_field(row, "pv_h0_warp_id",
                           _int_field(row, "pv_warp_id", 2 + pipe))
-    if name == "PV MMA h1" or name == "PV async tail":
+    if name == "PV MMA h1" or name == "PV async tail" or name == "PV MMA tail":
         return _int_field(row, "pv_h1_warp_id",
                           _int_field(row, "pv_warp_id", 2 + pipe))
     if name.startswith("PV "):
@@ -192,7 +234,7 @@ def pv_consumer_lane(row, name, consumer_base, consumer_count, consumer_lane_mod
     if consumer_count == 8:
         first_warp = consumer_base + pipe * 4
         if first_warp <= warp < first_warp + 4:
-            half = 1 if name in ("PV MMA h1", "PV async tail") else 0
+            half = 1 if name in ("PV MMA h1", "PV async tail", "PV MMA tail") else 0
             lane = (warp - first_warp) * 2 + half
             if consumer_lane_mode == "warp":
                 lane //= 2
@@ -226,7 +268,7 @@ def write_summary(path, rows, base, clock_mhz, sms, ld_warps, consumer_lane_mode
                     row, base, clock_mhz, sms, ld_warps):
                 if has_consumer_warp_stamps(row) and name in ("LD", "PACK", "ST"):
                     continue
-                warp = pv_stage_warp(row, name) if name == "V TMA" or name.startswith("PV ") else row["warp_id"]
+                warp = pv_stage_warp(row, name) if name.startswith("V TMA") or name.startswith("PV ") else row["warp_id"]
                 w.writerow([row["iter"], warp, row["pipe"], name, start, end, cycles, rate])
             if has_consumer_warp_stamps(row):
                 count = consumer_warp_count(row)
@@ -344,7 +386,7 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
                 continue
             if name in ("LD", "PACK", "ST"):
                 lane = ("ld", pipe)
-            elif name == "V TMA":
+            elif name.startswith("V TMA"):
                 lane = ("v_tma", pipe)
             elif name.startswith("PV "):
                 if pv_stage_warp(row, name) == 2 + pipe:
@@ -402,7 +444,6 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
             parts.append(
                 f'<text x="{cx:.1f}" y="{y + 25}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">{name}</text>'
             )
-
     sync_marks = []
     for row in rows:
         iteration = int(row["iter"])

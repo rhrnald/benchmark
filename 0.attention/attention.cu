@@ -229,6 +229,15 @@ __device__ __forceinline__ void attention_pv_pipe_role(
 #endif
     issue_v_tma_tile(v_map, v_smem[pipe], &v_ready[pipe], global_v_tile,
                      lane0);
+#if ATTENTION_CLOCK_TRACE
+    if (trace_iter) {
+      write_clock_trace_record(clock_trace,
+                               trace_slot_base + kClockTraceVTmaIssueSlot,
+                               kClockTraceVTmaIssue, iter, pipe, role_warp_id,
+                               -1, -1, v_tma_start, clock64(),
+                               clock_trace_base);
+    }
+#endif
     mbarrier_wait(&s_ready[pipe][0], phase);
     mbarrier_wait(&v_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
@@ -246,12 +255,16 @@ __device__ __forceinline__ void attention_pv_pipe_role(
     } else {
       mbarrier_wait(&pv_done[0], phase);
     }
+#if ATTENTION_CLOCK_TRACE
+    unsigned long long pv_mma_start = 0ull;
+#endif
     if (lane0) {
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
+        pv_mma_start = clock64();
         begin_clock_trace_record(clock_trace, trace_slot_base + 4,
                                  kClockTracePvMma, iter, pipe, role_warp_id, -1,
-                                 -1, clock64(), clock_trace_base);
+                                 -1, pv_mma_start, clock_trace_base);
       }
       const unsigned long long pv_h0_start =
           trace_iter ? clock64() : 0ull;
@@ -290,6 +303,11 @@ __device__ __forceinline__ void attention_pv_pipe_role(
       tcgen05_commit(&pv_done[pipe]);
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base + kClockTracePvMmaIssueSlot,
+                                 kClockTracePvMmaIssue, iter, pipe,
+                                 role_warp_id, -1, -1, pv_mma_start, clock64(),
+                                 clock_trace_base);
         mbarrier_wait(&pv_done[pipe], phase);
         end_clock_trace_record(clock_trace, trace_slot_base + 4, clock64(),
                                clock_trace_base);
@@ -368,6 +386,15 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
     issue_k_tma_tile(k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
                      lane0);
+#if ATTENTION_CLOCK_TRACE
+    if (trace_iter) {
+      write_clock_trace_record(clock_trace,
+                               trace_slot_base + kClockTraceKTmaIssueSlot,
+                               kClockTraceKTmaIssue, iter, pipe, role_warp_id,
+                               -1, -1, k_tma_start, clock64(),
+                               clock_trace_base);
+    }
+#endif
     mbarrier_wait(&k_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter) {
@@ -382,10 +409,12 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     }
     if (lane0) {
 #if ATTENTION_CLOCK_TRACE
+      unsigned long long qk_mma_start = 0ull;
       if (trace_iter) {
+        qk_mma_start = clock64();
         begin_clock_trace_record(clock_trace, trace_slot_base + 2,
                                  kClockTraceQkMma, iter, pipe, role_warp_id, -1,
-                                 -1, clock64(), clock_trace_base);
+                                 -1, qk_mma_start, clock_trace_base);
       }
 #endif
 #pragma unroll
@@ -394,6 +423,15 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                             mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base + kClockTraceQkMmaIssueSlot,
+                                 kClockTraceQkMmaIssue, iter, pipe,
+                                 role_warp_id, -1, -1, qk_mma_start, clock64(),
+                                 clock_trace_base);
+      }
+#endif
     }
     iter += kActivePipeStride;
     ++local;
@@ -427,6 +465,15 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
     issue_k_tma_tile(k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
                      lane0);
+#if ATTENTION_CLOCK_TRACE
+    if (trace_iter) {
+      write_clock_trace_record(clock_trace,
+                               trace_slot_base + kClockTraceKTmaIssueSlot,
+                               kClockTraceKTmaIssue, iter, pipe, role_warp_id,
+                               -1, -1, k_tma_start, clock64(),
+                               clock_trace_base);
+    }
+#endif
     mbarrier_wait(&k_ready[pipe], phase);
 #if ATTENTION_CLOCK_TRACE
     if (trace_iter) {
@@ -444,10 +491,12 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     }
     if (lane0) {
 #if ATTENTION_CLOCK_TRACE
+      unsigned long long qk_mma_start = 0ull;
       if (trace_iter) {
+        qk_mma_start = clock64();
         begin_clock_trace_record(clock_trace, trace_slot_base + 2,
                                  kClockTraceQkMma, iter, pipe, role_warp_id, -1,
-                                 -1, clock64(), clock_trace_base);
+                                 -1, qk_mma_start, clock_trace_base);
       }
 #endif
 #pragma unroll
@@ -456,6 +505,15 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                             mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+      if (trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base + kClockTraceQkMmaIssueSlot,
+                                 kClockTraceQkMmaIssue, iter, pipe,
+                                 role_warp_id, -1, -1, qk_mma_start, clock64(),
+                                 clock_trace_base);
+      }
+#endif
     }
   }
 #if ATTENTION_CLOCK_TRACE

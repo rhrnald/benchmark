@@ -170,8 +170,10 @@ struct ClockTraceRecord {
 
 struct TraceRecord {
   unsigned long long tma_start = 0;
+  unsigned long long tma_issue_end = 0;
   unsigned long long tma_end = 0;
   unsigned long long mma_start = 0xffffffffffffffffull;
+  unsigned long long mma_issue_end = 0;
   unsigned long long mma_end = 0xffffffffffffffffull;
   unsigned long long ld_start = 0xffffffffffffffffull;
   unsigned long long ld_end = 0;
@@ -190,8 +192,10 @@ struct TraceRecord {
   unsigned long long st_start = 0xffffffffffffffffull;
   unsigned long long st_end = 0;
   unsigned long long v_tma_start = 0;
+  unsigned long long v_tma_issue_end = 0;
   unsigned long long v_tma_end = 0;
   unsigned long long pv_start = 0xffffffffffffffffull;
+  unsigned long long pv_issue_end = 0;
   unsigned long long pv_end = 0;
   unsigned long long pv_h0_start = 0xffffffffffffffffull;
   unsigned long long pv_h0_end = 0;
@@ -226,6 +230,10 @@ enum ClockTraceStage {
   kClockTracePvMmaH1 = 16,
   kClockTraceSync = 17,
   kClockTracePackDetail = 18,
+  kClockTraceQkMmaIssue = 19,
+  kClockTracePvMmaIssue = 20,
+  kClockTraceKTmaIssue = 21,
+  kClockTraceVTmaIssue = 22,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -234,6 +242,10 @@ static constexpr int kClockTracePackStoreBase = 16;
 static constexpr int kClockTraceRowSumBase = 24;
 static constexpr int kClockTraceStoreBase = 32;
 static constexpr int kClockTraceSyncBase = 40;
+static constexpr int kClockTraceQkMmaIssueSlot = 44;
+static constexpr int kClockTracePvMmaIssueSlot = 45;
+static constexpr int kClockTraceKTmaIssueSlot = 46;
+static constexpr int kClockTraceVTmaIssueSlot = 47;
 static constexpr int kClockTracePackDetailBase = 52;
 static constexpr int kClockTraceExtraSlots = 32;
 
@@ -639,12 +651,20 @@ const char* clock_trace_stage_name(int stage) {
       return "q_tma";
     case kClockTraceKTma:
       return "k_tma";
+    case kClockTraceKTmaIssue:
+      return "k_tma_issue";
     case kClockTraceQkMma:
       return "qk_mma";
+    case kClockTraceQkMmaIssue:
+      return "qk_mma_issue";
     case kClockTraceVTma:
       return "v_tma";
+    case kClockTraceVTmaIssue:
+      return "v_tma_issue";
     case kClockTracePvMma:
       return "pv_mma";
+    case kClockTracePvMmaIssue:
+      return "pv_mma_issue";
     case kClockTracePvMmaH0:
       return "pv_mma_h0";
     case kClockTracePvMmaH1:
@@ -778,20 +798,42 @@ void write_clock_trace_csv(const Args& args,
         out.tma_start = r.start;
         out.tma_end = r.end;
         break;
+      case kClockTraceKTmaIssue:
+        out.pipe = static_cast<unsigned int>(r.pipe);
+        out.warp_id = static_cast<unsigned int>(r.warp_id);
+        out.tma_start = r.start;
+        out.tma_issue_end = r.end;
+        break;
       case kClockTraceQkMma:
         out.pipe = static_cast<unsigned int>(r.pipe);
         out.warp_id = static_cast<unsigned int>(r.warp_id);
         out.mma_start = r.start;
         out.mma_end = r.end;
         break;
+      case kClockTraceQkMmaIssue:
+        out.pipe = static_cast<unsigned int>(r.pipe);
+        out.warp_id = static_cast<unsigned int>(r.warp_id);
+        out.mma_start = r.start;
+        out.mma_issue_end = r.end;
+        break;
       case kClockTraceVTma:
         out.pipe = static_cast<unsigned int>(r.pipe);
         out.v_tma_start = r.start;
         out.v_tma_end = r.end;
         break;
+      case kClockTraceVTmaIssue:
+        out.pipe = static_cast<unsigned int>(r.pipe);
+        out.v_tma_start = r.start;
+        out.v_tma_issue_end = r.end;
+        break;
       case kClockTracePvMma:
         out.pv_start = r.start;
         out.pv_end = r.end;
+        out.pv_warp_id = r.warp_id;
+        break;
+      case kClockTracePvMmaIssue:
+        out.pv_start = r.start;
+        out.pv_issue_end = r.end;
         out.pv_warp_id = r.warp_id;
         break;
       case kClockTracePvMmaH0:
@@ -850,9 +892,13 @@ void write_clock_trace_csv(const Args& args,
   }
   std::fprintf(csv,
                "mode,elapsed_ms,iter,pipe,warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
-               "mma_cycles,ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
+               "mma_cycles,tma_issue_end,tma_issue_cycles,tma_wait_cycles,"
+               "mma_issue_end,mma_issue_cycles,mma_wait_cycles,"
+               "ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
                "st_start,st_end,st_cycles,v_tma_start,v_tma_end,v_tma_cycles,"
-               "pv_start,pv_end,pv_cycles,pv_warp_id,pv_h0_start,pv_h0_end,"
+               "v_tma_issue_end,v_tma_issue_cycles,v_tma_wait_cycles,"
+               "pv_start,pv_end,pv_cycles,pv_issue_end,pv_issue_cycles,pv_wait_cycles,"
+               "pv_warp_id,pv_h0_start,pv_h0_end,"
                "pv_h0_cycles,pv_h0_warp_id,pv_h1_start,pv_h1_end,pv_h1_cycles,"
                "pv_h1_warp_id,total_start,total_end,total_cycles");
   for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
@@ -894,19 +940,42 @@ void write_clock_trace_csv(const Args& args,
         std::max(std::max(r.ld_end, r.st_end),
                  std::max(trace_end_or_zero(r.pv_start, r.pv_end),
                           trace_end_or_zero(r.mma_start, r.mma_end)));
+    const unsigned long long mma_issue_end =
+        trace_cycles(r.mma_start, r.mma_issue_end) > 0 ? r.mma_issue_end : 0ull;
+    const unsigned long long pv_issue_end =
+        trace_cycles(r.pv_start, r.pv_issue_end) > 0 ? r.pv_issue_end : 0ull;
+    const unsigned long long tma_issue_end =
+        trace_cycles(r.tma_start, r.tma_issue_end) > 0 ? r.tma_issue_end : 0ull;
+    const unsigned long long v_tma_issue_end =
+        trace_cycles(r.v_tma_start, r.v_tma_issue_end) > 0 ? r.v_tma_issue_end : 0ull;
     std::fprintf(csv,
                  "%s,%.6f,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
-                 "%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
+                 "%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
                  mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_start, r.tma_end,
                  trace_cycles(r.tma_start, r.tma_end), mma_start,
                  trace_end_or_zero(r.mma_start, r.mma_end),
-                 trace_cycles(r.mma_start, r.mma_end), ld_start, r.ld_end,
+                 trace_cycles(r.mma_start, r.mma_end), tma_issue_end,
+                 trace_cycles(r.tma_start, r.tma_issue_end),
+                 tma_issue_end ? trace_cycles(r.tma_issue_end, r.tma_end) : 0ull,
+                 mma_issue_end,
+                 trace_cycles(r.mma_start, r.mma_issue_end),
+                 mma_issue_end ? trace_cycles(r.mma_issue_end, r.mma_end) : 0ull,
+                 ld_start, r.ld_end,
                  trace_cycles(r.ld_start, r.ld_end), pack_start, r.pack_end,
                  trace_cycles(r.pack_start, r.pack_end), st_start, r.st_end,
                  trace_cycles(r.st_start, r.st_end), r.v_tma_start, r.v_tma_end,
-                 trace_cycles(r.v_tma_start, r.v_tma_end), pv_start, r.pv_end,
-                 trace_cycles(r.pv_start, r.pv_end), r.pv_warp_id, pv_h0_start,
+                 trace_cycles(r.v_tma_start, r.v_tma_end), v_tma_issue_end,
+                 trace_cycles(r.v_tma_start, r.v_tma_issue_end),
+                 v_tma_issue_end ? trace_cycles(r.v_tma_issue_end, r.v_tma_end) : 0ull,
+                 pv_start, r.pv_end,
+                 trace_cycles(r.pv_start, r.pv_end), pv_issue_end,
+                 trace_cycles(r.pv_start, r.pv_issue_end),
+                 pv_issue_end ? trace_cycles(r.pv_issue_end, r.pv_end) : 0ull,
+                 r.pv_warp_id, pv_h0_start,
                  r.pv_h0_end, trace_cycles(r.pv_h0_start, r.pv_h0_end),
                  r.pv_h0_warp_id, pv_h1_start, r.pv_h1_end,
                  trace_cycles(r.pv_h1_start, r.pv_h1_end), r.pv_h1_warp_id,
