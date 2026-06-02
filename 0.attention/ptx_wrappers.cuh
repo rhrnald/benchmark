@@ -6,8 +6,16 @@
 #define ATTENTION_SETMAXNREG_PRODUCER 120
 #endif
 
+#ifndef ATTENTION_SETMAXNREG_QK
+#define ATTENTION_SETMAXNREG_QK ATTENTION_SETMAXNREG_PRODUCER
+#endif
+
+#ifndef ATTENTION_SETMAXNREG_TMA
+#define ATTENTION_SETMAXNREG_TMA 128
+#endif
+
 #ifndef ATTENTION_SETMAXNREG_CONSUMER
-#define ATTENTION_SETMAXNREG_CONSUMER 192
+#define ATTENTION_SETMAXNREG_CONSUMER 184
 #endif
 
 #define ATTENTION_STRINGIFY_IMPL(x) #x
@@ -127,6 +135,22 @@ __device__ __forceinline__ void setmaxnreg_dec_producer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("setmaxnreg.dec.sync.aligned.u32 "
                ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_PRODUCER) ";"
+               ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void setmaxnreg_dec_qk() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 "
+               ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_QK) ";"
+               ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void setmaxnreg_dec_tma() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 "
+               ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_TMA) ";"
                ::: "memory");
 #endif
 }
