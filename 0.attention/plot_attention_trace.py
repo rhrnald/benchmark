@@ -172,6 +172,8 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
             end_raw = _int_field(row, f"{prefix}_end", 0)
             if start_raw and issue_end and end_raw and start_raw < issue_end < end_raw:
                 stages.append((f"V TMA {half} issue", f"{prefix}_start", f"{prefix}_issue_end", color))
+            elif start_raw and issue_end and start_raw < issue_end:
+                stages.append((f"V TMA {half} issue", f"{prefix}_start", f"{prefix}_issue_end", color))
             else:
                 stages.append((f"V TMA {half}", f"{prefix}_start", f"{prefix}_end", color))
     else:
@@ -179,6 +181,8 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         v_tma_start_raw = _int_field(row, "v_tma_start", 0)
         v_tma_end_raw = _int_field(row, "v_tma_end", 0)
         if v_tma_start_raw and v_tma_issue_end and v_tma_end_raw and v_tma_start_raw < v_tma_issue_end < v_tma_end_raw:
+            stages.append(("V TMA issue", "v_tma_start", "v_tma_issue_end", "#00a6a6"))
+        elif v_tma_start_raw and v_tma_issue_end and v_tma_start_raw < v_tma_issue_end:
             stages.append(("V TMA issue", "v_tma_start", "v_tma_issue_end", "#00a6a6"))
         else:
             stages.append(("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"))

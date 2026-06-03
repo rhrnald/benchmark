@@ -83,6 +83,50 @@ The validation CSV is written to:
 /tmp/attention_main_validate_rank1_k4.csv
 ```
 
+## Dangerous Optimization Notes
+
+The V-split / K-first path has an experimental dependency relaxation:
+
+```text
+ATTENTION_SPLIT_V_TMA=1
+ATTENTION_SPLIT_V_H0_WITH_K_TMA=1
+ATTENTION_SPLIT_V_H0_BEFORE_K_TMA=0
+ATTENTION_SKIP_V_H0_READY_WAIT=1
+ATTENTION_SKIP_V_H1_READY_WAIT=1
+```
+
+This skips the explicit ready waits between:
+
+```text
+V TMA h0 done -> PV h0
+V TMA h1 done -> PV h1
+```
+
+Current validation status:
+
+```text
+rank1,  B=1,H=1,Sq=128,Skv=32768,D=128, checksum-repeats=100: ok
+random, B=1,H=1,Sq=128,Skv=32768,D=128, checksum-repeats=3:  ok
+```
+
+Observed checksum values:
+
+```text
+rank1:  8bbfabd24db01067
+random: e15a78e498676a13
+```
+
+Measured full benchmark performance for the dangerous path is about
+`1739.7 TFLOP/s` with `blocks=4096`, `k_tiles=256`, `warmup=3`, and
+`iters=10`.
+
+The 100-repeat rank1 validation completed with `checksum_stable=yes` and no
+unspecified CUDA error on the V-split / K-first skip-both binary.
+
+This is not a proven dependency removal. It is only known to pass the current
+validation coverage and should be treated as schedule-sensitive until tested
+against broader data patterns and timing perturbations.
+
 ## Useful Overrides
 
 ```bash

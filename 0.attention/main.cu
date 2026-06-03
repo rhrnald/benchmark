@@ -93,8 +93,14 @@ static constexpr int kVBufferCount = kPipeCount;
 static constexpr int kSBufferCount = kPipeCount;
 static constexpr int kFixedBenchmarkRepeats = 256;
 static constexpr int kFixedBenchmarkKTiles = 256;
-static constexpr int kEx2EmuFreq = 10;
-static constexpr int kEx2EmuRes = 1;
+#ifndef ATTENTION_EX2_EMU_FREQ
+#define ATTENTION_EX2_EMU_FREQ 10
+#endif
+#ifndef ATTENTION_EX2_EMU_RES
+#define ATTENTION_EX2_EMU_RES 1
+#endif
+static constexpr int kEx2EmuFreq = ATTENTION_EX2_EMU_FREQ;
+static constexpr int kEx2EmuRes = ATTENTION_EX2_EMU_RES;
 static constexpr int kDynamicSmemBytes =
     (1 + kKBufferTileCount + kVBufferCount + kSBufferCount) * kTileBytes + 1024;
 static constexpr int kTmemAllocCols = 512;
