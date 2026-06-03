@@ -52,7 +52,7 @@
 #endif
 
 #ifndef ATTENTION_SPLIT_V_TMA
-#define ATTENTION_SPLIT_V_TMA 0
+#define ATTENTION_SPLIT_V_TMA 1
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \

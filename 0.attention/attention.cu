@@ -42,7 +42,7 @@
 #endif
 
 #ifndef ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES
-#define ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES 1792
+#define ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES 1728
 #endif
 
 #ifndef ATTENTION_PIPE1_TMA_HEAD_MARKER
@@ -54,11 +54,11 @@
 #endif
 
 #ifndef ATTENTION_SPLIT_V_TMA
-#define ATTENTION_SPLIT_V_TMA 0
+#define ATTENTION_SPLIT_V_TMA 1
 #endif
 
 #ifndef ATTENTION_SPLIT_V_H0_WITH_K_TMA
-#define ATTENTION_SPLIT_V_H0_WITH_K_TMA 0
+#define ATTENTION_SPLIT_V_H0_WITH_K_TMA 1
 #endif
 
 #ifndef ATTENTION_SPLIT_V_H0_BEFORE_K_TMA
@@ -66,11 +66,37 @@
 #endif
 
 #ifndef ATTENTION_SKIP_V_H0_READY_WAIT
-#define ATTENTION_SKIP_V_H0_READY_WAIT 0
+#define ATTENTION_SKIP_V_H0_READY_WAIT 1
 #endif
 
 #ifndef ATTENTION_SKIP_V_H1_READY_WAIT
-#define ATTENTION_SKIP_V_H1_READY_WAIT 0
+#define ATTENTION_SKIP_V_H1_READY_WAIT 1
+#endif
+
+#ifndef ATTENTION_SKIP_V_H0_READY_WAIT_STEADY
+#define ATTENTION_SKIP_V_H0_READY_WAIT_STEADY ATTENTION_SKIP_V_H0_READY_WAIT
+#endif
+
+#ifndef ATTENTION_SKIP_V_H0_READY_WAIT_TAIL
+#define ATTENTION_SKIP_V_H0_READY_WAIT_TAIL ATTENTION_SKIP_V_H0_READY_WAIT
+#endif
+
+#ifndef ATTENTION_SKIP_V_H1_READY_WAIT_STEADY
+#define ATTENTION_SKIP_V_H1_READY_WAIT_STEADY ATTENTION_SKIP_V_H1_READY_WAIT
+#endif
+
+#ifndef ATTENTION_SKIP_V_H1_READY_WAIT_TAIL
+#define ATTENTION_SKIP_V_H1_READY_WAIT_TAIL ATTENTION_SKIP_V_H1_READY_WAIT
+#endif
+
+#ifndef ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER
+#define ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER 9
+#endif
+
+#if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER != 0 && \
+    (ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER <= 8 || \
+     ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER >= 12)
+#error "ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER must be 0 or 9..11"
 #endif
 
 #ifndef ATTENTION_MINIMAL_TMA_GAP_TRACE
@@ -961,7 +987,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
       }
 #endif
     }
-#if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT)
+#if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT_STEADY)
     mbarrier_wait(&v_ready[pipe], prev_phase);
 #if ATTENTION_CLOCK_TRACE
     if (pv_trace_iter) {
@@ -971,11 +997,28 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
 #endif
     if (lane0) {
+#if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER
+#pragma unroll
+      for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
+           ++mma) {
+        tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                            pv_idesc, local != 1 || mma != 0);
+      }
+      tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+      for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
+           mma < kMmasPerTile / 2; ++mma) {
+        tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                            pv_idesc, true);
+      }
+#else
 #pragma unroll
       for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
                             pv_idesc, local != 1 || mma != 0);
       }
+      tcgen05_commit(&qk_done[pipe]);
+#endif
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
         write_clock_trace_record(clock_trace,
@@ -985,11 +1028,10 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                                  clock_trace_base);
       }
 #endif
-      tcgen05_commit(&qk_done[pipe]);
     }
     mbarrier_wait(&s_h1_done[pipe], prev_phase);
 #if ATTENTION_SPLIT_V_TMA
-#if !ATTENTION_SKIP_V_H1_READY_WAIT
+#if !ATTENTION_SKIP_V_H1_READY_WAIT_STEADY
     mbarrier_wait(&v_h1_ready[pipe], prev_phase);
 #if ATTENTION_CLOCK_TRACE
     if (pv_trace_iter) {
@@ -1048,7 +1090,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     const int tail_trace_slot_base = tail_trace_idx * kClockTraceSlotsPerIter;
 #endif
     mbarrier_wait(&p_done[pipe], tail_phase);
-#if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT)
+#if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT_TAIL)
     mbarrier_wait(&v_ready[pipe], tail_phase);
 #endif
 #if ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_QK_AFTER_PIPE0
@@ -1057,7 +1099,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     }
 #endif
 #if ATTENTION_CLOCK_TRACE
-#if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT)
+#if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT_TAIL)
     if (tail_trace_iter) {
       end_clock_trace_record(clock_trace, tail_trace_slot_base + 3, clock64(),
                              clock_trace_base);
@@ -1065,16 +1107,32 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
 #endif
     if (lane0) {
+#if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER
+#pragma unroll
+      for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
+           ++mma) {
+        tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                            pv_idesc, local != 1 || mma != 0);
+      }
+      tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+      for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
+           mma < kMmasPerTile / 2; ++mma) {
+        tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                            pv_idesc, true);
+      }
+#else
 #pragma unroll
       for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
                             pv_idesc, local != 1 || mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#endif
     }
     mbarrier_wait(&s_h1_done[pipe], tail_phase);
 #if ATTENTION_SPLIT_V_TMA
-#if !ATTENTION_SKIP_V_H1_READY_WAIT
+#if !ATTENTION_SKIP_V_H1_READY_WAIT_TAIL
     mbarrier_wait(&v_h1_ready[pipe], tail_phase);
 #if ATTENTION_CLOCK_TRACE
     if (tail_trace_iter) {

@@ -18,6 +18,10 @@
 #define ATTENTION_SETMAXNREG_CONSUMER 184
 #endif
 
+#ifndef ATTENTION_SKIP_V_TMA_EXPECT_TX
+#define ATTENTION_SKIP_V_TMA_EXPECT_TX 1
+#endif
+
 #define ATTENTION_STRINGIFY_IMPL(x) #x
 #define ATTENTION_STRINGIFY(x) ATTENTION_STRINGIFY_IMPL(x)
 
@@ -296,7 +300,9 @@ __device__ __forceinline__ void issue_v_tma_tile(const CUtensorMap* v_map,
                                                  uint64_t* barrier,
                                                  int global_v_tile,
                                                  bool lane0) {
+#if !ATTENTION_SKIP_V_TMA_EXPECT_TX
   mbarrier_expect_tx(barrier, kTileBytes);
+#endif
   if (lane0) {
     const uint32_t dst_smem_addr = smem_ptr_u32(dst_smem);
     tma_load_4d(v_map, dst_smem_addr, barrier, 0, 0, 0, global_v_tile * 8);
@@ -309,7 +315,9 @@ __device__ __forceinline__ void issue_v_tma_half_tile(const CUtensorMap* v_map,
                                                       int global_v_tile,
                                                       int half,
                                                       bool lane0) {
+#if !ATTENTION_SKIP_V_TMA_EXPECT_TX
   mbarrier_expect_tx(barrier, kTileBytes / 2);
+#endif
   if (lane0) {
     const uint32_t dst_smem_addr =
         smem_ptr_u32(dst_smem) + static_cast<uint32_t>(half) * (kTileBytes / 2);
