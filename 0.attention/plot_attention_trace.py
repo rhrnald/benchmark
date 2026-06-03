@@ -60,6 +60,10 @@ def has_pv_activity(row):
     keys = (
         "v_tma_start",
         "v_tma_end",
+        "v_tma_h0_start",
+        "v_tma_h0_end",
+        "v_tma_h1_start",
+        "v_tma_h1_end",
         "pv_start",
         "pv_end",
         "pv_h0_start",
@@ -118,6 +122,15 @@ def sync_items(row, base):
     return out
 
 
+def sync_stage(sync_idx, iteration):
+    if sync_idx == 0:
+        label = "wait QK+PVh0" if iteration >= 2 else "wait QK"
+        return label, "#4777c3"
+    if sync_idx == 1:
+        return "wait PVh1 done", "#6f47a3"
+    return f"SYNC{sync_idx}", "#d62728"
+
+
 def stage_items(row, base, clock_mhz, sms, ld_warps):
     has_split_ld = (
         row.get("pack_start", "0") not in ("", "0")
@@ -130,10 +143,7 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
     tma_start_raw = _int_field(row, "tma_start", 0)
     tma_end_raw = _int_field(row, "tma_end", 0)
     if tma_start_raw and tma_issue_end and tma_end_raw and tma_start_raw < tma_issue_end < tma_end_raw:
-        stages += [
-            ("K TMA issue", "tma_start", "tma_issue_end", "#08b557"),
-            ("K TMA wait", "tma_issue_end", "tma_end", "#9aa0a6"),
-        ]
+        stages.append(("K TMA issue", "tma_start", "tma_issue_end", "#08b557"))
     else:
         stages.append(("K TMA", "tma_start", "tma_end", "#08b557"))
     mma_issue_end = _int_field(row, "mma_issue_end", 0)
@@ -143,10 +153,7 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
     iter_id = int(row["iter"])
     qk_label = "QK + PV h0 MMA" if iter_id >= 2 else "QK MMA"
     if mma_start_raw and mma_issue_end and mma_end_raw and mma_start_raw < mma_issue_end < mma_end_raw:
-        stages += [
-            (f"{qk_label} issue", "mma_start", "mma_issue_end", "#4777c3"),
-            (f"{qk_label} tail", "mma_issue_end", "mma_end", "#9aa0a6"),
-        ]
+        stages.append((f"{qk_label} issue", "mma_start", "mma_issue_end", "#4777c3"))
     else:
         stages.append((qk_label, "mma_start", "mma_end", "#4777c3"))
     if has_split_ld:
@@ -157,16 +164,24 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         ]
     else:
         stages.append(("PACK", "ld_start", "ld_end", "#1f4f7a"))
-    v_tma_issue_end = _int_field(row, "v_tma_issue_end", 0)
-    v_tma_start_raw = _int_field(row, "v_tma_start", 0)
-    v_tma_end_raw = _int_field(row, "v_tma_end", 0)
-    if v_tma_start_raw and v_tma_issue_end and v_tma_end_raw and v_tma_start_raw < v_tma_issue_end < v_tma_end_raw:
-        stages += [
-            ("V TMA issue", "v_tma_start", "v_tma_issue_end", "#00a6a6"),
-            ("V TMA wait", "v_tma_issue_end", "v_tma_end", "#9aa0a6"),
-        ]
+    if row.get("v_tma_h0_start", "0") not in ("", "0"):
+        for half, color in (("h0", "#00a6a6"), ("h1", "#008c8c")):
+            prefix = f"v_tma_{half}"
+            issue_end = _int_field(row, f"{prefix}_issue_end", 0)
+            start_raw = _int_field(row, f"{prefix}_start", 0)
+            end_raw = _int_field(row, f"{prefix}_end", 0)
+            if start_raw and issue_end and end_raw and start_raw < issue_end < end_raw:
+                stages.append((f"V TMA {half} issue", f"{prefix}_start", f"{prefix}_issue_end", color))
+            else:
+                stages.append((f"V TMA {half}", f"{prefix}_start", f"{prefix}_end", color))
     else:
-        stages.append(("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"))
+        v_tma_issue_end = _int_field(row, "v_tma_issue_end", 0)
+        v_tma_start_raw = _int_field(row, "v_tma_start", 0)
+        v_tma_end_raw = _int_field(row, "v_tma_end", 0)
+        if v_tma_start_raw and v_tma_issue_end and v_tma_end_raw and v_tma_start_raw < v_tma_issue_end < v_tma_end_raw:
+            stages.append(("V TMA issue", "v_tma_start", "v_tma_issue_end", "#00a6a6"))
+        else:
+            stages.append(("V TMA", "v_tma_start", "v_tma_end", "#00a6a6"))
     has_pv_h0 = row.get("pv_h0_start", "0") not in ("", "0")
     has_pv_h1 = row.get("pv_h1_start", "0") not in ("", "0")
     if has_pv_h0 or has_pv_h1:
@@ -174,19 +189,12 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
             stages.append(("PV MMA h0", "pv_h0_start", "pv_h0_end", "#8c5fbf"))
         if has_pv_h1:
             stages.append(("PV MMA h1", "pv_h1_start", "pv_h1_end", "#6f47a3"))
-        pv_end_raw = _int_field(row, "pv_end", 0)
-        pv_h1_end_raw = _int_field(row, "pv_h1_end", 0)
-        if pv_h1_end_raw and pv_end_raw and pv_h1_end_raw < pv_end_raw:
-            stages.append(("PV MMA tail", "pv_h1_end", "pv_end", "#9aa0a6"))
     else:
         pv_issue_end = _int_field(row, "pv_issue_end", 0)
         pv_start_raw = _int_field(row, "pv_start", 0)
         pv_end_raw = _int_field(row, "pv_end", 0)
         if pv_start_raw and pv_issue_end and pv_end_raw and pv_start_raw < pv_issue_end < pv_end_raw:
-            stages += [
-                ("PV MMA issue", "pv_start", "pv_issue_end", "#8c5fbf"),
-                ("PV MMA tail", "pv_issue_end", "pv_end", "#9aa0a6"),
-            ]
+            stages.append(("PV MMA issue", "pv_start", "pv_issue_end", "#8c5fbf"))
         else:
             stages.append(("PV MMA", "pv_start", "pv_end", "#8c5fbf"))
     out = []
@@ -318,7 +326,10 @@ def write_summary(path, rows, base, clock_mhz, sms, ld_warps, consumer_lane_mode
                             row, base, clock_mhz, sms, consumer_warp):
                         w.writerow([row["iter"], warp, row["pipe"], name + suffix, start, end, cycles, rate])
             for sync_idx, start, end, cycles in sync_items(row, base):
-                w.writerow([row["iter"], "CTA", row["pipe"], f"SYNC{sync_idx}", start, end, cycles, "barrier"])
+                iteration = int(row["iter"])
+                name, _ = sync_stage(sync_idx, iteration)
+                warp = 2 + int(row["pipe"]) if sync_idx in (0, 1) else "CTA"
+                w.writerow([row["iter"], warp, row["pipe"], name, start, end, cycles, "wait"])
 
 
 def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_mode):
@@ -486,11 +497,145 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
             parts.append(
                 f'<text x="{cx:.1f}" y="{y + 25}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="white">{name}</text>'
             )
+
+    def compute_lane_for_warp(row, warp, stage_name):
+        pipe = int(row["pipe"])
+        if warp < 0:
+            warp = int(row["warp_id"])
+        if warp in producer_warps:
+            return ("producer", warp)
+        if warp == 2 + pipe:
+            return ("v_tma", pipe)
+        lane = pv_consumer_lane(
+            row, stage_name, consumer_base, consumer_count, consumer_lane_mode
+        ) if per_consumer else None
+        if lane is not None:
+            return lane
+        return ("pv_issue", warp)
+
+    tma_done_marks = []
+    for row in rows:
+        pipe = int(row["pipe"])
+        iteration = int(row["iter"])
+        k_done = _int_field(row, "tma_end", 0)
+        if k_done:
+            lane = ("producer", int(row["warp_id"]))
+            tma_done_marks.append((k_done - base, lane, iteration, pipe, "K", "#08b557"))
+        if row.get("v_tma_h0_end", "0") not in ("", "0"):
+            for label, key, color, lane in (
+                ("Vh0", "v_tma_h0_end", "#00a6a6",
+                 ("producer", int(row["warp_id"]))),
+                ("Vh1", "v_tma_h1_end", "#008c8c",
+                 compute_lane_for_warp(row, pv_stage_warp(row, "PV MMA h1"),
+                                       "PV MMA h1")),
+            ):
+                done = _int_field(row, key, 0)
+                if done:
+                    tma_done_marks.append((done - base, lane, iteration, pipe, label, color))
+        else:
+            done = _int_field(row, "v_tma_end", 0)
+            if done:
+                lane = compute_lane_for_warp(row, pv_stage_warp(row, "PV MMA"),
+                                             "PV MMA")
+                tma_done_marks.append((done - base, lane, iteration, pipe, "V", "#00a6a6"))
+
+    for done, lane, iteration, pipe, label, color in sorted(tma_done_marks):
+        if lane not in lane_index:
+            continue
+        idx = lane_index[lane]
+        y = top + idx * row_h
+        mx = x(done)
+        parts.append(
+            f'<line x1="{mx:.1f}" y1="{y - 3}" x2="{mx:.1f}" y2="{y + bar_h + 5}" stroke="{color}" stroke-width="3"/>'
+        )
+        parts.append(
+            f'<text x="{mx + 4:.1f}" y="{y + bar_h + 16}" font-family="Arial, sans-serif" font-size="10" fill="{color}">{label} done i{iteration}p{pipe}</text>'
+        )
+
+    compute_done_marks = []
+    for row in rows:
+        pipe = int(row["pipe"])
+        iteration = int(row["iter"])
+        qk_wait_done = _int_field(row, "sync0_end", 0)
+        if qk_wait_done:
+            label = "QK+PVh0" if iteration >= 2 else "QK"
+            compute_done_marks.append(
+                (qk_wait_done - base, ("v_tma", pipe), iteration, pipe, label, "#4777c3")
+            )
+            if per_consumer:
+                for consumer_warp in range(consumer_count):
+                    if consumer_count == 8 and (consumer_warp & 1):
+                        continue
+                    start_key = f"ld_warp{consumer_warp}_start"
+                    ld_start = _int_field(row, start_key, 0)
+                    if not ld_start:
+                        continue
+                    if consumer_count == 8 and consumer_lane_mode == "warp":
+                        lane = ("ld", (pipe, consumer_warp // 2))
+                    else:
+                        lane = ("ld", (pipe, consumer_warp))
+                    compute_done_marks.append(
+                        (ld_start - base, lane, iteration, pipe, "", "#4777c3")
+                    )
+            elif ("ld", pipe) in lane_index:
+                ld_start = _int_field(row, "ld_start", 0)
+                if ld_start:
+                    compute_done_marks.append(
+                        (ld_start - base, ("ld", pipe), iteration, pipe, "", "#4777c3")
+                    )
+        else:
+            qk_done = _int_field(row, "mma_end", 0)
+            if not qk_done:
+                continue
+            compute_done_marks.append(
+                (qk_done - base, ("producer", int(row["warp_id"])), iteration, pipe,
+                 "QK", "#4777c3")
+            )
+        pv_h1_wait_done = _int_field(row, "sync1_end", 0)
+        if pv_h1_wait_done:
+            compute_done_marks.append(
+                (pv_h1_wait_done - base, ("v_tma", pipe), iteration, pipe,
+                 "PVh1", "#6f47a3")
+            )
+        else:
+            pv_h1_done = _int_field(row, "pv_h1_end", 0)
+            if not pv_h1_done:
+                continue
+            pv_warp = pv_stage_warp(row, "PV MMA h1")
+            if pv_warp in producer_warps:
+                lane = ("producer", pv_warp)
+            elif pv_warp == 2 + pipe:
+                lane = ("v_tma", pipe)
+            else:
+                lane = pv_consumer_lane(
+                    row, "PV MMA h1", consumer_base, consumer_count, consumer_lane_mode
+                ) if per_consumer else None
+                if lane is None:
+                    lane = ("pv_issue", pv_warp)
+            compute_done_marks.append(
+                (pv_h1_done - base, lane, iteration, pipe, "PVh1", "#6f47a3")
+            )
+
+    for done, lane, iteration, pipe, label, color in sorted(compute_done_marks):
+        if lane not in lane_index:
+            continue
+        idx = lane_index[lane]
+        y = top + idx * row_h
+        mx = x(done)
+        parts.append(
+            f'<line x1="{mx:.1f}" y1="{y - 3}" x2="{mx:.1f}" y2="{y + bar_h + 5}" stroke="{color}" stroke-width="3"/>'
+        )
+        if label:
+            parts.append(
+                f'<text x="{mx + 4:.1f}" y="{y + bar_h + 28}" font-family="Arial, sans-serif" font-size="10" fill="{color}">{label} done i{iteration}p{pipe}</text>'
+            )
     sync_marks = []
     for row in rows:
         iteration = int(row["iter"])
         pipe = int(row["pipe"])
         for sync_idx, start, end, cycles in sync_items(row, base):
+            if sync_idx in (0, 1):
+                continue
             sync_marks.append((end, start, sync_idx, iteration, pipe, cycles))
     for end, start, sync_idx, iteration, pipe, cycles in sorted(sync_marks):
         ex = x(end)

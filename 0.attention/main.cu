@@ -51,6 +51,10 @@
 #define ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS 1
 #endif
 
+#ifndef ATTENTION_SPLIT_V_TMA
+#define ATTENTION_SPLIT_V_TMA 0
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                         \
     cudaError_t err__ = (stmt);                                                \
@@ -195,6 +199,12 @@ struct TraceRecord {
   unsigned long long v_tma_start = 0;
   unsigned long long v_tma_issue_end = 0;
   unsigned long long v_tma_end = 0;
+  unsigned long long v_tma_h0_start = 0;
+  unsigned long long v_tma_h0_issue_end = 0;
+  unsigned long long v_tma_h0_end = 0;
+  unsigned long long v_tma_h1_start = 0;
+  unsigned long long v_tma_h1_issue_end = 0;
+  unsigned long long v_tma_h1_end = 0;
   unsigned long long pv_start = 0xffffffffffffffffull;
   unsigned long long pv_issue_end = 0;
   unsigned long long pv_end = 0;
@@ -399,6 +409,34 @@ void encode_contiguous_sw128_k16_tma_map(CUtensorMap* map, void* base,
                                       CU_TENSOR_MAP_L2_PROMOTION_NONE,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(contiguous_sw128_k16)");
+}
+
+void encode_contiguous_sw128_k16_half_tma_map(CUtensorMap* map, void* base,
+                                              uint64_t tiles) {
+  const cuuint64_t global_dim[4] = {
+      kTileN / 4,
+      16,
+      2,
+      static_cast<cuuint64_t>(8) * tiles};
+  const cuuint64_t global_stride[3] = {
+      static_cast<cuuint64_t>(kTileN / 2) * sizeof(uint32_t),
+      static_cast<cuuint64_t>(kTileN / 4) * sizeof(uint32_t),
+      static_cast<cuuint64_t>(16 * kTileN / 2) * sizeof(uint32_t)};
+  const cuuint32_t box_dim[4] = {kTileN / 4, 16, 2, 4};
+  const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
+  driver_check(cuTensorMapEncodeTiled(map,
+                                      CU_TENSOR_MAP_DATA_TYPE_UINT32,
+                                      4,
+                                      base,
+                                      global_dim,
+                                      global_stride,
+                                      box_dim,
+                                      elem_stride,
+                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_128B,
+                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(contiguous_sw128_k16_half)");
 }
 
 void encode_bf16_output_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
@@ -820,13 +858,29 @@ void write_clock_trace_csv(const Args& args,
         break;
       case kClockTraceVTma:
         out.pipe = static_cast<unsigned int>(r.pipe);
-        out.v_tma_start = r.start;
-        out.v_tma_end = r.end;
+        if (r.half == 0) {
+          out.v_tma_h0_start = r.start;
+          out.v_tma_h0_end = r.end;
+        } else if (r.half == 1) {
+          out.v_tma_h1_start = r.start;
+          out.v_tma_h1_end = r.end;
+        } else {
+          out.v_tma_start = r.start;
+          out.v_tma_end = r.end;
+        }
         break;
       case kClockTraceVTmaIssue:
         out.pipe = static_cast<unsigned int>(r.pipe);
-        out.v_tma_start = r.start;
-        out.v_tma_issue_end = r.end;
+        if (r.half == 0) {
+          out.v_tma_h0_start = r.start;
+          out.v_tma_h0_issue_end = r.end;
+        } else if (r.half == 1) {
+          out.v_tma_h1_start = r.start;
+          out.v_tma_h1_issue_end = r.end;
+        } else {
+          out.v_tma_start = r.start;
+          out.v_tma_issue_end = r.end;
+        }
         break;
       case kClockTracePvMma:
         out.pv_start = r.start;
@@ -899,6 +953,10 @@ void write_clock_trace_csv(const Args& args,
                "ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
                "st_start,st_end,st_cycles,v_tma_start,v_tma_end,v_tma_cycles,"
                "v_tma_issue_end,v_tma_issue_cycles,v_tma_wait_cycles,"
+               "v_tma_h0_start,v_tma_h0_end,v_tma_h0_cycles,"
+               "v_tma_h0_issue_end,v_tma_h0_issue_cycles,v_tma_h0_wait_cycles,"
+               "v_tma_h1_start,v_tma_h1_end,v_tma_h1_cycles,"
+               "v_tma_h1_issue_end,v_tma_h1_issue_cycles,v_tma_h1_wait_cycles,"
                "pv_start,pv_end,pv_cycles,pv_issue_end,pv_issue_cycles,pv_wait_cycles,"
                "pv_warp_id,pv_h0_start,pv_h0_end,"
                "pv_h0_cycles,pv_h0_warp_id,pv_h1_start,pv_h1_end,pv_h1_cycles,"
@@ -950,12 +1008,18 @@ void write_clock_trace_csv(const Args& args,
         trace_cycles(r.tma_start, r.tma_issue_end) > 0 ? r.tma_issue_end : 0ull;
     const unsigned long long v_tma_issue_end =
         trace_cycles(r.v_tma_start, r.v_tma_issue_end) > 0 ? r.v_tma_issue_end : 0ull;
+    const unsigned long long v_tma_h0_issue_end =
+        trace_cycles(r.v_tma_h0_start, r.v_tma_h0_issue_end) > 0 ? r.v_tma_h0_issue_end : 0ull;
+    const unsigned long long v_tma_h1_issue_end =
+        trace_cycles(r.v_tma_h1_start, r.v_tma_h1_issue_end) > 0 ? r.v_tma_h1_issue_end : 0ull;
     std::fprintf(csv,
                  "%s,%.6f,%u,%u,%u,%d,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
                  mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_warp_id,
                  r.tma_start, r.tma_end, trace_cycles(r.tma_start, r.tma_end),
@@ -974,6 +1038,16 @@ void write_clock_trace_csv(const Args& args,
                  trace_cycles(r.v_tma_start, r.v_tma_end), v_tma_issue_end,
                  trace_cycles(r.v_tma_start, r.v_tma_issue_end),
                  v_tma_issue_end ? trace_cycles(r.v_tma_issue_end, r.v_tma_end) : 0ull,
+                 r.v_tma_h0_start, r.v_tma_h0_end,
+                 trace_cycles(r.v_tma_h0_start, r.v_tma_h0_end),
+                 v_tma_h0_issue_end,
+                 trace_cycles(r.v_tma_h0_start, r.v_tma_h0_issue_end),
+                 v_tma_h0_issue_end ? trace_cycles(r.v_tma_h0_issue_end, r.v_tma_h0_end) : 0ull,
+                 r.v_tma_h1_start, r.v_tma_h1_end,
+                 trace_cycles(r.v_tma_h1_start, r.v_tma_h1_end),
+                 v_tma_h1_issue_end,
+                 trace_cycles(r.v_tma_h1_start, r.v_tma_h1_issue_end),
+                 v_tma_h1_issue_end ? trace_cycles(r.v_tma_h1_issue_end, r.v_tma_h1_end) : 0ull,
                  pv_start, r.pv_end,
                  trace_cycles(r.pv_start, r.pv_end), pv_issue_end,
                  trace_cycles(r.pv_start, r.pv_issue_end),
@@ -1782,8 +1856,13 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   encode_qk_contiguous_sw128_tma_map(&q_map, d_q, 1);
   encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
                                      static_cast<uint64_t>(args.k_tiles));
+#if ATTENTION_SPLIT_V_TMA
+  encode_contiguous_sw128_k16_half_tma_map(&v_map, d_v,
+                                           static_cast<uint64_t>(args.k_tiles));
+#else
   encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
                                       static_cast<uint64_t>(args.k_tiles));
+#endif
   encode_bf16_output_tma_map(&o_map, d_o, 1);
 
   CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel<0, 0>,
@@ -1967,8 +2046,13 @@ int run_benchmark(const Args& args_in) {
                                      static_cast<uint64_t>(args.blocks));
   encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
                                      static_cast<uint64_t>(kv_total_tiles));
+#if ATTENTION_SPLIT_V_TMA
+  encode_contiguous_sw128_k16_half_tma_map(&v_map, d_v,
+                                           static_cast<uint64_t>(kv_total_tiles));
+#else
   encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
                                       static_cast<uint64_t>(kv_total_tiles));
+#endif
   encode_bf16_output_tma_map(&o_map, d_o, static_cast<uint64_t>(args.blocks));
 
 #if ATTENTION_CLOCK_TRACE
