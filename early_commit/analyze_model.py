@@ -2,7 +2,7 @@
 import argparse
 import csv
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 
 
 def read_csv(path):
@@ -30,6 +30,7 @@ def summarize(name, values):
         "min": min(values) if values else 0.0,
         "p05": pct(values, 0.05),
         "mean": mean(values) if values else 0.0,
+        "stdev": stdev(values) if len(values) > 1 else 0.0,
         "p95": pct(values, 0.95),
         "max": max(values) if values else 0.0,
     }
@@ -134,6 +135,9 @@ def main():
             safe = sum(1 for row in rows if int(f(row, "safe")) == 1)
             alpha_values = [f(row, "early_wait_to_ld_start") for row in rows]
             alpha_mean = mean(alpha_values) if alpha_values else 0.0
+            alpha_stdev = stdev(alpha_values) if len(alpha_values) > 1 else 0.0
+            ld_target_values = [f(row, "ld_start_after_target_issue_end") for row in rows]
+            ld_target_stdev = stdev(ld_target_values) if len(ld_target_values) > 1 else 0.0
             compare_rows.append(
                 {
                     "delay_cycles": delay,
@@ -141,6 +145,7 @@ def main():
                     "safe_rate": f"{safe / len(rows):.6f}" if rows else "0.000000",
                     "alpha_min": f"{min(alpha_values):.3f}" if alpha_values else "0.000",
                     "alpha_mean": f"{alpha_mean:.3f}",
+                    "alpha_stdev": f"{alpha_stdev:.3f}",
                     "alpha_max": f"{max(alpha_values):.3f}" if alpha_values else "0.000",
                     "pred_late_at_alpha_mean": f"{probability(v_late, e, alpha_mean):.6f}",
                     "pred_ready_start_at_alpha_mean": f"{probability(v_ready_start, e, alpha_mean):.6f}",
@@ -148,9 +153,10 @@ def main():
                     "pred_late_at_alpha_dist": f"{probability_for_alpha_distribution(v_late, e, alpha_values):.6f}",
                     "pred_ready_start_at_alpha_dist": f"{probability_for_alpha_distribution(v_ready_start, e, alpha_values):.6f}",
                     "pred_ready_end_at_alpha_dist": f"{probability_for_alpha_distribution(v_ready_end, e, alpha_values):.6f}",
-                    "ld_start_after_target_issue_end_min": f"{min(f(row, 'ld_start_after_target_issue_end') for row in rows):.3f}",
-                    "ld_start_after_target_issue_end_mean": f"{mean(f(row, 'ld_start_after_target_issue_end') for row in rows):.3f}",
-                    "ld_start_after_target_issue_end_max": f"{max(f(row, 'ld_start_after_target_issue_end') for row in rows):.3f}",
+                    "ld_start_after_target_issue_end_min": f"{min(ld_target_values):.3f}",
+                    "ld_start_after_target_issue_end_mean": f"{mean(ld_target_values):.3f}",
+                    "ld_start_after_target_issue_end_stdev": f"{ld_target_stdev:.3f}",
+                    "ld_start_after_target_issue_end_max": f"{max(ld_target_values):.3f}",
                 }
             )
         if args.compare_csv:
@@ -163,6 +169,7 @@ def main():
                     "safe_rate",
                     "alpha_min",
                     "alpha_mean",
+                    "alpha_stdev",
                     "alpha_max",
                     "pred_late_at_alpha_mean",
                     "pred_ready_start_at_alpha_mean",
@@ -172,6 +179,7 @@ def main():
                     "pred_ready_end_at_alpha_dist",
                     "ld_start_after_target_issue_end_min",
                     "ld_start_after_target_issue_end_mean",
+                    "ld_start_after_target_issue_end_stdev",
                     "ld_start_after_target_issue_end_max",
                 ],
             )
@@ -203,14 +211,14 @@ def main():
             "",
             "## Distributions",
             "",
-            "| quantity | n | min | p05 | mean | p95 | max |",
-            "|---|---:|---:|---:|---:|---:|---:|",
+            "| quantity | n | min | p05 | mean | stdev | p95 | max |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for item in summaries:
             lines.append(
                 f"| {item['name']} | {item['n']} | {item['min']:.3f} | "
-                f"{item['p05']:.3f} | {item['mean']:.3f} | {item['p95']:.3f} | "
-                f"{item['max']:.3f} |"
+                f"{item['p05']:.3f} | {item['mean']:.3f} | {item['stdev']:.3f} | "
+                f"{item['p95']:.3f} | {item['max']:.3f} |"
             )
         lines.extend(
             [
@@ -230,17 +238,19 @@ def main():
                     "",
                     "## Race Comparison",
                     "",
-                    "| delay | actual safe | alpha mean | ready-start mean | ready-start dist | ready-end dist | LD-target mean |",
-                    "|---:|---:|---:|---:|---:|---:|---:|",
+                    "| delay | actual safe | alpha mean | alpha stdev | ready-start mean | ready-start dist | ready-end dist | LD-target mean | LD-target stdev |",
+                    "|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
                 ]
             )
             for row in compare_rows:
                 lines.append(
                     f"| {row['delay_cycles']} | {row['safe_rate']} | {row['alpha_mean']} | "
+                    f"{row['alpha_stdev']} | "
                     f"{row['pred_ready_start_at_alpha_mean']} | "
                     f"{row['pred_ready_start_at_alpha_dist']} | "
                     f"{row['pred_ready_end_at_alpha_dist']} | "
-                    f"{row['ld_start_after_target_issue_end_mean']} |"
+                    f"{row['ld_start_after_target_issue_end_mean']} | "
+                    f"{row['ld_start_after_target_issue_end_stdev']} |"
                 )
         Path(args.out_md).write_text("\n".join(lines) + "\n")
 
