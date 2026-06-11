@@ -198,6 +198,8 @@ struct TraceRecord {
   unsigned long long st_warp_end[kTraceConsumerLanesPerPipe];
   unsigned long long sum_warp_start[kTraceConsumerLanesPerPipe];
   unsigned long long sum_warp_end[kTraceConsumerLanesPerPipe];
+  unsigned long long qk_wait_warp_start[kConsumerWarpsPerPipe];
+  unsigned long long qk_wait_warp_end[kConsumerWarpsPerPipe];
   unsigned long long pack_start = 0xffffffffffffffffull;
   unsigned long long pack_end = 0;
   unsigned long long st_start = 0xffffffffffffffffull;
@@ -258,9 +260,10 @@ enum ClockTraceStage {
   kClockTraceEarlyCommit = 23,
   kClockTraceFullMmaIssue = 24,
   kClockTraceFullMmaWait = 25,
+  kClockTraceQkDoneWait = 26,
 };
 
-static constexpr int kClockTraceSlotsPerIter = 64;
+static constexpr int kClockTraceSlotsPerIter = 80;
 static constexpr int kClockTraceLdBase = 8;
 static constexpr int kClockTracePackStoreBase = 16;
 static constexpr int kClockTraceRowSumBase = 24;
@@ -270,10 +273,11 @@ static constexpr int kClockTraceQkMmaIssueSlot = 44;
 static constexpr int kClockTracePvMmaIssueSlot = 45;
 static constexpr int kClockTraceKTmaIssueSlot = 46;
 static constexpr int kClockTraceVTmaIssueSlot = 47;
-static constexpr int kClockTraceEarlyCommitSlot = 49;
-static constexpr int kClockTraceFullMmaIssueSlot = 50;
-static constexpr int kClockTraceFullMmaWaitSlot = 51;
+static constexpr int kClockTraceEarlyCommitSlot = 64;
+static constexpr int kClockTraceFullMmaIssueSlot = 65;
+static constexpr int kClockTraceFullMmaWaitSlot = 66;
 static constexpr int kClockTracePackDetailBase = 52;
+static constexpr int kClockTraceQkDoneWaitBase = 60;
 static constexpr int kClockTraceExtraSlots = 32;
 
 #include "ptx_wrappers.cuh"
@@ -690,6 +694,10 @@ void init_trace_record(TraceRecord* r, int iter) {
     r->sync_start[i] = 0xffffffffffffffffull;
     r->sync_end[i] = 0;
   }
+  for (int i = 0; i < kConsumerWarpsPerPipe; ++i) {
+    r->qk_wait_warp_start[i] = 0xffffffffffffffffull;
+    r->qk_wait_warp_end[i] = 0;
+  }
   r->pack_start = 0xffffffffffffffffull;
   r->st_start = 0xffffffffffffffffull;
   r->pv_start = 0xffffffffffffffffull;
@@ -726,6 +734,8 @@ const char* clock_trace_stage_name(int stage) {
       return "full_mma_issue";
     case kClockTraceFullMmaWait:
       return "full_mma_wait";
+    case kClockTraceQkDoneWait:
+      return "qk_done_wait";
     case kClockTracePvMmaH0:
       return "pv_mma_h0";
     case kClockTracePvMmaH1:
@@ -931,6 +941,13 @@ void write_clock_trace_csv(const Args& args,
         out.full_issue_end = r.start;
         out.full_done_end = r.end;
         break;
+      case kClockTraceQkDoneWait:
+        if (r.consumer_warp >= 0 &&
+            r.consumer_warp < kConsumerWarpsPerPipe) {
+          out.qk_wait_warp_start[r.consumer_warp] = r.start;
+          out.qk_wait_warp_end[r.consumer_warp] = r.end;
+        }
+        break;
       case kClockTracePvMmaH0:
         out.pv_h0_start = r.start;
         out.pv_h0_end = r.end;
@@ -988,10 +1005,12 @@ void write_clock_trace_csv(const Args& args,
   std::fprintf(csv,
                "mode,elapsed_ms,iter,pipe,warp_id,tma_warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
                "mma_cycles,tma_issue_end,tma_issue_cycles,tma_wait_cycles,"
-               "mma_issue_end,mma_issue_cycles,mma_wait_cycles,"
-               "early_commit_end,full_issue_end,full_done_end,full_done_wait_cycles,"
-               "earliest_pack_start,softmax_start_after_full_issue,"
-               "mma_done_after_full_issue,hazard_margin,"
+	               "mma_issue_end,mma_issue_cycles,mma_wait_cycles,"
+	               "early_commit_end,full_issue_end,full_done_end,full_done_wait_cycles,"
+	               "early_wait_start,early_wait_end,early_wait_cycles,"
+	               "earliest_pack_start,softmax_start_after_early_wait,"
+	               "mma_done_after_early_wait,hazard_margin_after_early_wait,"
+	               "softmax_start_after_full_issue,mma_done_after_full_issue,hazard_margin,"
                "ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
                "st_start,st_end,st_cycles,v_tma_start,v_tma_end,v_tma_cycles,"
                "v_tma_issue_end,v_tma_issue_cycles,v_tma_wait_cycles,"
@@ -1015,12 +1034,15 @@ void write_clock_trace_csv(const Args& args,
   for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
     std::fprintf(csv, ",st_warp%d_start,st_warp%d_end", w, w);
   }
-  for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
-    std::fprintf(csv, ",sum_warp%d_start,sum_warp%d_end", w, w);
-  }
-  for (int i = 0; i < kClockTraceSyncCount; ++i) {
-    std::fprintf(csv, ",sync%d_start,sync%d_end,sync%d_cycles", i, i, i);
-  }
+	  for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
+	    std::fprintf(csv, ",sum_warp%d_start,sum_warp%d_end", w, w);
+	  }
+	  for (int w = 0; w < kConsumerWarpsPerPipe; ++w) {
+	    std::fprintf(csv, ",qk_wait_warp%d_start,qk_wait_warp%d_end", w, w);
+	  }
+	  for (int i = 0; i < kClockTraceSyncCount; ++i) {
+	    std::fprintf(csv, ",sync%d_start,sync%d_end,sync%d_cycles", i, i, i);
+	  }
   std::fprintf(csv, ",status,cuda_error,notes\n");
 
   const char* mode = "contiguous_qkv_sw128_2d_tma_pv_2pipe_bf16_output_trace";
@@ -1029,10 +1051,29 @@ void write_clock_trace_csv(const Args& args,
       "v_contiguous_k16_sw128_mn_major_no_cross_pipe_qk_dep_"
       "no_s_ready_trace_schema"
       ;
-  for (const TraceRecord& r : rows) {
-    const unsigned long long ld_start = trace_start_or_zero(r.ld_start);
-    const unsigned long long pack_start = trace_start_or_zero(r.pack_start);
-    const unsigned long long st_start = trace_start_or_zero(r.st_start);
+	  for (const TraceRecord& r : rows) {
+	    const unsigned long long ld_start = trace_start_or_zero(r.ld_start);
+	    const unsigned long long pack_start = trace_start_or_zero(r.pack_start);
+	    int earliest_pack_lane = -1;
+	    for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
+	      const unsigned long long lane_pack_start =
+	          trace_start_or_zero(r.pack_warp_start[w]);
+	      if (lane_pack_start != 0ull &&
+	          (earliest_pack_lane < 0 ||
+	           lane_pack_start <
+	               trace_start_or_zero(r.pack_warp_start[earliest_pack_lane]))) {
+	        earliest_pack_lane = w;
+	      }
+	    }
+	    const int early_wait_warp =
+	        earliest_pack_lane >= 0 ? earliest_pack_lane / 2 : -1;
+	    const unsigned long long early_wait_start =
+	        early_wait_warp >= 0
+	            ? trace_start_or_zero(r.qk_wait_warp_start[early_wait_warp])
+	            : 0ull;
+	    const unsigned long long early_wait_end =
+	        early_wait_warp >= 0 ? r.qk_wait_warp_end[early_wait_warp] : 0ull;
+	    const unsigned long long st_start = trace_start_or_zero(r.st_start);
     const unsigned long long mma_start = trace_start_or_zero(r.mma_start);
     const unsigned long long pv_start = trace_start_or_zero(r.pv_start);
     const unsigned long long pv_h0_start = trace_start_or_zero(r.pv_h0_start);
@@ -1057,10 +1098,10 @@ void write_clock_trace_csv(const Args& args,
         trace_cycles(r.v_tma_h1_start, r.v_tma_h1_issue_end) > 0 ? r.v_tma_h1_issue_end : 0ull;
     std::fprintf(csv,
                  "%s,%.6f,%u,%u,%u,%d,%llu,%llu,%llu,%llu,%llu,%llu,"
-                 "%llu,%llu,%llu,"
-                 "%llu,%llu,%llu,"
-                 "%llu,%llu,%llu,%llu,%llu,%lld,%lld,%lld,"
-                 "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
+	                 "%llu,%llu,%llu,"
+	                 "%llu,%llu,%llu,"
+	                 "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%lld,%lld,%lld,%lld,%lld,%lld,"
+	                 "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,"
@@ -1072,14 +1113,19 @@ void write_clock_trace_csv(const Args& args,
                  trace_cycles(r.mma_start, r.mma_end), tma_issue_end,
                  trace_cycles(r.tma_start, r.tma_issue_end),
                  tma_issue_end ? trace_cycles(r.tma_issue_end, r.tma_end) : 0ull,
-                 mma_issue_end,
-                 trace_cycles(r.mma_start, r.mma_issue_end),
-                 mma_issue_end ? trace_cycles(r.mma_issue_end, r.mma_end) : 0ull,
-                 r.early_commit_end, r.full_issue_end, r.full_done_end,
-                 trace_cycles(r.full_issue_end, r.full_done_end), pack_start,
-                 trace_signed_delta(pack_start, r.full_issue_end),
-                 trace_signed_delta(r.full_done_end, r.full_issue_end),
-                 trace_signed_delta(pack_start, r.full_done_end),
+	                 mma_issue_end,
+	                 trace_cycles(r.mma_start, r.mma_issue_end),
+	                 mma_issue_end ? trace_cycles(r.mma_issue_end, r.mma_end) : 0ull,
+	                 r.early_commit_end, r.full_issue_end, r.full_done_end,
+	                 trace_cycles(r.full_issue_end, r.full_done_end),
+	                 early_wait_start, early_wait_end,
+	                 trace_cycles(early_wait_start, early_wait_end), pack_start,
+	                 trace_signed_delta(pack_start, early_wait_end),
+	                 trace_signed_delta(r.full_done_end, early_wait_end),
+	                 trace_signed_delta(pack_start, r.full_done_end),
+	                 trace_signed_delta(pack_start, r.full_issue_end),
+	                 trace_signed_delta(r.full_done_end, r.full_issue_end),
+	                 trace_signed_delta(pack_start, r.full_done_end),
                  ld_start, r.ld_end,
                  trace_cycles(r.ld_start, r.ld_end), pack_start, r.pack_end,
                  trace_cycles(r.pack_start, r.pack_end), st_start, r.st_end,
@@ -1124,10 +1170,15 @@ void write_clock_trace_csv(const Args& args,
       std::fprintf(csv, ",%llu,%llu", trace_start_or_zero(r.st_warp_start[w]),
                    r.st_warp_end[w]);
     }
-    for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
-      std::fprintf(csv, ",%llu,%llu", trace_start_or_zero(r.sum_warp_start[w]),
-                   r.sum_warp_end[w]);
-    }
+	    for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
+	      std::fprintf(csv, ",%llu,%llu", trace_start_or_zero(r.sum_warp_start[w]),
+	                   r.sum_warp_end[w]);
+	    }
+	    for (int w = 0; w < kConsumerWarpsPerPipe; ++w) {
+	      std::fprintf(csv, ",%llu,%llu",
+	                   trace_start_or_zero(r.qk_wait_warp_start[w]),
+	                   r.qk_wait_warp_end[w]);
+	    }
     for (int i = 0; i < kClockTraceSyncCount; ++i) {
       std::fprintf(csv, ",%llu,%llu,%llu", trace_start_or_zero(r.sync_start[i]),
                    trace_end_or_zero(r.sync_start[i], r.sync_end[i]),

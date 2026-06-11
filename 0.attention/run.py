@@ -167,10 +167,35 @@ def _parse_trace_sample(trace_csv: Path, trace_start: int, sample: int) -> dict[
         raise SystemExit(f"expected exactly one trace row in {trace_csv}, got {len(rows)}")
     row = rows[0]
     pack_starts = [_int_field(row, f"pack_warp{i}_start") for i in range(8)]
-    nonzero_pack_starts = [value for value in pack_starts if value > 0]
-    earliest_pack_start = min(nonzero_pack_starts) if nonzero_pack_starts else _int_field(row, "pack_start")
+    nonzero_pack_starts = [
+        (idx, value) for idx, value in enumerate(pack_starts) if value > 0
+    ]
+    earliest_pack_lane, earliest_pack_start = (
+        min(nonzero_pack_starts, key=lambda item: item[1])
+        if nonzero_pack_starts
+        else (-1, _int_field(row, "pack_start"))
+    )
+    early_wait_warp = earliest_pack_lane // 2 if earliest_pack_lane >= 0 else -1
+    early_wait_start = _int_field(row, "early_wait_start")
+    early_wait_end = _int_field(row, "early_wait_end")
+    if early_wait_warp >= 0:
+        early_wait_start = early_wait_start or _int_field(
+            row, f"qk_wait_warp{early_wait_warp}_start"
+        )
+        early_wait_end = early_wait_end or _int_field(
+            row, f"qk_wait_warp{early_wait_warp}_end"
+        )
     full_issue_end = _int_field(row, "full_issue_end")
     full_done_end = _int_field(row, "full_done_end")
+    softmax_start_after_early_wait = (
+        earliest_pack_start - early_wait_end if earliest_pack_start and early_wait_end else 0
+    )
+    mma_done_after_early_wait = (
+        full_done_end - early_wait_end if full_done_end and early_wait_end else 0
+    )
+    hazard_margin_after_early_wait = (
+        earliest_pack_start - full_done_end if earliest_pack_start and full_done_end else 0
+    )
     softmax_start_after_full_issue = (
         earliest_pack_start - full_issue_end if earliest_pack_start and full_issue_end else 0
     )
@@ -188,7 +213,14 @@ def _parse_trace_sample(trace_csv: Path, trace_start: int, sample: int) -> dict[
         "full_issue_end": full_issue_end,
         "full_done_end": full_done_end,
         "full_done_wait_cycles": _int_field(row, "full_done_wait_cycles"),
+        "early_wait_start": early_wait_start,
+        "early_wait_end": early_wait_end,
+        "early_wait_cycles": _int_field(row, "early_wait_cycles"),
         "earliest_pack_start": earliest_pack_start,
+        "earliest_pack_lane": earliest_pack_lane,
+        "softmax_start_after_early_wait": softmax_start_after_early_wait,
+        "mma_done_after_early_wait": mma_done_after_early_wait,
+        "hazard_margin_after_early_wait": hazard_margin_after_early_wait,
         "softmax_start_after_full_issue": softmax_start_after_full_issue,
         "mma_done_after_full_issue": mma_done_after_full_issue,
         "hazard_margin": hazard_margin,
@@ -196,6 +228,9 @@ def _parse_trace_sample(trace_csv: Path, trace_start: int, sample: int) -> dict[
     }
     for i, value in enumerate(pack_starts):
         parsed[f"pack_warp{i}_start"] = value
+    for i in range(4):
+        parsed[f"qk_wait_warp{i}_start"] = _int_field(row, f"qk_wait_warp{i}_start")
+        parsed[f"qk_wait_warp{i}_end"] = _int_field(row, f"qk_wait_warp{i}_end")
     return parsed
 
 
@@ -209,11 +244,24 @@ def _write_early_commit_summary(out_dir: Path, samples: list[dict[str, object]])
         "full_issue_end",
         "full_done_end",
         "full_done_wait_cycles",
+        "early_wait_start",
+        "early_wait_end",
+        "early_wait_cycles",
         "earliest_pack_start",
+        "earliest_pack_lane",
+        "softmax_start_after_early_wait",
+        "mma_done_after_early_wait",
+        "hazard_margin_after_early_wait",
         "softmax_start_after_full_issue",
         "mma_done_after_full_issue",
         "hazard_margin",
-    ] + [f"pack_warp{i}_start" for i in range(8)] + ["trace_csv"]
+    ] + [f"pack_warp{i}_start" for i in range(8)]
+    sample_fields += [
+        field
+        for i in range(4)
+        for field in (f"qk_wait_warp{i}_start", f"qk_wait_warp{i}_end")
+    ]
+    sample_fields += ["trace_csv"]
 
     samples_csv = out_dir / "early_commit_samples.csv"
     with samples_csv.open("w", newline="") as f:
@@ -227,12 +275,16 @@ def _write_early_commit_summary(out_dir: Path, samples: list[dict[str, object]])
         "valid_n",
         "collision_count",
         "empirical_collision_rate",
+        "x_mean_mma_done_after_early_wait",
+        "x_stddev_early_wait",
+        "y_mean_softmax_start_after_early_wait",
+        "y_stddev_early_wait",
+        "hazard_margin_after_early_wait_mean",
+        "hazard_margin_after_early_wait_stddev",
         "x_mean_mma_done_after_full_issue",
-        "x_stddev",
+        "x_stddev_full_issue",
         "y_mean_softmax_start_after_full_issue",
-        "y_stddev",
-        "hazard_margin_mean",
-        "hazard_margin_stddev",
+        "y_stddev_full_issue",
         "independent_normal_collision_prob",
         "paired_margin_normal_collision_prob",
     ]
@@ -244,16 +296,20 @@ def _write_early_commit_summary(out_dir: Path, samples: list[dict[str, object]])
             row for row in rows
             if row["status"] == "ok"
             and row["cuda_error"] == "no error"
-            and int(row["full_issue_end"]) > 0
+            and int(row["early_wait_end"]) > 0
             and int(row["full_done_end"]) > 0
             and int(row["earliest_pack_start"]) > 0
         ]
-        x_values = [int(row["mma_done_after_full_issue"]) for row in valid]
-        y_values = [int(row["softmax_start_after_full_issue"]) for row in valid]
-        margins = [int(row["hazard_margin"]) for row in valid]
+        x_values = [int(row["mma_done_after_early_wait"]) for row in valid]
+        y_values = [int(row["softmax_start_after_early_wait"]) for row in valid]
+        margins = [int(row["hazard_margin_after_early_wait"]) for row in valid]
         x_mean, x_std = _mean_std(x_values)
         y_mean, y_std = _mean_std(y_values)
         margin_mean, margin_std = _mean_std(margins)
+        x_full_values = [int(row["mma_done_after_full_issue"]) for row in valid]
+        y_full_values = [int(row["softmax_start_after_full_issue"]) for row in valid]
+        x_full_mean, x_full_std = _mean_std(x_full_values)
+        y_full_mean, y_full_std = _mean_std(y_full_values)
         independent_std = math.sqrt(x_std * x_std + y_std * y_std)
         independent_p = _normal_lt_zero(y_mean - x_mean, independent_std)
         paired_p = _normal_lt_zero(margin_mean, margin_std)
@@ -264,12 +320,16 @@ def _write_early_commit_summary(out_dir: Path, samples: list[dict[str, object]])
             "valid_n": len(valid),
             "collision_count": collision_count,
             "empirical_collision_rate": collision_count / len(valid) if valid else 0.0,
-            "x_mean_mma_done_after_full_issue": x_mean,
-            "x_stddev": x_std,
-            "y_mean_softmax_start_after_full_issue": y_mean,
-            "y_stddev": y_std,
-            "hazard_margin_mean": margin_mean,
-            "hazard_margin_stddev": margin_std,
+            "x_mean_mma_done_after_early_wait": x_mean,
+            "x_stddev_early_wait": x_std,
+            "y_mean_softmax_start_after_early_wait": y_mean,
+            "y_stddev_early_wait": y_std,
+            "hazard_margin_after_early_wait_mean": margin_mean,
+            "hazard_margin_after_early_wait_stddev": margin_std,
+            "x_mean_mma_done_after_full_issue": x_full_mean,
+            "x_stddev_full_issue": x_full_std,
+            "y_mean_softmax_start_after_full_issue": y_full_mean,
+            "y_stddev_full_issue": y_full_std,
             "independent_normal_collision_prob": independent_p,
             "paired_margin_normal_collision_prob": paired_p,
         })
@@ -284,14 +344,15 @@ def _write_early_commit_summary(out_dir: Path, samples: list[dict[str, object]])
     with summary_md.open("w") as f:
         f.write("# Early Commit Safety Measurement\n\n")
         f.write("Primary softmax/store start metric: earliest nonzero `pack_warp*_start` per traced iteration.\n\n")
+        f.write("Primary X/Y anchor: consumer `qk_done` early-commit wait end for the same warp as the earliest pack lane.\n\n")
         f.write("| trace_start | valid/n | empirical collision | independent normal | paired margin normal | X mean | Y mean | margin mean |\n")
         f.write("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n")
         for row in summary_rows:
             f.write(
                 "| {trace_start} | {valid_n}/{n} | {empirical_collision_rate:.6g} | "
                 "{independent_normal_collision_prob:.6g} | {paired_margin_normal_collision_prob:.6g} | "
-                "{x_mean_mma_done_after_full_issue:.3f} | {y_mean_softmax_start_after_full_issue:.3f} | "
-                "{hazard_margin_mean:.3f} |\n".format(**row)
+                "{x_mean_mma_done_after_early_wait:.3f} | {y_mean_softmax_start_after_early_wait:.3f} | "
+                "{hazard_margin_after_early_wait_mean:.3f} |\n".format(**row)
             )
 
 
@@ -329,9 +390,10 @@ def early_commit_measure(args: argparse.Namespace) -> int:
             latest = samples[-1]
             print(
                 "trace_start={trace_start} sample={sample} "
-                "mma_done_after_full_issue={mma_done_after_full_issue} "
-                "softmax_start_after_full_issue={softmax_start_after_full_issue} "
-                "hazard_margin={hazard_margin} status={status} cuda_error={cuda_error}".format(**latest),
+                "mma_done_after_early_wait={mma_done_after_early_wait} "
+                "softmax_start_after_early_wait={softmax_start_after_early_wait} "
+                "hazard_margin={hazard_margin_after_early_wait} "
+                "status={status} cuda_error={cuda_error}".format(**latest),
                 flush=True,
             )
 

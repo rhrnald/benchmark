@@ -1339,6 +1339,42 @@ attention_row_sum_update_h1_cold(uint32_t row_taddr,
 }
 #endif
 
+#if ATTENTION_CLOCK_TRACE
+__device__ __forceinline__ unsigned long long
+attention_begin_consumer_qk_wait_trace(ClockTraceRecord* clock_trace,
+                                       int clock_trace_iters,
+                                       int clock_trace_start,
+                                       int iter,
+                                       int lane) {
+  if (clock_trace != nullptr && blockIdx.x == 0 && lane == 0 &&
+      iter >= clock_trace_start &&
+      iter < clock_trace_start + clock_trace_iters) {
+    return clock64();
+  }
+  return 0ull;
+}
+
+__device__ __forceinline__ void attention_end_consumer_qk_wait_trace(
+    ClockTraceRecord* clock_trace,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int iter,
+    int pipe,
+    int consumer_warp,
+    unsigned long long wait_start) {
+  if (wait_start == 0ull) return;
+  const int trace_idx = iter - clock_trace_start;
+  const int warp_id =
+      kConsumerBaseWarp + pipe * kConsumerWarpsPerPipe + consumer_warp;
+  write_clock_trace_record(
+      clock_trace,
+      trace_idx * kClockTraceSlotsPerIter + kClockTraceQkDoneWaitBase +
+          consumer_warp,
+      kClockTraceQkDoneWait, iter, pipe, warp_id, consumer_warp, -1,
+      wait_start, clock64(), clock_trace_base);
+}
+#endif
+
 __device__ __forceinline__ void attention_consumer_pipe_role(
     uint32_t* const (&s_smem)[kPipeCount],
     uint64_t (&qk_done)[kPipeCount],
@@ -1375,7 +1411,17 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
       static_cast<float>(ATTENTION_ROW_SUM_UPDATE_LIMIT);
 #endif
   if (iter < loop_repeats) {
+#if ATTENTION_CLOCK_TRACE
+    const unsigned long long qk_wait_start =
+        attention_begin_consumer_qk_wait_trace(
+            clock_trace, clock_trace_iters, clock_trace_start, iter, lane);
+#endif
     mbarrier_wait(&qk_done[pipe], 0);
+#if ATTENTION_CLOCK_TRACE
+    attention_end_consumer_qk_wait_trace(
+        clock_trace, clock_trace_start, clock_trace_base, iter, pipe,
+        consumer_warp, qk_wait_start);
+#endif
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_COMPUTE_MAX
@@ -1421,7 +1467,17 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
        prefix_check < ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS; ++prefix_check) {
     if (iter < loop_repeats) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
+#if ATTENTION_CLOCK_TRACE
+      const unsigned long long qk_wait_start =
+          attention_begin_consumer_qk_wait_trace(
+              clock_trace, clock_trace_iters, clock_trace_start, iter, lane);
+#endif
       mbarrier_wait(&qk_done[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+      attention_end_consumer_qk_wait_trace(
+          clock_trace, clock_trace_start, clock_trace_base, iter, pipe,
+          consumer_warp, qk_wait_start);
+#endif
       const uint32_t row_taddr =
           p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
       float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
@@ -1465,7 +1521,17 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
 #endif
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
+#if ATTENTION_CLOCK_TRACE
+    const unsigned long long qk_wait_start =
+        attention_begin_consumer_qk_wait_trace(
+            clock_trace, clock_trace_iters, clock_trace_start, iter, lane);
+#endif
     mbarrier_wait(&qk_done[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+    attention_end_consumer_qk_wait_trace(
+        clock_trace, clock_trace_start, clock_trace_base, iter, pipe,
+        consumer_warp, qk_wait_start);
+#endif
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
@@ -1525,7 +1591,17 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
 #else
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
+#if ATTENTION_CLOCK_TRACE
+    const unsigned long long qk_wait_start =
+        attention_begin_consumer_qk_wait_trace(
+            clock_trace, clock_trace_iters, clock_trace_start, iter, lane);
+#endif
     mbarrier_wait(&qk_done[pipe], phase);
+#if ATTENTION_CLOCK_TRACE
+    attention_end_consumer_qk_wait_trace(
+        clock_trace, clock_trace_start, clock_trace_base, iter, pipe,
+        consumer_warp, qk_wait_start);
+#endif
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_ROW_MAX_ONLY
