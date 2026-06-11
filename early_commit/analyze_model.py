@@ -43,6 +43,18 @@ def probability(v_values, e_values, alpha):
     return ok / n
 
 
+def probability_for_alpha_distribution(v_values, e_values, alpha_values):
+    if not alpha_values:
+        return 0.0
+    counts = {}
+    for alpha in alpha_values:
+        counts[alpha] = counts.get(alpha, 0) + 1
+    total = 0.0
+    for alpha, count in counts.items():
+        total += count * probability(v_values, e_values, alpha)
+    return total / len(alpha_values)
+
+
 def group_race(rows):
     grouped = {}
     for row in rows:
@@ -133,6 +145,9 @@ def main():
                     "pred_late_at_alpha_mean": f"{probability(v_late, e, alpha_mean):.6f}",
                     "pred_ready_start_at_alpha_mean": f"{probability(v_ready_start, e, alpha_mean):.6f}",
                     "pred_ready_end_at_alpha_mean": f"{probability(v_ready_end, e, alpha_mean):.6f}",
+                    "pred_late_at_alpha_dist": f"{probability_for_alpha_distribution(v_late, e, alpha_values):.6f}",
+                    "pred_ready_start_at_alpha_dist": f"{probability_for_alpha_distribution(v_ready_start, e, alpha_values):.6f}",
+                    "pred_ready_end_at_alpha_dist": f"{probability_for_alpha_distribution(v_ready_end, e, alpha_values):.6f}",
                     "ld_start_after_target_issue_end_min": f"{min(f(row, 'ld_start_after_target_issue_end') for row in rows):.3f}",
                     "ld_start_after_target_issue_end_mean": f"{mean(f(row, 'ld_start_after_target_issue_end') for row in rows):.3f}",
                     "ld_start_after_target_issue_end_max": f"{max(f(row, 'ld_start_after_target_issue_end') for row in rows):.3f}",
@@ -152,6 +167,9 @@ def main():
                     "pred_late_at_alpha_mean",
                     "pred_ready_start_at_alpha_mean",
                     "pred_ready_end_at_alpha_mean",
+                    "pred_late_at_alpha_dist",
+                    "pred_ready_start_at_alpha_dist",
+                    "pred_ready_end_at_alpha_dist",
                     "ld_start_after_target_issue_end_min",
                     "ld_start_after_target_issue_end_mean",
                     "ld_start_after_target_issue_end_max",
@@ -212,16 +230,16 @@ def main():
                     "",
                     "## Race Comparison",
                     "",
-                    "| delay | actual safe | alpha mean | pred late | pred ready-start | pred ready-end | LD-target mean |",
+                    "| delay | actual safe | alpha mean | ready-start mean | ready-start dist | ready-end dist | LD-target mean |",
                     "|---:|---:|---:|---:|---:|---:|---:|",
                 ]
             )
             for row in compare_rows:
                 lines.append(
                     f"| {row['delay_cycles']} | {row['safe_rate']} | {row['alpha_mean']} | "
-                    f"{row['pred_late_at_alpha_mean']} | "
                     f"{row['pred_ready_start_at_alpha_mean']} | "
-                    f"{row['pred_ready_end_at_alpha_mean']} | "
+                    f"{row['pred_ready_start_at_alpha_dist']} | "
+                    f"{row['pred_ready_end_at_alpha_dist']} | "
                     f"{row['ld_start_after_target_issue_end_mean']} |"
                 )
         Path(args.out_md).write_text("\n".join(lines) + "\n")
