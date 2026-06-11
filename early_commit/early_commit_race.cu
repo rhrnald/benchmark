@@ -286,20 +286,21 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
 }
 
 template <int Insts>
-__device__ __forceinline__ void dummy_alu_delay_unrolled() {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+__device__ __forceinline__ uint32_t dummy_alu_delay_unrolled() {
   uint32_t sink = static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
 #pragma unroll
   for (int i = 0; i < Insts; ++i) {
     asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
   }
   asm volatile("" :: "r"(sink) : "memory");
 #endif
+  return sink;
 }
 
-__device__ __forceinline__ void dummy_alu_delay_runtime(uint32_t insts) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+__device__ __forceinline__ uint32_t dummy_alu_delay_runtime(uint32_t insts) {
   uint32_t sink = static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   for (uint32_t i = 0; i < insts; ++i) {
     asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
   }
@@ -307,14 +308,14 @@ __device__ __forceinline__ void dummy_alu_delay_runtime(uint32_t insts) {
 #else
   (void)insts;
 #endif
+  return sink;
 }
 
 #define DUMMY_ALU_DELAY_CASE(n) \
   case n:                      \
-    dummy_alu_delay_unrolled<n>(); \
-    break
+    return dummy_alu_delay_unrolled<n>()
 
-__device__ __forceinline__ void consumer_delay_instructions(uint32_t insts) {
+__device__ __forceinline__ uint32_t consumer_delay_instructions(uint32_t insts) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   switch (insts) {
     DUMMY_ALU_DELAY_CASE(0);
@@ -447,15 +448,30 @@ __device__ __forceinline__ void consumer_delay_instructions(uint32_t insts) {
     DUMMY_ALU_DELAY_CASE(127);
     DUMMY_ALU_DELAY_CASE(128);
     default:
-      dummy_alu_delay_runtime(insts);
-      break;
+      return dummy_alu_delay_runtime(insts);
   }
 #else
   (void)insts;
+  return 0;
 #endif
 }
 
 #undef DUMMY_ALU_DELAY_CASE
+
+__device__ __forceinline__ uint64_t dependent_clock64(uint32_t dependency) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint64_t now;
+  asm volatile(
+      "{ .reg .u32 dep; mov.u32 dep, %1; mov.u64 %0, %%clock64; }"
+      : "=l"(now)
+      : "r"(dependency)
+      : "memory");
+  return now;
+#else
+  (void)dependency;
+  return clock64();
+#endif
+}
 
 #define TCGEN05_LD_X64_OUTPUTS(a)                                            \
   "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
@@ -645,11 +661,12 @@ void early_commit_race_kernel(Record* __restrict__ records,
     mbarrier_wait(&early_done, 0);
     const uint64_t early_wait_end = clock64() - base_clock;
     if (lane == 0) rec.early_wait_end = early_wait_end;
-    consumer_delay_instructions(static_cast<uint32_t>(delay_cycles_after_early_wait));
+    const uint32_t delay_dependency =
+        consumer_delay_instructions(static_cast<uint32_t>(delay_cycles_after_early_wait));
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
-    const uint64_t ld_start = clock64() - base_clock;
+    const uint64_t ld_start = dependent_clock64(delay_dependency) - base_clock;
     TCGEN05_LD_X64(target_taddr, early_regs);
     tcgen05_wait_ld();
     const uint64_t ld_end = clock64() - base_clock;
