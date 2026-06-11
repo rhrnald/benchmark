@@ -318,40 +318,45 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       : "r"(src_taddr)                                                       \
       : "memory")
 
-#define DUMMY_ALU_ASM_ADD "add.u32 dep, dep, 0x9e3779b9; "
+#define DUMMY_ALU_ASM_LOOP(n)                                                \
+  "mov.u32 ctr, " #n "; "                                                    \
+  "L_delay_%=: "                                                             \
+  "add.u32 dep, dep, 0x9e3779b9; "                                           \
+  "add.u32 ctr, ctr, 0xffffffff; "                                           \
+  "setp.ne.u32 lp, ctr, 0; "                                                 \
+  "@lp bra L_delay_%=; "
 #define DUMMY_ALU_ASM_0 ""
-#define DUMMY_ALU_ASM_1 DUMMY_ALU_ASM_ADD
-#define DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_1 DUMMY_ALU_ASM_1
-#define DUMMY_ALU_ASM_3 DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_1
-#define DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_2
-#define DUMMY_ALU_ASM_5 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_1
-#define DUMMY_ALU_ASM_6 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_2
-#define DUMMY_ALU_ASM_7 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_3
-#define DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_4
-#define DUMMY_ALU_ASM_9 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_1
-#define DUMMY_ALU_ASM_10 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_2
-#define DUMMY_ALU_ASM_11 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_3
-#define DUMMY_ALU_ASM_12 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_4
-#define DUMMY_ALU_ASM_13 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_5
-#define DUMMY_ALU_ASM_14 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_6
-#define DUMMY_ALU_ASM_15 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_7
-#define DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_8
-#define DUMMY_ALU_ASM_24 DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_8
-#define DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_16
-#define DUMMY_ALU_ASM_48 DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_16
-#define DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_32
-#define DUMMY_ALU_ASM_96 DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_32
-#define DUMMY_ALU_ASM_128 DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_64
-#define DUMMY_ALU_ASM_256 DUMMY_ALU_ASM_128 DUMMY_ALU_ASM_128
+#define DUMMY_ALU_ASM_1 DUMMY_ALU_ASM_LOOP(1)
+#define DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_LOOP(2)
+#define DUMMY_ALU_ASM_3 DUMMY_ALU_ASM_LOOP(3)
+#define DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_LOOP(4)
+#define DUMMY_ALU_ASM_5 DUMMY_ALU_ASM_LOOP(5)
+#define DUMMY_ALU_ASM_6 DUMMY_ALU_ASM_LOOP(6)
+#define DUMMY_ALU_ASM_7 DUMMY_ALU_ASM_LOOP(7)
+#define DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_LOOP(8)
+#define DUMMY_ALU_ASM_9 DUMMY_ALU_ASM_LOOP(9)
+#define DUMMY_ALU_ASM_10 DUMMY_ALU_ASM_LOOP(10)
+#define DUMMY_ALU_ASM_11 DUMMY_ALU_ASM_LOOP(11)
+#define DUMMY_ALU_ASM_12 DUMMY_ALU_ASM_LOOP(12)
+#define DUMMY_ALU_ASM_13 DUMMY_ALU_ASM_LOOP(13)
+#define DUMMY_ALU_ASM_14 DUMMY_ALU_ASM_LOOP(14)
+#define DUMMY_ALU_ASM_15 DUMMY_ALU_ASM_LOOP(15)
+#define DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_LOOP(16)
+#define DUMMY_ALU_ASM_24 DUMMY_ALU_ASM_LOOP(24)
+#define DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_LOOP(32)
+#define DUMMY_ALU_ASM_48 DUMMY_ALU_ASM_LOOP(48)
+#define DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_LOOP(64)
+#define DUMMY_ALU_ASM_96 DUMMY_ALU_ASM_LOOP(96)
+#define DUMMY_ALU_ASM_128 DUMMY_ALU_ASM_LOOP(128)
+#define DUMMY_ALU_ASM_256 DUMMY_ALU_ASM_LOOP(256)
 
 #define TCGEN05_DELAYED_LD_X64(src_taddr, seed, delay_asm, out_regs, ld_clock) \
   asm volatile(                                                               \
-      "{ .reg .u32 dep; .reg .pred p; .reg .u64 t; "                          \
+      "{ .reg .u32 dep; .reg .u32 ctr; .reg .pred lp; .reg .u64 t; "           \
       "mov.u32 dep, %66; " delay_asm                                          \
-      "setp.ne.u32 p, dep, 0xffffffff; "                                      \
       "mov.u64 t, %%clock64; "                                                \
       "mov.u64 %64, t; "                                                      \
-      "@p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
+      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS      \
       "}, [%65]; }"                                                           \
       : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
       : "r"(src_taddr), "r"(seed)                                             \
@@ -808,7 +813,7 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
 #undef DUMMY_ALU_ASM_2
 #undef DUMMY_ALU_ASM_1
 #undef DUMMY_ALU_ASM_0
-#undef DUMMY_ALU_ASM_ADD
+#undef DUMMY_ALU_ASM_LOOP
 #undef TCGEN05_LD_X64_OUTPUTS
 #undef TCGEN05_LD_X64_OPERANDS
 
