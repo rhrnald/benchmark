@@ -12,8 +12,8 @@ The benchmark is intentionally independent from `0.attention`:
    tile before the early commit.
 4. The consumer warp waits on that early commit, executes `delay_cycles`
    dependent dummy ALU instructions inside the same inline PTX block as the
-   timestamp and `tcgen05.ld.x64`. The delay uses a fixed-count immediate loop
-   with an `add.u32` in the loop body, then predicates and issues the TMEM load.
+   timestamp and `tcgen05.ld.x64`. The delay uses a runtime-counted loop with
+   an `add.u32` in the loop body, then predicates and issues the TMEM load.
 5. After the producer's full commit completes, the consumer loads the same TMEM
    address again and compares all 32 lanes x 64 registers.
 
@@ -32,7 +32,9 @@ binary name includes those values, for example `early_commit_race_t8_f0`.
 
 `early_target_mmas` and `early_extra_mmas` are selected by host-side template
 dispatch. One binary can sweep multiple values, but each kernel launch is a
-separate specialization with constant producer loop bounds.
+separate specialization with constant producer loop bounds. `delay_cycles` is a
+runtime loop count so the dummy ALU loop cannot be folded away as a compile-time
+constant.
 
 ## Smoke
 
@@ -53,7 +55,7 @@ The default main sweep uses only the target MMA sequence:
 - `full_extra_mmas=0`
 - `early_target_mmas=8`
 - `early_extra_mmas=0`
-- `delay_cycles=0..128` as fixed dummy ALU instruction counts.
+- `delay_cycles=0..128` as runtime dummy ALU loop counts.
 
 ```bash
 make run
@@ -95,8 +97,8 @@ make run TARGET_MMAS=8 FULL_EXTRA_MMAS=0 EARLY_TARGETS=7 EARLY_EXTRAS=0
 
 The detail CSV keeps per-CTA timings and signatures for debugging.
 Use `early_wait_to_ld_start` for the actual measured delay in cycles; the
-`delay_cycles` argument is only the requested dummy ALU instruction count. The
+`delay_cycles` argument is only the requested dummy ALU loop count. The
 early LD is placed after that inline PTX loop, so the requested delay is attached
 to the load instead of only to the timestamp; the LD predicate consumes the loop
 result to keep the dummy operations live.
-Supported fixed delay counts are `0..16,24,32,48,64,96,128,256`.
+Any non-negative delay count accepted by `--delays` can be used.

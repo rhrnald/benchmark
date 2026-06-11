@@ -318,57 +318,29 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       : "r"(src_taddr)                                                       \
       : "memory")
 
-#define DUMMY_ALU_ASM_LOOP(n)                                                \
-  "mov.u32 ctr, " #n "; "                                                    \
-  "L_delay_%=: "                                                             \
-  "add.u32 dep, dep, 0x9e3779b9; "                                           \
-  "add.u32 ctr, ctr, 0xffffffff; "                                           \
-  "setp.ne.u32 lp, ctr, 0; "                                                 \
-  "@lp bra L_delay_%=; "
-#define DUMMY_ALU_ASM_0 ""
-#define DUMMY_ALU_ASM_1 DUMMY_ALU_ASM_LOOP(1)
-#define DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_LOOP(2)
-#define DUMMY_ALU_ASM_3 DUMMY_ALU_ASM_LOOP(3)
-#define DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_LOOP(4)
-#define DUMMY_ALU_ASM_5 DUMMY_ALU_ASM_LOOP(5)
-#define DUMMY_ALU_ASM_6 DUMMY_ALU_ASM_LOOP(6)
-#define DUMMY_ALU_ASM_7 DUMMY_ALU_ASM_LOOP(7)
-#define DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_LOOP(8)
-#define DUMMY_ALU_ASM_9 DUMMY_ALU_ASM_LOOP(9)
-#define DUMMY_ALU_ASM_10 DUMMY_ALU_ASM_LOOP(10)
-#define DUMMY_ALU_ASM_11 DUMMY_ALU_ASM_LOOP(11)
-#define DUMMY_ALU_ASM_12 DUMMY_ALU_ASM_LOOP(12)
-#define DUMMY_ALU_ASM_13 DUMMY_ALU_ASM_LOOP(13)
-#define DUMMY_ALU_ASM_14 DUMMY_ALU_ASM_LOOP(14)
-#define DUMMY_ALU_ASM_15 DUMMY_ALU_ASM_LOOP(15)
-#define DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_LOOP(16)
-#define DUMMY_ALU_ASM_24 DUMMY_ALU_ASM_LOOP(24)
-#define DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_LOOP(32)
-#define DUMMY_ALU_ASM_48 DUMMY_ALU_ASM_LOOP(48)
-#define DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_LOOP(64)
-#define DUMMY_ALU_ASM_96 DUMMY_ALU_ASM_LOOP(96)
-#define DUMMY_ALU_ASM_128 DUMMY_ALU_ASM_LOOP(128)
-#define DUMMY_ALU_ASM_256 DUMMY_ALU_ASM_LOOP(256)
-
-#define TCGEN05_DELAYED_LD_X64(src_taddr, seed, delay_asm, out_regs, ld_clock) \
+#define TCGEN05_DELAYED_LD_X64(src_taddr, seed, delay_count, out_regs, ld_clock) \
   asm volatile(                                                               \
       "{ .reg .u32 dep; .reg .u32 ctr; .reg .pred lp; .reg .pred p; "          \
       ".reg .u64 t; "                                                         \
-      "mov.u32 dep, %66; " delay_asm                                          \
-      "setp.ne.u32 p, dep, 0xffffffff; "                                      \
+      "mov.u32 dep, %66; "                                                    \
+      "mov.u32 ctr, %67; "                                                    \
+      "setp.eq.u32 lp, ctr, 0; "                                              \
+      "@lp bra L_delay_done_%=; "                                             \
+      "L_delay_%=: "                                                          \
+      "add.u32 dep, dep, 0x9e3779b9; "                                        \
+      "add.u32 ctr, ctr, 0xffffffff; "                                        \
+      "setp.ne.u32 lp, ctr, 0; "                                              \
+      "@lp bra L_delay_%=; "                                                  \
+      "L_delay_done_%=: "                                                     \
+      "or.b32 dep, dep, 1; "                                                  \
+      "setp.ne.u32 p, dep, 0; "                                               \
       "mov.u64 t, %%clock64; "                                                \
       "mov.u64 %64, t; "                                                      \
       "@p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
       "}, [%65]; }"                                                           \
       : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
-      : "r"(src_taddr), "r"(seed)                                             \
+      : "r"(src_taddr), "r"(seed), "r"(delay_count)                          \
       : "memory")
-
-#define TCGEN05_DELAYED_LD_IF(n)                                              \
-  if constexpr (DelayInsts == n) {                                            \
-    TCGEN05_DELAYED_LD_X64(target_taddr, delay_seed, DUMMY_ALU_ASM_##n,        \
-                           early_regs, ld_clock);                             \
-  } else
 
 __device__ __forceinline__ void issue_target_mma(int mma,
                                                  uint32_t target_taddr,
@@ -386,26 +358,20 @@ __device__ __forceinline__ void issue_extra_mma(int mma,
   tcgen05_mma_bf16_ss(extra_taddr, q_desc[mma & 7], k_desc[mma & 7], idesc, mma != 0);
 }
 
-template <int EarlyTargetMmas, int EarlyExtraMmas, int DelayInsts>
+template <int EarlyTargetMmas, int EarlyExtraMmas>
 __global__ __launch_bounds__(kThreads, 1)
-void early_commit_race_kernel(Record* __restrict__ records, uint32_t combo_id) {
+void early_commit_race_kernel(Record* __restrict__ records,
+                              int delay_cycles_after_early_wait,
+                              uint32_t combo_id) {
   static_assert(EarlyTargetMmas >= 0, "EarlyTargetMmas must be non-negative");
   static_assert(EarlyTargetMmas <= kCompileTimeTargetMmas,
                 "EarlyTargetMmas exceeds target MMA count");
   static_assert(EarlyExtraMmas >= 0, "EarlyExtraMmas must be non-negative");
   static_assert(EarlyExtraMmas <= kCompileTimeFullExtraMmas,
                 "EarlyExtraMmas exceeds full extra MMA count");
-  static_assert(DelayInsts == 0 || DelayInsts == 1 || DelayInsts == 2 ||
-                    DelayInsts == 3 || DelayInsts == 4 || DelayInsts == 5 ||
-                    DelayInsts == 6 || DelayInsts == 7 || DelayInsts == 8 ||
-                    DelayInsts == 9 || DelayInsts == 10 || DelayInsts == 11 ||
-                    DelayInsts == 12 || DelayInsts == 13 || DelayInsts == 14 ||
-                    DelayInsts == 15 || DelayInsts == 16 || DelayInsts == 24 ||
-                    DelayInsts == 32 || DelayInsts == 48 || DelayInsts == 64 ||
-                    DelayInsts == 96 || DelayInsts == 128 || DelayInsts == 256,
-                "unsupported fixed dummy ALU delay");
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)records;
+  (void)delay_cycles_after_early_wait;
   (void)combo_id;
 #else
   extern __shared__ uint32_t smem_raw[];
@@ -443,7 +409,7 @@ void early_commit_race_kernel(Record* __restrict__ records, uint32_t combo_id) {
     rec.early_target_mmas = static_cast<uint32_t>(EarlyTargetMmas);
     rec.early_extra_mmas = static_cast<uint32_t>(EarlyExtraMmas);
     rec.full_extra_mmas = static_cast<uint32_t>(kCompileTimeFullExtraMmas);
-    rec.delay_cycles = static_cast<uint32_t>(DelayInsts);
+    rec.delay_cycles = static_cast<uint32_t>(delay_cycles_after_early_wait);
     rec.target_issue_end = 0;
     rec.early_commit_end = 0;
     rec.early_commit_issue_end = 0;
@@ -537,33 +503,9 @@ void early_commit_race_kernel(Record* __restrict__ records, uint32_t combo_id) {
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
     uint64_t ld_clock = 0;
-    TCGEN05_DELAYED_LD_IF(0)
-    TCGEN05_DELAYED_LD_IF(1)
-    TCGEN05_DELAYED_LD_IF(2)
-    TCGEN05_DELAYED_LD_IF(3)
-    TCGEN05_DELAYED_LD_IF(4)
-    TCGEN05_DELAYED_LD_IF(5)
-    TCGEN05_DELAYED_LD_IF(6)
-    TCGEN05_DELAYED_LD_IF(7)
-    TCGEN05_DELAYED_LD_IF(8)
-    TCGEN05_DELAYED_LD_IF(9)
-    TCGEN05_DELAYED_LD_IF(10)
-    TCGEN05_DELAYED_LD_IF(11)
-    TCGEN05_DELAYED_LD_IF(12)
-    TCGEN05_DELAYED_LD_IF(13)
-    TCGEN05_DELAYED_LD_IF(14)
-    TCGEN05_DELAYED_LD_IF(15)
-    TCGEN05_DELAYED_LD_IF(16)
-    TCGEN05_DELAYED_LD_IF(24)
-    TCGEN05_DELAYED_LD_IF(32)
-    TCGEN05_DELAYED_LD_IF(48)
-    TCGEN05_DELAYED_LD_IF(64)
-    TCGEN05_DELAYED_LD_IF(96)
-    TCGEN05_DELAYED_LD_IF(128)
-    TCGEN05_DELAYED_LD_IF(256)
-    {
-      asm volatile("trap;" ::: "memory");
-    }
+    TCGEN05_DELAYED_LD_X64(target_taddr, delay_seed,
+                           static_cast<uint32_t>(delay_cycles_after_early_wait),
+                           early_regs, ld_clock);
     const uint64_t ld_start = ld_clock - base_clock;
     tcgen05_wait_ld();
     const uint64_t ld_end = clock64() - base_clock;
@@ -789,33 +731,7 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
 }
 
 #undef TCGEN05_LD_X64
-#undef TCGEN05_DELAYED_LD_IF
 #undef TCGEN05_DELAYED_LD_X64
-#undef DUMMY_ALU_ASM_256
-#undef DUMMY_ALU_ASM_128
-#undef DUMMY_ALU_ASM_96
-#undef DUMMY_ALU_ASM_64
-#undef DUMMY_ALU_ASM_48
-#undef DUMMY_ALU_ASM_32
-#undef DUMMY_ALU_ASM_24
-#undef DUMMY_ALU_ASM_16
-#undef DUMMY_ALU_ASM_15
-#undef DUMMY_ALU_ASM_14
-#undef DUMMY_ALU_ASM_13
-#undef DUMMY_ALU_ASM_12
-#undef DUMMY_ALU_ASM_11
-#undef DUMMY_ALU_ASM_10
-#undef DUMMY_ALU_ASM_9
-#undef DUMMY_ALU_ASM_8
-#undef DUMMY_ALU_ASM_7
-#undef DUMMY_ALU_ASM_6
-#undef DUMMY_ALU_ASM_5
-#undef DUMMY_ALU_ASM_4
-#undef DUMMY_ALU_ASM_3
-#undef DUMMY_ALU_ASM_2
-#undef DUMMY_ALU_ASM_1
-#undef DUMMY_ALU_ASM_0
-#undef DUMMY_ALU_ASM_LOOP
 #undef TCGEN05_LD_X64_OUTPUTS
 #undef TCGEN05_LD_X64_OPERANDS
 
@@ -847,38 +763,6 @@ std::vector<int> parse_list(const char* text) {
   return values;
 }
 
-bool is_supported_delay(int delay) {
-  switch (delay) {
-    case 0:
-    case 1:
-    case 2:
-    case 3:
-    case 4:
-    case 5:
-    case 6:
-    case 7:
-    case 8:
-    case 9:
-    case 10:
-    case 11:
-    case 12:
-    case 13:
-    case 14:
-    case 15:
-    case 16:
-    case 24:
-    case 32:
-    case 48:
-    case 64:
-    case 96:
-    case 128:
-    case 256:
-      return true;
-    default:
-      return false;
-  }
-}
-
 void parse_args(int argc, char** argv, Args* args) {
   if (has_flag(argc, argv, "--help")) {
     std::printf(
@@ -890,7 +774,7 @@ void parse_args(int argc, char** argv, Args* args) {
         "                         [--probe-gap-cycles N]\n\n"
         "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
         "target_mmas=%d, full_extra_mmas=%d.\n"
-        "Default sweep: early_targets=8, early_extras=0, fixed dummy ALU delays=0..128.\n",
+        "Default sweep: early_targets=8, early_extras=0, runtime dummy ALU delays=0..128.\n",
         kCompileTimeTargetMmas, kCompileTimeFullExtraMmas);
     std::exit(0);
   }
@@ -923,13 +807,6 @@ std::vector<Combo> make_combos(const Args& args) {
         if (early_target < 0 || early_target > args.target_mmas) continue;
         if (early_extra < 0 || early_extra > args.full_extra_mmas) continue;
         if (delay < 0) continue;
-        if (!is_supported_delay(delay)) {
-          std::fprintf(stderr,
-                       "unsupported delay=%d; supported fixed dummy ALU counts are "
-                       "0..16,24,32,48,64,96,128,256\n",
-                       delay);
-          std::exit(1);
-        }
         combos.push_back({early_target, early_extra, delay});
       }
     }
@@ -1212,70 +1089,25 @@ void print_model_summary(const std::vector<ModelRecord>& rows) {
   std::exit(1);
 }
 
-template <int EarlyTargetMmas, int EarlyExtraMmas, int DelayInsts>
+template <int EarlyTargetMmas, int EarlyExtraMmas>
 void launch_specialized_combo(const Args& args,
                               const Combo& combo,
                               uint32_t combo_id,
                               Record* d_records) {
   CUDA_CHECK(cudaFuncSetAttribute(
-      early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, DelayInsts>,
+      early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>,
       cudaFuncAttributeMaxDynamicSharedMemorySize, kDynamicSmemBytes));
   for (int i = 0; i < args.warmup; ++i) {
-    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, DelayInsts>
-        <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo_id);
+    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
+        <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
   }
   CUDA_CHECK(cudaPeekAtLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
-  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, DelayInsts>
-      <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo_id);
+  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
+      <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
   CUDA_CHECK(cudaPeekAtLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 }
-
-#define DISPATCH_DELAY_CASE(n)                                                \
-  case n:                                                                     \
-    launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas, n>(args, combo,  \
-                                                                 combo_id,     \
-                                                                 d_records);   \
-    return
-
-template <int EarlyTargetMmas, int EarlyExtraMmas>
-void dispatch_delay(const Args& args,
-                    const Combo& combo,
-                    uint32_t combo_id,
-                    Record* d_records) {
-  switch (combo.delay_cycles) {
-    DISPATCH_DELAY_CASE(0);
-    DISPATCH_DELAY_CASE(1);
-    DISPATCH_DELAY_CASE(2);
-    DISPATCH_DELAY_CASE(3);
-    DISPATCH_DELAY_CASE(4);
-    DISPATCH_DELAY_CASE(5);
-    DISPATCH_DELAY_CASE(6);
-    DISPATCH_DELAY_CASE(7);
-    DISPATCH_DELAY_CASE(8);
-    DISPATCH_DELAY_CASE(9);
-    DISPATCH_DELAY_CASE(10);
-    DISPATCH_DELAY_CASE(11);
-    DISPATCH_DELAY_CASE(12);
-    DISPATCH_DELAY_CASE(13);
-    DISPATCH_DELAY_CASE(14);
-    DISPATCH_DELAY_CASE(15);
-    DISPATCH_DELAY_CASE(16);
-    DISPATCH_DELAY_CASE(24);
-    DISPATCH_DELAY_CASE(32);
-    DISPATCH_DELAY_CASE(48);
-    DISPATCH_DELAY_CASE(64);
-    DISPATCH_DELAY_CASE(96);
-    DISPATCH_DELAY_CASE(128);
-    DISPATCH_DELAY_CASE(256);
-    default:
-      std::fprintf(stderr, "unsupported fixed dummy ALU delay=%d\n", combo.delay_cycles);
-      std::exit(1);
-  }
-}
-
-#undef DISPATCH_DELAY_CASE
 
 template <int EarlyTargetMmas, int EarlyExtraMmas>
 void dispatch_early_extra(const Args& args,
@@ -1283,7 +1115,8 @@ void dispatch_early_extra(const Args& args,
                           uint32_t combo_id,
                           Record* d_records) {
   if (combo.early_extra_mmas == EarlyExtraMmas) {
-    dispatch_delay<EarlyTargetMmas, EarlyExtraMmas>(args, combo, combo_id, d_records);
+    launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas>(args, combo, combo_id,
+                                                             d_records);
     return;
   }
   if constexpr (EarlyExtraMmas < kCompileTimeFullExtraMmas) {
