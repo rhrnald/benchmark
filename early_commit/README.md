@@ -26,7 +26,7 @@ make build
 ```
 
 `TARGET_MMAS` and `FULL_EXTRA_MMAS` are compile-time defines. The generated
-binary name includes those values, for example `early_commit_race_t8_f4`.
+binary name includes those values, for example `early_commit_race_t8_f0`.
 
 `early_target_mmas` and `early_extra_mmas` are selected by host-side template
 dispatch. One binary can sweep multiple values, but each kernel launch is a
@@ -45,12 +45,12 @@ Outputs:
 
 ## Main Sweep
 
-The default main sweep keeps the attention-like target sequence:
+The default main sweep uses only the target MMA sequence:
 
 - `target_mmas=8`
-- `full_extra_mmas=4`
+- `full_extra_mmas=0`
 - `early_target_mmas=8`
-- `early_extra_mmas=0,1,2,3,4`
+- `early_extra_mmas=0`
 - `delay_cycles=0..512`
 
 ```bash
@@ -66,7 +66,7 @@ make run EARLY_TARGETS=0,1,2,3,4,5,6,7,8 EARLY_EXTRAS=0 DELAYS=0,64,128,192,256,
 To change the compile-time target/full sequence, rebuild with Make variables:
 
 ```bash
-make run TARGET_MMAS=8 FULL_EXTRA_MMAS=4 EARLY_TARGETS=7 EARLY_EXTRAS=0
+make run TARGET_MMAS=8 FULL_EXTRA_MMAS=0 EARLY_TARGETS=7 EARLY_EXTRAS=0
 ```
 
 ## Summary Columns

@@ -38,7 +38,7 @@ static constexpr int kDynamicSmemBytes = 2 * kTileBytes + 1024;
 #endif
 
 #ifndef EARLY_COMMIT_FULL_EXTRA_MMAS
-#define EARLY_COMMIT_FULL_EXTRA_MMAS 4
+#define EARLY_COMMIT_FULL_EXTRA_MMAS 0
 #endif
 
 static constexpr int kCompileTimeTargetMmas = EARLY_COMMIT_TARGET_MMAS;
@@ -57,7 +57,7 @@ struct Args {
   int full_extra_mmas = kCompileTimeFullExtraMmas;
   int warmup = 1;
   const char* early_targets = "8";
-  const char* early_extras = "0,1,2,3,4";
+  const char* early_extras = "0";
   const char* delays = "0,32,64,96,128,160,192,224,256,320,384,448,512";
   const char* csv = "early_commit/log/early_commit_race_detail.csv";
   const char* summary_csv = "early_commit/log/early_commit_race_summary.csv";
@@ -538,7 +538,7 @@ void parse_args(int argc, char** argv, Args* args) {
         "                         [--csv path] [--summary-csv path]\n\n"
         "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
         "target_mmas=%d, full_extra_mmas=%d.\n"
-        "Default sweep: early_targets=8, early_extras=0,1,2,3,4, delays=0..512 cycles.\n",
+        "Default sweep: early_targets=8, early_extras=0, delays=0..512 cycles.\n",
         kCompileTimeTargetMmas, kCompileTimeFullExtraMmas);
     std::exit(0);
   }

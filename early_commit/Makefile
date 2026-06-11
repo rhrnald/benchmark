@@ -6,7 +6,7 @@ NVCCFLAGS ?= -O3 -std=c++17 $(GENCODE) --expt-relaxed-constexpr
 
 BLOCKS ?= 512
 TARGET_MMAS ?= 8
-FULL_EXTRA_MMAS ?= 4
+FULL_EXTRA_MMAS ?= 0
 BUILD_DIR ?= ../build/early_commit
 BIN ?= $(BUILD_DIR)/early_commit_race_t$(TARGET_MMAS)_f$(FULL_EXTRA_MMAS)
 OUT_DIR ?= log
@@ -41,7 +41,7 @@ run: $(BIN) | $(OUT_DIR)
 
 smoke: $(BIN) | $(OUT_DIR)
 	$(BIN) --blocks 32 --target-mmas $(TARGET_MMAS) --full-extra-mmas $(FULL_EXTRA_MMAS) \
-		--early-targets 7,8 --early-extras 0,1 --delays 0,128,256 \
+		--early-targets 7,8 --early-extras 0 --delays 0,128,256 \
 		--warmup 0 --csv $(OUT_DIR)/smoke_detail.csv \
 		--summary-csv $(OUT_DIR)/smoke_summary.csv
 
