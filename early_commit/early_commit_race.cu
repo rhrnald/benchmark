@@ -332,8 +332,7 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       "setp.ne.u32 lp, ctr, 0; "                                              \
       "@lp bra L_delay_%=; "                                                  \
       "L_delay_done_%=: "                                                     \
-      "or.b32 dep, dep, 1; "                                                  \
-      "setp.ne.u32 p, dep, 0; "                                               \
+      "setp.ne.u32 p, dep, 0xffffffff; "                                      \
       "mov.u64 t, %%clock64; "                                                \
       "mov.u64 %64, t; "                                                      \
       "@p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
