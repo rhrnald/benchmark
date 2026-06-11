@@ -318,24 +318,6 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       : "r"(src_taddr)                                                       \
       : "memory")
 
-#define DUMMY_ALU_DELAY(seed, delay_count, sink)                                \
-  asm volatile(                                                               \
-      "{ .reg .u32 dep; .reg .u32 ctr; .reg .pred lp; "                       \
-      "mov.u32 dep, %1; "                                                     \
-      "mov.u32 ctr, %2; "                                                     \
-      "setp.eq.u32 lp, ctr, 0; "                                              \
-      "@lp bra L_delay_done_%=; "                                             \
-      "L_delay_%=: "                                                          \
-      "add.u32 dep, dep, 0x9e3779b9; "                                        \
-      "add.u32 ctr, ctr, 0xffffffff; "                                        \
-      "setp.ne.u32 lp, ctr, 0; "                                              \
-      "@lp bra L_delay_%=; "                                                  \
-      "L_delay_done_%=: "                                                     \
-      "mov.u32 %0, dep; }"                                                    \
-      : "=r"(sink)                                                            \
-      : "r"(seed), "r"(delay_count)                                          \
-      : "memory")
-
 #define TCGEN05_TIMED_LD_X64(src_taddr, out_regs, ld_clock)                   \
   asm volatile(                                                               \
       "{ .reg .u64 t; "                                                       \
@@ -345,6 +327,28 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       "}, [%65]; }"                                                           \
       : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
       : "r"(src_taddr)                                                        \
+      : "memory")
+
+#define TCGEN05_DUMMY_DELAYED_LD_X64(src_taddr, seed, delay_count, zero_mask, \
+                                     out_regs, ld_clock)                      \
+  asm volatile(                                                               \
+      "{ .reg .u32 dep; .reg .u32 ctr; .reg .u32 offset; .reg .u32 addr; "    \
+      ".reg .pred lp; .reg .u64 t; "                                          \
+      "mov.u32 dep, %66; "                                                    \
+      "mov.u32 ctr, %67; "                                                    \
+      "L_delay_%=: "                                                          \
+      "add.u32 dep, dep, 0x9e3779b9; "                                        \
+      "add.u32 ctr, ctr, 0xffffffff; "                                        \
+      "setp.ne.u32 lp, ctr, 0; "                                              \
+      "@lp bra L_delay_%=; "                                                  \
+      "and.b32 offset, dep, %68; "                                            \
+      "add.u32 addr, %65, offset; "                                           \
+      "mov.u64 t, %%clock64; "                                                \
+      "mov.u64 %64, t; "                                                      \
+      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS      \
+      "}, [addr]; }"                                                          \
+      : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
+      : "r"(src_taddr), "r"(seed), "r"(delay_count), "r"(zero_mask)          \
       : "memory")
 
 __device__ __forceinline__ void issue_target_mma(int mma,
@@ -388,6 +392,7 @@ void early_commit_race_kernel(Record* __restrict__ records,
   __shared__ uint64_t full_done;
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
+  __shared__ uint32_t zero_mask_shared;
   __shared__ uint64_t base_clock_shared;
   __shared__ uint64_t q_desc_shared[kMaxTargetMmas];
   __shared__ uint64_t k_desc_shared[kMaxTargetMmas];
@@ -430,6 +435,7 @@ void early_commit_race_kernel(Record* __restrict__ records,
     rec.mismatch_lanes = 0;
     rec.early_sig = 0;
     rec.ref_sig = 0;
+    zero_mask_shared = 0;
     mbarrier_init(&early_done, 1);
     mbarrier_init(&full_done, 1);
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
@@ -504,17 +510,19 @@ void early_commit_race_kernel(Record* __restrict__ records,
     if (lane == 0) rec.early_wait_end = early_wait_end;
     const uint32_t delay_seed = static_cast<uint32_t>(early_wait_end) ^
                                 static_cast<uint32_t>(early_wait_end >> 32);
+    const uint32_t zero_mask =
+        *reinterpret_cast<volatile uint32_t*>(&zero_mask_shared);
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
     uint64_t ld_clock = 0;
-    uint32_t delay_sink = delay_seed;
     if (delay_cycles_after_early_wait > 0) {
-      DUMMY_ALU_DELAY(delay_seed, static_cast<uint32_t>(delay_cycles_after_early_wait),
-                      delay_sink);
-      asm volatile("" :: "r"(delay_sink) : "memory");
+      TCGEN05_DUMMY_DELAYED_LD_X64(
+          target_taddr, delay_seed, static_cast<uint32_t>(delay_cycles_after_early_wait),
+          zero_mask, early_regs, ld_clock);
+    } else {
+      TCGEN05_TIMED_LD_X64(target_taddr, early_regs, ld_clock);
     }
-    TCGEN05_TIMED_LD_X64(target_taddr, early_regs, ld_clock);
     const uint64_t ld_start = ld_clock - base_clock;
     tcgen05_wait_ld();
     const uint64_t ld_end = clock64() - base_clock;
@@ -740,8 +748,8 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
 }
 
 #undef TCGEN05_LD_X64
+#undef TCGEN05_DUMMY_DELAYED_LD_X64
 #undef TCGEN05_TIMED_LD_X64
-#undef DUMMY_ALU_DELAY
 #undef TCGEN05_LD_X64_OUTPUTS
 #undef TCGEN05_LD_X64_OPERANDS
 
