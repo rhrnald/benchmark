@@ -25,6 +25,13 @@ cd /path/to/benchmark/early_commit
 make build
 ```
 
+`TARGET_MMAS` and `FULL_EXTRA_MMAS` are compile-time defines. The generated
+binary name includes those values, for example `early_commit_race_t8_f4`.
+
+`early_target_mmas` and `early_extra_mmas` are selected by host-side template
+dispatch. One binary can sweep multiple values, but each kernel launch is a
+separate specialization with constant producer loop bounds.
+
 ## Smoke
 
 ```bash
@@ -56,6 +63,12 @@ To test committing before all target MMAs have been issued:
 make run EARLY_TARGETS=0,1,2,3,4,5,6,7,8 EARLY_EXTRAS=0 DELAYS=0,64,128,192,256,320,384,448,512
 ```
 
+To change the compile-time target/full sequence, rebuild with Make variables:
+
+```bash
+make run TARGET_MMAS=8 FULL_EXTRA_MMAS=4 EARLY_TARGETS=7 EARLY_EXTRAS=0
+```
+
 ## Summary Columns
 
 - `safe_rate`: fraction of CTAs where early LD matched the full-commit reference.
@@ -65,6 +78,17 @@ make run EARLY_TARGETS=0,1,2,3,4,5,6,7,8 EARLY_EXTRAS=0 DELAYS=0,64,128,192,256,
   Positive means LD finished before full commit completion.
 - `max_safe_ld_start_ahead`: largest observed safe head start.
 - `min_unsafe_ld_start_ahead`: smallest observed unsafe head start.
+- `avg_early_wait_to_ld_start`: average cycles from early wait completion to LD
+  start.
+- `avg_commit_issue_cycles`: cycles spent issuing the early commit instruction.
+- `avg_remaining_target_issue_delay`: gap from early commit issue completion to
+  the next target MMA issue start.
+- `avg_remaining_target_issue_cycles`: cycles to issue the target MMAs that were
+  intentionally left after early commit.
+- `avg_ld_start_after_remaining_target_issue_start`: positive means LD started
+  after the remaining target MMA issue sequence began.
+- `avg_ld_start_after_target_issue_end`: positive means LD started after the
+  remaining target MMA issue sequence finished.
 - `avg_mismatch_words`: average mismatched register count across 32 lanes x 64 regs.
 
 The detail CSV keeps per-CTA timings and signatures for debugging.

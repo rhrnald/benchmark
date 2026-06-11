@@ -33,10 +33,28 @@ static constexpr int kTileWords = kTileBf16Elems / 2;
 static constexpr int kTileBytes = kTileWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kDynamicSmemBytes = 2 * kTileBytes + 1024;
 
+#ifndef EARLY_COMMIT_TARGET_MMAS
+#define EARLY_COMMIT_TARGET_MMAS 8
+#endif
+
+#ifndef EARLY_COMMIT_FULL_EXTRA_MMAS
+#define EARLY_COMMIT_FULL_EXTRA_MMAS 4
+#endif
+
+static constexpr int kCompileTimeTargetMmas = EARLY_COMMIT_TARGET_MMAS;
+static constexpr int kCompileTimeFullExtraMmas = EARLY_COMMIT_FULL_EXTRA_MMAS;
+static_assert(kCompileTimeTargetMmas >= 1, "EARLY_COMMIT_TARGET_MMAS must be positive");
+static_assert(kCompileTimeTargetMmas <= kMaxTargetMmas,
+              "EARLY_COMMIT_TARGET_MMAS exceeds descriptor capacity");
+static_assert(kCompileTimeFullExtraMmas >= 0,
+              "EARLY_COMMIT_FULL_EXTRA_MMAS must be non-negative");
+static_assert(kCompileTimeFullExtraMmas <= kMaxTargetMmas,
+              "EARLY_COMMIT_FULL_EXTRA_MMAS exceeds descriptor capacity");
+
 struct Args {
   int blocks = 512;
-  int target_mmas = 8;
-  int full_extra_mmas = 4;
+  int target_mmas = kCompileTimeTargetMmas;
+  int full_extra_mmas = kCompileTimeFullExtraMmas;
   int warmup = 1;
   const char* early_targets = "8";
   const char* early_extras = "0,1,2,3,4";
@@ -55,6 +73,8 @@ struct Record {
   uint32_t delay_cycles;
   uint64_t target_issue_end;
   uint64_t early_commit_end;
+  uint64_t early_commit_issue_end;
+  uint64_t remaining_target_issue_start;
   uint64_t early_wait_end;
   uint64_t ld_start;
   uint64_t ld_end;
@@ -277,20 +297,19 @@ __device__ __forceinline__ void issue_extra_mma(int mma,
   tcgen05_mma_bf16_ss(extra_taddr, q_desc[mma & 7], k_desc[mma & 7], idesc, mma != 0);
 }
 
+template <int EarlyTargetMmas, int EarlyExtraMmas>
 __global__ __launch_bounds__(kThreads, 1)
 void early_commit_race_kernel(Record* __restrict__ records,
-                              int target_mmas,
-                              int early_target_mmas,
-                              int early_extra_mmas,
-                              int full_extra_mmas,
                               int delay_cycles_after_early_wait,
                               uint32_t combo_id) {
+  static_assert(EarlyTargetMmas >= 0, "EarlyTargetMmas must be non-negative");
+  static_assert(EarlyTargetMmas <= kCompileTimeTargetMmas,
+                "EarlyTargetMmas exceeds target MMA count");
+  static_assert(EarlyExtraMmas >= 0, "EarlyExtraMmas must be non-negative");
+  static_assert(EarlyExtraMmas <= kCompileTimeFullExtraMmas,
+                "EarlyExtraMmas exceeds full extra MMA count");
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)records;
-  (void)target_mmas;
-  (void)early_target_mmas;
-  (void)early_extra_mmas;
-  (void)full_extra_mmas;
   (void)delay_cycles_after_early_wait;
   (void)combo_id;
 #else
@@ -325,13 +344,15 @@ void early_commit_race_kernel(Record* __restrict__ records,
   if (tid == 0) {
     rec.combo_id = combo_id;
     rec.block = blockIdx.x;
-    rec.target_mmas = static_cast<uint32_t>(target_mmas);
-    rec.early_target_mmas = static_cast<uint32_t>(early_target_mmas);
-    rec.early_extra_mmas = static_cast<uint32_t>(early_extra_mmas);
-    rec.full_extra_mmas = static_cast<uint32_t>(full_extra_mmas);
+    rec.target_mmas = static_cast<uint32_t>(kCompileTimeTargetMmas);
+    rec.early_target_mmas = static_cast<uint32_t>(EarlyTargetMmas);
+    rec.early_extra_mmas = static_cast<uint32_t>(EarlyExtraMmas);
+    rec.full_extra_mmas = static_cast<uint32_t>(kCompileTimeFullExtraMmas);
     rec.delay_cycles = static_cast<uint32_t>(delay_cycles_after_early_wait);
     rec.target_issue_end = 0;
     rec.early_commit_end = 0;
+    rec.early_commit_issue_end = 0;
+    rec.remaining_target_issue_start = 0;
     rec.early_wait_end = 0;
     rec.ld_start = 0;
     rec.ld_end = 0;
@@ -383,20 +404,26 @@ void early_commit_race_kernel(Record* __restrict__ records,
   const uint64_t base_clock = base_clock_shared;
 
   if (warp_id == kProducerWarp && lane == 0) {
-    for (int mma = 0; mma < early_target_mmas; ++mma) {
+#pragma unroll
+    for (int mma = 0; mma < EarlyTargetMmas; ++mma) {
       issue_target_mma(mma, target_taddr, q_desc_shared, k_desc_shared, idesc);
     }
-    for (int mma = 0; mma < early_extra_mmas; ++mma) {
+#pragma unroll
+    for (int mma = 0; mma < EarlyExtraMmas; ++mma) {
       issue_extra_mma(mma, extra_taddr, q_desc_shared, k_desc_shared, idesc);
     }
     rec.early_commit_end = clock64() - base_clock;
     tcgen05_commit(&early_done);
+    rec.early_commit_issue_end = clock64() - base_clock;
 
-    for (int mma = early_target_mmas; mma < target_mmas; ++mma) {
+    rec.remaining_target_issue_start = clock64() - base_clock;
+#pragma unroll
+    for (int mma = EarlyTargetMmas; mma < kCompileTimeTargetMmas; ++mma) {
       issue_target_mma(mma, target_taddr, q_desc_shared, k_desc_shared, idesc);
     }
     rec.target_issue_end = clock64() - base_clock;
-    for (int mma = early_extra_mmas; mma < full_extra_mmas; ++mma) {
+#pragma unroll
+    for (int mma = EarlyExtraMmas; mma < kCompileTimeFullExtraMmas; ++mma) {
       issue_extra_mma(mma, extra_taddr, q_desc_shared, k_desc_shared, idesc);
     }
     rec.full_issue_end = clock64() - base_clock;
@@ -509,13 +536,19 @@ void parse_args(int argc, char** argv, Args* args) {
         "                         [--early-targets list] [--early-extras list]\n"
         "                         [--delays list] [--warmup N]\n"
         "                         [--csv path] [--summary-csv path]\n\n"
-        "Default sweep: target_mmas=8, full_extra_mmas=4, early_targets=8,\n"
-        "early_extras=0,1,2,3,4, delays=0..512 cycles.\n");
+        "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
+        "target_mmas=%d, full_extra_mmas=%d.\n"
+        "Default sweep: early_targets=8, early_extras=0,1,2,3,4, delays=0..512 cycles.\n",
+        kCompileTimeTargetMmas, kCompileTimeFullExtraMmas);
     std::exit(0);
   }
   args->blocks = std::atoi(arg_value(argc, argv, "--blocks", "512"));
-  args->target_mmas = std::atoi(arg_value(argc, argv, "--target-mmas", "8"));
-  args->full_extra_mmas = std::atoi(arg_value(argc, argv, "--full-extra-mmas", "4"));
+  if (const char* target_mmas = arg_value(argc, argv, "--target-mmas", nullptr)) {
+    args->target_mmas = std::atoi(target_mmas);
+  }
+  if (const char* full_extra_mmas = arg_value(argc, argv, "--full-extra-mmas", nullptr)) {
+    args->full_extra_mmas = std::atoi(full_extra_mmas);
+  }
   args->warmup = std::atoi(arg_value(argc, argv, "--warmup", "1"));
   args->early_targets = arg_value(argc, argv, "--early-targets", args->early_targets);
   args->early_extras = arg_value(argc, argv, "--early-extras", args->early_extras);
@@ -556,19 +589,25 @@ void write_detail_csv(const char* path, const std::vector<Record>& rows) {
   std::fprintf(f,
                "combo_id,block,target_mmas,early_target_mmas,early_extra_mmas,"
                "full_extra_mmas,delay_cycles,target_issue_end,early_commit_end,"
+               "early_commit_issue_end,remaining_target_issue_start,"
                "early_wait_end,ld_start,ld_end,full_issue_end,full_done_end,"
                "ref_ld_start,ref_ld_end,ld_start_ahead_of_full_done,"
                "ld_end_ahead_of_full_done,early_wait_to_ld_start,"
+               "commit_issue_cycles,remaining_target_issue_delay,"
+               "remaining_target_issue_cycles,ld_start_after_remaining_target_issue_start,"
+               "ld_start_after_target_issue_end,"
                "mismatch_words,mismatch_lanes,safe,early_sig,ref_sig\n");
   for (const Record& r : rows) {
     const bool safe = r.mismatch_words == 0;
     std::fprintf(f,
                  "%u,%u,%u,%u,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
-                 "%lld,%lld,%lld,%u,%u,%d,0x%08x,0x%08x\n",
+                 "%llu,%llu,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%u,%u,%d,0x%08x,0x%08x\n",
                  r.combo_id, r.block, r.target_mmas, r.early_target_mmas,
                  r.early_extra_mmas, r.full_extra_mmas, r.delay_cycles,
                  static_cast<unsigned long long>(r.target_issue_end),
                  static_cast<unsigned long long>(r.early_commit_end),
+                 static_cast<unsigned long long>(r.early_commit_issue_end),
+                 static_cast<unsigned long long>(r.remaining_target_issue_start),
                  static_cast<unsigned long long>(r.early_wait_end),
                  static_cast<unsigned long long>(r.ld_start),
                  static_cast<unsigned long long>(r.ld_end),
@@ -578,7 +617,12 @@ void write_detail_csv(const char* path, const std::vector<Record>& rows) {
                  static_cast<unsigned long long>(r.ref_ld_end),
                  signed_delta(r.full_done_end, r.ld_start),
                  signed_delta(r.full_done_end, r.ld_end),
-                 signed_delta(r.ld_start, r.early_wait_end), r.mismatch_words,
+                 signed_delta(r.ld_start, r.early_wait_end),
+                 signed_delta(r.early_commit_issue_end, r.early_commit_end),
+                 signed_delta(r.remaining_target_issue_start, r.early_commit_issue_end),
+                 signed_delta(r.target_issue_end, r.remaining_target_issue_start),
+                 signed_delta(r.ld_start, r.remaining_target_issue_start),
+                 signed_delta(r.ld_start, r.target_issue_end), r.mismatch_words,
                  r.mismatch_lanes, safe ? 1 : 0, r.early_sig, r.ref_sig);
   }
   std::fclose(f);
@@ -613,7 +657,10 @@ void write_summary_csv(const char* path,
                "combo_id,early_target_mmas,early_extra_mmas,delay_cycles,n,safe_n,"
                "unsafe_n,safe_rate,avg_ld_start_ahead,avg_ld_end_ahead,"
                "max_safe_ld_start_ahead,min_unsafe_ld_start_ahead,"
-               "avg_early_wait_to_ld_start,avg_mismatch_words,status\n");
+               "avg_early_wait_to_ld_start,avg_commit_issue_cycles,"
+               "avg_remaining_target_issue_delay,avg_remaining_target_issue_cycles,"
+               "avg_ld_start_after_remaining_target_issue_start,"
+               "avg_ld_start_after_target_issue_end,avg_mismatch_words,status\n");
   for (size_t combo_id = 0; combo_id < combos.size(); ++combo_id) {
     int n = 0;
     int safe_n = 0;
@@ -623,6 +670,11 @@ void write_summary_csv(const char* path,
     std::vector<double> safe_ld_start_ahead;
     std::vector<double> unsafe_ld_start_ahead;
     std::vector<double> early_wait_to_ld_start;
+    std::vector<double> commit_issue_cycles;
+    std::vector<double> remaining_target_issue_delay;
+    std::vector<double> remaining_target_issue_cycles;
+    std::vector<double> ld_start_after_remaining_target_issue_start;
+    std::vector<double> ld_start_after_target_issue_end;
     std::vector<double> mismatch_words;
     for (const Record& r : rows) {
       if (r.combo_id != combo_id) continue;
@@ -634,6 +686,16 @@ void write_summary_csv(const char* path,
       ld_start_ahead.push_back(start_ahead);
       ld_end_ahead.push_back(end_ahead);
       early_wait_to_ld_start.push_back(static_cast<double>(signed_delta(r.ld_start, r.early_wait_end)));
+      commit_issue_cycles.push_back(
+          static_cast<double>(signed_delta(r.early_commit_issue_end, r.early_commit_end)));
+      remaining_target_issue_delay.push_back(static_cast<double>(
+          signed_delta(r.remaining_target_issue_start, r.early_commit_issue_end)));
+      remaining_target_issue_cycles.push_back(static_cast<double>(
+          signed_delta(r.target_issue_end, r.remaining_target_issue_start)));
+      ld_start_after_remaining_target_issue_start.push_back(static_cast<double>(
+          signed_delta(r.ld_start, r.remaining_target_issue_start)));
+      ld_start_after_target_issue_end.push_back(
+          static_cast<double>(signed_delta(r.ld_start, r.target_issue_end)));
       mismatch_words.push_back(static_cast<double>(r.mismatch_words));
       if (safe) {
         safe_ld_start_ahead.push_back(start_ahead);
@@ -643,12 +705,17 @@ void write_summary_csv(const char* path,
     }
     const Combo& c = combos[combo_id];
     std::fprintf(f,
-                 "%zu,%d,%d,%d,%d,%d,%d,%.6f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%s\n",
+                 "%zu,%d,%d,%d,%d,%d,%d,%.6f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
+                 "%.3f,%.3f,%.3f,%.3f,%.3f,%s\n",
                  combo_id, c.early_target_mmas, c.early_extra_mmas, c.delay_cycles, n,
                  safe_n, unsafe_n, n > 0 ? static_cast<double>(safe_n) / n : 0.0,
                  mean_or_zero(ld_start_ahead), mean_or_zero(ld_end_ahead),
                  max_or_zero(safe_ld_start_ahead), min_or_zero(unsafe_ld_start_ahead),
-                 mean_or_zero(early_wait_to_ld_start), mean_or_zero(mismatch_words),
+                 mean_or_zero(early_wait_to_ld_start), mean_or_zero(commit_issue_cycles),
+                 mean_or_zero(remaining_target_issue_delay),
+                 mean_or_zero(remaining_target_issue_cycles),
+                 mean_or_zero(ld_start_after_remaining_target_issue_start),
+                 mean_or_zero(ld_start_after_target_issue_end), mean_or_zero(mismatch_words),
                  unsafe_n == 0 ? "safe" : (safe_n == 0 ? "unsafe" : "mixed"));
   }
   std::fclose(f);
@@ -674,6 +741,67 @@ void print_summary(const std::vector<Record>& rows, const std::vector<Combo>& co
   }
 }
 
+[[noreturn]] void die_unsupported_combo(const Combo& combo) {
+  std::fprintf(stderr,
+               "unsupported compile-time combo: early_target=%d early_extra=%d. "
+               "Rebuild with larger EARLY_COMMIT_TARGET_MMAS/FULL_EXTRA_MMAS if needed.\n",
+               combo.early_target_mmas, combo.early_extra_mmas);
+  std::exit(1);
+}
+
+template <int EarlyTargetMmas, int EarlyExtraMmas>
+void launch_specialized_combo(const Args& args,
+                              const Combo& combo,
+                              uint32_t combo_id,
+                              Record* d_records) {
+  CUDA_CHECK(cudaFuncSetAttribute(early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>,
+                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                  kDynamicSmemBytes));
+  for (int i = 0; i < args.warmup; ++i) {
+    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
+        <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
+  }
+  CUDA_CHECK(cudaPeekAtLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
+      <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
+  CUDA_CHECK(cudaPeekAtLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+template <int EarlyTargetMmas, int EarlyExtraMmas>
+void dispatch_early_extra(const Args& args,
+                          const Combo& combo,
+                          uint32_t combo_id,
+                          Record* d_records) {
+  if (combo.early_extra_mmas == EarlyExtraMmas) {
+    launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas>(args, combo, combo_id, d_records);
+    return;
+  }
+  if constexpr (EarlyExtraMmas < kCompileTimeFullExtraMmas) {
+    dispatch_early_extra<EarlyTargetMmas, EarlyExtraMmas + 1>(args, combo, combo_id,
+                                                             d_records);
+  } else {
+    die_unsupported_combo(combo);
+  }
+}
+
+template <int EarlyTargetMmas>
+void dispatch_early_target(const Args& args,
+                           const Combo& combo,
+                           uint32_t combo_id,
+                           Record* d_records) {
+  if (combo.early_target_mmas == EarlyTargetMmas) {
+    dispatch_early_extra<EarlyTargetMmas, 0>(args, combo, combo_id, d_records);
+    return;
+  }
+  if constexpr (EarlyTargetMmas < kCompileTimeTargetMmas) {
+    dispatch_early_target<EarlyTargetMmas + 1>(args, combo, combo_id, d_records);
+  } else {
+    die_unsupported_combo(combo);
+  }
+}
+
 void run_combo(const Args& args,
                const Combo& combo,
                uint32_t combo_id,
@@ -681,21 +809,7 @@ void run_combo(const Args& args,
   Record* d_records = nullptr;
   CUDA_CHECK(cudaMalloc(&d_records, static_cast<size_t>(args.blocks) * sizeof(Record)));
   CUDA_CHECK(cudaMemset(d_records, 0, static_cast<size_t>(args.blocks) * sizeof(Record)));
-  CUDA_CHECK(cudaFuncSetAttribute(early_commit_race_kernel,
-                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  kDynamicSmemBytes));
-  for (int i = 0; i < args.warmup; ++i) {
-    early_commit_race_kernel<<<args.blocks, kThreads, kDynamicSmemBytes>>>(
-        d_records, args.target_mmas, combo.early_target_mmas, combo.early_extra_mmas,
-        args.full_extra_mmas, combo.delay_cycles, combo_id);
-  }
-  CUDA_CHECK(cudaPeekAtLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
-  early_commit_race_kernel<<<args.blocks, kThreads, kDynamicSmemBytes>>>(
-      d_records, args.target_mmas, combo.early_target_mmas, combo.early_extra_mmas,
-      args.full_extra_mmas, combo.delay_cycles, combo_id);
-  CUDA_CHECK(cudaPeekAtLastError());
-  CUDA_CHECK(cudaDeviceSynchronize());
+  dispatch_early_target<0>(args, combo, combo_id, d_records);
 
   const size_t old_size = all_records->size();
   all_records->resize(old_size + args.blocks);
@@ -710,12 +824,18 @@ void run_combo(const Args& args,
 int main(int argc, char** argv) {
   Args args;
   parse_args(argc, argv, &args);
-  if (args.target_mmas < 1 || args.target_mmas > kMaxTargetMmas) {
-    std::fprintf(stderr, "--target-mmas must be in [1,%d]\n", kMaxTargetMmas);
+  if (args.target_mmas != kCompileTimeTargetMmas) {
+    std::fprintf(stderr,
+                 "--target-mmas=%d does not match compile-time target_mmas=%d; "
+                 "rebuild with TARGET_MMAS=%d\n",
+                 args.target_mmas, kCompileTimeTargetMmas, args.target_mmas);
     return 1;
   }
-  if (args.full_extra_mmas < 0 || args.full_extra_mmas > kMaxTargetMmas) {
-    std::fprintf(stderr, "--full-extra-mmas must be in [0,%d]\n", kMaxTargetMmas);
+  if (args.full_extra_mmas != kCompileTimeFullExtraMmas) {
+    std::fprintf(stderr,
+                 "--full-extra-mmas=%d does not match compile-time full_extra_mmas=%d; "
+                 "rebuild with FULL_EXTRA_MMAS=%d\n",
+                 args.full_extra_mmas, kCompileTimeFullExtraMmas, args.full_extra_mmas);
     return 1;
   }
   if (args.blocks <= 0) {
