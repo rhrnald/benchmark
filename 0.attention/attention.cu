@@ -93,10 +93,22 @@
 #define ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER 9
 #endif
 
+#ifndef ATTENTION_EARLY_COMMIT_MEASURE
+#define ATTENTION_EARLY_COMMIT_MEASURE 0
+#endif
+
 #if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER != 0 && \
     (ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER <= 8 || \
      ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER >= 12)
 #error "ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER must be 0 or 9..11"
+#endif
+
+#if ATTENTION_EARLY_COMMIT_MEASURE && !ATTENTION_CLOCK_TRACE
+#error "ATTENTION_EARLY_COMMIT_MEASURE requires ATTENTION_CLOCK_TRACE=1"
+#endif
+
+#if ATTENTION_EARLY_COMMIT_MEASURE && !ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER
+#error "ATTENTION_EARLY_COMMIT_MEASURE requires ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER"
 #endif
 
 #ifndef ATTENTION_MINIMAL_TMA_GAP_TRACE
@@ -776,6 +788,9 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     uint64_t* q_ready,
     uint64_t (&k_ready)[kPipeCount],
     uint64_t (&qk_done)[kPipeCount],
+#if ATTENTION_EARLY_COMMIT_MEASURE
+    uint64_t (&qk_full_done)[kPipeCount],
+#endif
     uint64_t (&p_done)[kPipeCount],
     uint64_t (&s_h1_done)[kPipeCount],
     uint64_t (&pv_done)[kPipeCount],
@@ -1005,12 +1020,42 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                             pv_idesc, local != 1 || mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+      const unsigned long long early_commit_end = trace_iter ? clock64() : 0ull;
+      if (trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base + kClockTraceEarlyCommitSlot,
+                                 kClockTraceEarlyCommit, iter, pipe,
+                                 role_warp_id, -1, -1, qk_mma_start,
+                                 early_commit_end, clock_trace_base);
+      }
+#endif
 #pragma unroll
       for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
            mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
                             pv_idesc, true);
       }
+#if ATTENTION_EARLY_COMMIT_MEASURE
+#if ATTENTION_CLOCK_TRACE
+      const unsigned long long full_issue_end = trace_iter ? clock64() : 0ull;
+      if (trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base + kClockTraceFullMmaIssueSlot,
+                                 kClockTraceFullMmaIssue, iter, pipe,
+                                 role_warp_id, -1, -1, qk_mma_start,
+                                 full_issue_end, clock_trace_base);
+        tcgen05_commit(&qk_full_done[pipe]);
+        mbarrier_wait(&qk_done[pipe], phase);
+        mbarrier_wait(&qk_full_done[pipe], 0);
+        write_clock_trace_record(clock_trace,
+                                 trace_slot_base + kClockTraceFullMmaWaitSlot,
+                                 kClockTraceFullMmaWait, iter, pipe,
+                                 role_warp_id, -1, -1, full_issue_end,
+                                 clock64(), clock_trace_base);
+      }
+#endif
+#endif
 #else
 #pragma unroll
       for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
@@ -1115,12 +1160,44 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                             pv_idesc, local != 1 || mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#if ATTENTION_CLOCK_TRACE
+      const unsigned long long early_commit_end =
+          tail_trace_iter ? clock64() : 0ull;
+      if (tail_trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 tail_trace_slot_base + kClockTraceEarlyCommitSlot,
+                                 kClockTraceEarlyCommit, tail_iter, pipe,
+                                 role_warp_id, -1, -1, early_commit_end,
+                                 early_commit_end, clock_trace_base);
+      }
+#endif
 #pragma unroll
       for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
            mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
                             pv_idesc, true);
       }
+#if ATTENTION_EARLY_COMMIT_MEASURE
+#if ATTENTION_CLOCK_TRACE
+      const unsigned long long full_issue_end =
+          tail_trace_iter ? clock64() : 0ull;
+      if (tail_trace_iter) {
+        write_clock_trace_record(clock_trace,
+                                 tail_trace_slot_base + kClockTraceFullMmaIssueSlot,
+                                 kClockTraceFullMmaIssue, tail_iter, pipe,
+                                 role_warp_id, -1, -1, full_issue_end,
+                                 full_issue_end, clock_trace_base);
+        tcgen05_commit(&qk_full_done[pipe]);
+        mbarrier_wait(&qk_done[pipe], tail_phase);
+        mbarrier_wait(&qk_full_done[pipe], 0);
+        write_clock_trace_record(clock_trace,
+                                 tail_trace_slot_base + kClockTraceFullMmaWaitSlot,
+                                 kClockTraceFullMmaWait, tail_iter, pipe,
+                                 role_warp_id, -1, -1, full_issue_end,
+                                 clock64(), clock_trace_base);
+      }
+#endif
+#endif
 #else
 #pragma unroll
       for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
@@ -1553,6 +1630,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ uint64_t q_ready;
   __shared__ uint64_t k_ready[kPipeCount];
   __shared__ uint64_t qk_done[kPipeCount];
+#if ATTENTION_EARLY_COMMIT_MEASURE
+  __shared__ uint64_t qk_full_done[kPipeCount];
+#endif
   __shared__ uint64_t p_done[kPipeCount];
   __shared__ uint64_t s_h1_done[kPipeCount];
   __shared__ uint64_t v_ready[kPipeCount];
@@ -1601,6 +1681,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     for (int p = 0; p < kPipeCount; ++p) {
       mbarrier_init(&k_ready[p], 1);
       mbarrier_init(&qk_done[p], 1);
+#if ATTENTION_EARLY_COMMIT_MEASURE
+      mbarrier_init(&qk_full_done[p], 1);
+#endif
       mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
       mbarrier_init(&s_h1_done[p], kConsumerWarpsPerPipe);
       mbarrier_init(&v_ready[p], 1);
@@ -1690,10 +1773,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
 
 	  if (warp_id == 0 || warp_id == 1) {
-	    const int pipe = warp_id;
-	    attention_qk_pipe_role<kFixedKTiles>(
-	        q_smem, k_smem, &q_ready, k_ready, qk_done, p_done, s_h1_done, pv_done,
-		        qk_issue_gen,
+		    const int pipe = warp_id;
+		    attention_qk_pipe_role<kFixedKTiles>(
+		        q_smem, k_smem, &q_ready, k_ready, qk_done,
+#if ATTENTION_EARLY_COMMIT_MEASURE
+            qk_full_done,
+#endif
+            p_done, s_h1_done, pv_done,
+			        qk_issue_gen,
 	        s_smem, v_smem, v_ready, v_h1_ready, p_taddr, o_taddr, pipe,
         loop_repeats, clock_trace,
         clock_trace_iters, clock_trace_start, clock_trace_base,

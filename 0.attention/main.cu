@@ -218,6 +218,9 @@ struct TraceRecord {
   unsigned long long pv_h0_end = 0;
   unsigned long long pv_h1_start = 0xffffffffffffffffull;
   unsigned long long pv_h1_end = 0;
+  unsigned long long early_commit_end = 0;
+  unsigned long long full_issue_end = 0;
+  unsigned long long full_done_end = 0;
   int tma_warp_id = -1;
   int pv_warp_id = -1;
   int pv_h0_warp_id = -1;
@@ -252,6 +255,9 @@ enum ClockTraceStage {
   kClockTracePvMmaIssue = 20,
   kClockTraceKTmaIssue = 21,
   kClockTraceVTmaIssue = 22,
+  kClockTraceEarlyCommit = 23,
+  kClockTraceFullMmaIssue = 24,
+  kClockTraceFullMmaWait = 25,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -264,6 +270,9 @@ static constexpr int kClockTraceQkMmaIssueSlot = 44;
 static constexpr int kClockTracePvMmaIssueSlot = 45;
 static constexpr int kClockTraceKTmaIssueSlot = 46;
 static constexpr int kClockTraceVTmaIssueSlot = 47;
+static constexpr int kClockTraceEarlyCommitSlot = 49;
+static constexpr int kClockTraceFullMmaIssueSlot = 50;
+static constexpr int kClockTraceFullMmaWaitSlot = 51;
 static constexpr int kClockTracePackDetailBase = 52;
 static constexpr int kClockTraceExtraSlots = 32;
 
@@ -711,6 +720,12 @@ const char* clock_trace_stage_name(int stage) {
       return "pv_mma";
     case kClockTracePvMmaIssue:
       return "pv_mma_issue";
+    case kClockTraceEarlyCommit:
+      return "early_commit";
+    case kClockTraceFullMmaIssue:
+      return "full_mma_issue";
+    case kClockTraceFullMmaWait:
+      return "full_mma_wait";
     case kClockTracePvMmaH0:
       return "pv_mma_h0";
     case kClockTracePvMmaH1:
@@ -764,6 +779,14 @@ unsigned long long trace_start_or_zero(unsigned long long start) {
 
 unsigned long long trace_end_or_zero(unsigned long long start, unsigned long long end) {
   return trace_cycles(start, end) > 0 ? end : 0ull;
+}
+
+long long trace_signed_delta(unsigned long long end, unsigned long long start) {
+  if (start == 0ull || end == 0ull ||
+      start == 0xffffffffffffffffull || end == 0xffffffffffffffffull) {
+    return 0ll;
+  }
+  return static_cast<long long>(end) - static_cast<long long>(start);
 }
 
 std::string epilogue_trace_path(const char* csv_path) {
@@ -898,6 +921,16 @@ void write_clock_trace_csv(const Args& args,
         out.pv_issue_end = r.end;
         out.pv_warp_id = r.warp_id;
         break;
+      case kClockTraceEarlyCommit:
+        out.early_commit_end = r.end;
+        break;
+      case kClockTraceFullMmaIssue:
+        out.full_issue_end = r.end;
+        break;
+      case kClockTraceFullMmaWait:
+        out.full_issue_end = r.start;
+        out.full_done_end = r.end;
+        break;
       case kClockTracePvMmaH0:
         out.pv_h0_start = r.start;
         out.pv_h0_end = r.end;
@@ -956,6 +989,9 @@ void write_clock_trace_csv(const Args& args,
                "mode,elapsed_ms,iter,pipe,warp_id,tma_warp_id,tma_start,tma_end,tma_cycles,mma_start,mma_end,"
                "mma_cycles,tma_issue_end,tma_issue_cycles,tma_wait_cycles,"
                "mma_issue_end,mma_issue_cycles,mma_wait_cycles,"
+               "early_commit_end,full_issue_end,full_done_end,full_done_wait_cycles,"
+               "earliest_pack_start,softmax_start_after_full_issue,"
+               "mma_done_after_full_issue,hazard_margin,"
                "ld_start,ld_end,ld_cycles,pack_start,pack_end,pack_cycles,"
                "st_start,st_end,st_cycles,v_tma_start,v_tma_end,v_tma_cycles,"
                "v_tma_issue_end,v_tma_issue_cycles,v_tma_wait_cycles,"
@@ -1004,8 +1040,9 @@ void write_clock_trace_csv(const Args& args,
     const unsigned long long total_start = r.tma_start;
     const unsigned long long total_end =
         std::max(std::max(r.ld_end, r.st_end),
-                 std::max(trace_end_or_zero(r.pv_start, r.pv_end),
-                          trace_end_or_zero(r.mma_start, r.mma_end)));
+                 std::max(std::max(trace_end_or_zero(r.pv_start, r.pv_end),
+                                   trace_end_or_zero(r.mma_start, r.mma_end)),
+                          r.full_done_end));
     const unsigned long long mma_issue_end =
         trace_cycles(r.mma_start, r.mma_issue_end) > 0 ? r.mma_issue_end : 0ull;
     const unsigned long long pv_issue_end =
@@ -1022,6 +1059,7 @@ void write_clock_trace_csv(const Args& args,
                  "%s,%.6f,%u,%u,%u,%d,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
+                 "%llu,%llu,%llu,%llu,%llu,%lld,%lld,%lld,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,"
@@ -1037,6 +1075,11 @@ void write_clock_trace_csv(const Args& args,
                  mma_issue_end,
                  trace_cycles(r.mma_start, r.mma_issue_end),
                  mma_issue_end ? trace_cycles(r.mma_issue_end, r.mma_end) : 0ull,
+                 r.early_commit_end, r.full_issue_end, r.full_done_end,
+                 trace_cycles(r.full_issue_end, r.full_done_end), pack_start,
+                 trace_signed_delta(pack_start, r.full_issue_end),
+                 trace_signed_delta(r.full_done_end, r.full_issue_end),
+                 trace_signed_delta(pack_start, r.full_done_end),
                  ld_start, r.ld_end,
                  trace_cycles(r.ld_start, r.ld_end), pack_start, r.pack_end,
                  trace_cycles(r.pack_start, r.pack_end), st_start, r.st_end,
