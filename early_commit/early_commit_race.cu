@@ -463,7 +463,10 @@ __device__ __forceinline__ uint64_t dependent_clock64(uint32_t dependency) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   uint64_t now;
   asm volatile(
-      "{ .reg .u32 dep; mov.u32 dep, %1; mov.u64 %0, %%clock64; }"
+      "{ .reg .pred p; "
+      "setp.ne.u32 p, %1, 0xffffffff; "
+      "@p mov.u64 %0, %%clock64; "
+      "@!p mov.u64 %0, %%clock64; }"
       : "=l"(now)
       : "r"(dependency)
       : "memory");
