@@ -28,6 +28,7 @@ TRACE_SVG ?= log/best.svg
 
 VALIDATE_PATTERN ?= rank1
 VALIDATE_K_TILES ?= 4
+VALIDATE_CHECKSUM_REPEATS ?= 2
 VALIDATE_CSV ?= /tmp/attention_main_validate_rank1_k4.csv
 
 .DEFAULT_GOAL := build
@@ -55,4 +56,4 @@ plot: $(TRACE_BIN)
 	$(PYTHON) run.py plot --binary $(TRACE_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(TRACE_WARMUP) --iters $(TRACE_RUN_ITERS) --clock-trace-start $(TRACE_START) --clock-trace-iters $(TRACE_ITERS) --trace-csv $(TRACE_CSV) --summary-csv $(TRACE_SUMMARY_CSV) --svg $(TRACE_SVG)
 
 validation: $(VALIDATION_BIN)
-	$(VALIDATION_BIN) --validate --pattern $(VALIDATE_PATTERN) --k-tiles $(VALIDATE_K_TILES) --csv $(VALIDATE_CSV)
+	$(VALIDATION_BIN) --validate --pattern $(VALIDATE_PATTERN) --k-tiles $(VALIDATE_K_TILES) --checksum-repeats $(VALIDATE_CHECKSUM_REPEATS) --csv $(VALIDATE_CSV)

@@ -38,11 +38,11 @@ warmup=3
 iters=10
 ```
 
-The expected result on the current system is about `1594 TFLOP/s` total. The
-latest checked run was:
+The default build uses the current fastest measured schedule. The latest
+checked serial 100-run benchmark was:
 
 ```text
-total_TFLOP_per_s=1593.769 status=ok
+ok=100 fail=0 avg=1801.207 TFLOP/s min=1800.598 max=1801.617
 ```
 
 The benchmark CSV is written to:
@@ -82,6 +82,64 @@ The validation CSV is written to:
 ```text
 /tmp/attention_main_validate_rank1_k4.csv
 ```
+
+## Dangerous Optimization Notes
+
+The default path is the current fastest measured schedule:
+
+```text
+ATTENTION_SPLIT_V_TMA=1
+ATTENTION_SPLIT_V_H0_WITH_K_TMA=1
+ATTENTION_SPLIT_V_H0_BEFORE_K_TMA=0
+ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES=1728
+ATTENTION_CROSS_PIPE_PHASE=0
+ATTENTION_SKIP_V_H0_READY_WAIT=1
+ATTENTION_SKIP_V_H1_READY_WAIT=1
+ATTENTION_SKIP_V_TMA_EXPECT_TX=1
+ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER=9
+```
+
+This schedule has two experimental dependency relaxations. First, it skips the
+explicit ready waits between:
+
+```text
+V TMA h0 done -> PV h0
+V TMA h1 done -> PV h1
+```
+
+Second, `ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER=9` commits `qk_done` after all
+QK MMA issues and one PV h0 MMA issue, then issues the remaining PV h0 MMAs.
+This is risky because it changes the meaning of `qk_done` from "QK+PV h0
+fully issued" to "QK+PV h0 early-enough for the measured schedule". Values
+below 9 are not currently allowed; `ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER=8`
+failed validation during testing.
+
+Current validation status:
+
+```text
+rank1, B=1,H=1,Sq=128,Skv=32768,D=128, checksum-repeats=100: ok
+```
+
+Observed checksum values:
+
+```text
+rank1: 8bbfabd24db01067
+```
+
+Measured full benchmark performance for the default path is:
+
+```text
+blocks=4096, k_tiles=256, warmup=3, iters=10, serial repeats=100
+ok=100 fail=0 avg=1801.207 TFLOP/s min=1800.598 max=1801.617
+```
+
+The 100-repeat rank1 validation completed with `checksum_stable=yes`. The
+100-repeat serial benchmark also completed with `100 ok / 0 fail`, so no
+unspecified CUDA error was observed for this default build in that run.
+
+This is not a proven dependency removal. It is only known to pass the current
+validation coverage and should be treated as schedule-sensitive until tested
+against broader data patterns and timing perturbations.
 
 ## Useful Overrides
 

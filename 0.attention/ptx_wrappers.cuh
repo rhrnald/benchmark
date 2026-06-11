@@ -6,8 +6,20 @@
 #define ATTENTION_SETMAXNREG_PRODUCER 120
 #endif
 
+#ifndef ATTENTION_SETMAXNREG_QK
+#define ATTENTION_SETMAXNREG_QK ATTENTION_SETMAXNREG_PRODUCER
+#endif
+
+#ifndef ATTENTION_SETMAXNREG_TMA
+#define ATTENTION_SETMAXNREG_TMA 128
+#endif
+
 #ifndef ATTENTION_SETMAXNREG_CONSUMER
-#define ATTENTION_SETMAXNREG_CONSUMER 192
+#define ATTENTION_SETMAXNREG_CONSUMER 184
+#endif
+
+#ifndef ATTENTION_SKIP_V_TMA_EXPECT_TX
+#define ATTENTION_SKIP_V_TMA_EXPECT_TX 1
 #endif
 
 #define ATTENTION_STRINGIFY_IMPL(x) #x
@@ -127,6 +139,22 @@ __device__ __forceinline__ void setmaxnreg_dec_producer() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("setmaxnreg.dec.sync.aligned.u32 "
                ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_PRODUCER) ";"
+               ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void setmaxnreg_dec_qk() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 "
+               ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_QK) ";"
+               ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void setmaxnreg_dec_tma() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("setmaxnreg.dec.sync.aligned.u32 "
+               ATTENTION_STRINGIFY(ATTENTION_SETMAXNREG_TMA) ";"
                ::: "memory");
 #endif
 }
@@ -272,10 +300,29 @@ __device__ __forceinline__ void issue_v_tma_tile(const CUtensorMap* v_map,
                                                  uint64_t* barrier,
                                                  int global_v_tile,
                                                  bool lane0) {
+#if !ATTENTION_SKIP_V_TMA_EXPECT_TX
   mbarrier_expect_tx(barrier, kTileBytes);
+#endif
   if (lane0) {
     const uint32_t dst_smem_addr = smem_ptr_u32(dst_smem);
     tma_load_4d(v_map, dst_smem_addr, barrier, 0, 0, 0, global_v_tile * 8);
+  }
+}
+
+__device__ __forceinline__ void issue_v_tma_half_tile(const CUtensorMap* v_map,
+                                                      uint32_t* dst_smem,
+                                                      uint64_t* barrier,
+                                                      int global_v_tile,
+                                                      int half,
+                                                      bool lane0) {
+#if !ATTENTION_SKIP_V_TMA_EXPECT_TX
+  mbarrier_expect_tx(barrier, kTileBytes / 2);
+#endif
+  if (lane0) {
+    const uint32_t dst_smem_addr =
+        smem_ptr_u32(dst_smem) + static_cast<uint32_t>(half) * (kTileBytes / 2);
+    tma_load_4d(v_map, dst_smem_addr, barrier, 0, 0, 0,
+                global_v_tile * 8 + half * 4);
   }
 }
 
