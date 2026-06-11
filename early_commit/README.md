@@ -11,9 +11,9 @@ The benchmark is intentionally independent from `0.attention`:
 3. It can also issue `early_extra_mmas` unrelated MMAs into a different TMEM
    tile before the early commit.
 4. The consumer warp waits on that early commit, executes `delay_cycles`
-   dependent dummy ALU instructions, folds the dependency through a
-   value-preserving TMEM address calculation, then loads the target tile with
-   `tcgen05.ld.x64`.
+   dependent dummy ALU instructions inside the same inline PTX block as the
+   timestamp and `tcgen05.ld.x64`. The dependency is folded through a
+   value-preserving TMEM address calculation before the load.
 5. After the producer's full commit completes, the consumer loads the same TMEM
    address again and compares all 32 lanes x 64 registers.
 
@@ -53,7 +53,7 @@ The default main sweep uses only the target MMA sequence:
 - `full_extra_mmas=0`
 - `early_target_mmas=8`
 - `early_extra_mmas=0`
-- `delay_cycles=0..128` as dummy ALU instruction counts.
+- `delay_cycles=0..128` as fixed dummy ALU instruction counts.
 
 ```bash
 make run
@@ -98,3 +98,4 @@ Use `early_wait_to_ld_start` for the actual measured delay in cycles; the
 `delay_cycles` argument is only the requested dummy ALU instruction count. The
 early LD consumes a TMEM address register derived from that dummy chain, so the
 requested delay is attached to the load instead of only to the timestamp.
+Supported fixed delay counts are `0..16,24,32,48,64,96,128,256`.

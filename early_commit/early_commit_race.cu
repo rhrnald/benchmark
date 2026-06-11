@@ -285,217 +285,6 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
   }
 }
 
-template <int Insts>
-__device__ __forceinline__ uint32_t dummy_alu_delay_unrolled(uint32_t seed) {
-  uint32_t sink = seed ^ static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-#pragma unroll
-  for (int i = 0; i < Insts; ++i) {
-    asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
-  }
-  asm volatile("" :: "r"(sink) : "memory");
-#endif
-  return sink;
-}
-
-__device__ __forceinline__ uint32_t dummy_alu_delay_runtime(uint32_t insts, uint32_t seed) {
-  uint32_t sink = seed ^ static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  for (uint32_t i = 0; i < insts; ++i) {
-    asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
-  }
-  asm volatile("" :: "r"(sink) : "memory");
-#else
-  (void)insts;
-#endif
-  return sink;
-}
-
-#define DUMMY_ALU_DELAY_CASE(n) \
-  case n:                      \
-    return dummy_alu_delay_unrolled<n>(seed)
-
-__device__ __forceinline__ uint32_t consumer_delay_instructions(uint32_t insts, uint32_t seed) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  switch (insts) {
-    DUMMY_ALU_DELAY_CASE(0);
-    DUMMY_ALU_DELAY_CASE(1);
-    DUMMY_ALU_DELAY_CASE(2);
-    DUMMY_ALU_DELAY_CASE(3);
-    DUMMY_ALU_DELAY_CASE(4);
-    DUMMY_ALU_DELAY_CASE(5);
-    DUMMY_ALU_DELAY_CASE(6);
-    DUMMY_ALU_DELAY_CASE(7);
-    DUMMY_ALU_DELAY_CASE(8);
-    DUMMY_ALU_DELAY_CASE(9);
-    DUMMY_ALU_DELAY_CASE(10);
-    DUMMY_ALU_DELAY_CASE(11);
-    DUMMY_ALU_DELAY_CASE(12);
-    DUMMY_ALU_DELAY_CASE(13);
-    DUMMY_ALU_DELAY_CASE(14);
-    DUMMY_ALU_DELAY_CASE(15);
-    DUMMY_ALU_DELAY_CASE(16);
-    DUMMY_ALU_DELAY_CASE(17);
-    DUMMY_ALU_DELAY_CASE(18);
-    DUMMY_ALU_DELAY_CASE(19);
-    DUMMY_ALU_DELAY_CASE(20);
-    DUMMY_ALU_DELAY_CASE(21);
-    DUMMY_ALU_DELAY_CASE(22);
-    DUMMY_ALU_DELAY_CASE(23);
-    DUMMY_ALU_DELAY_CASE(24);
-    DUMMY_ALU_DELAY_CASE(25);
-    DUMMY_ALU_DELAY_CASE(26);
-    DUMMY_ALU_DELAY_CASE(27);
-    DUMMY_ALU_DELAY_CASE(28);
-    DUMMY_ALU_DELAY_CASE(29);
-    DUMMY_ALU_DELAY_CASE(30);
-    DUMMY_ALU_DELAY_CASE(31);
-    DUMMY_ALU_DELAY_CASE(32);
-    DUMMY_ALU_DELAY_CASE(33);
-    DUMMY_ALU_DELAY_CASE(34);
-    DUMMY_ALU_DELAY_CASE(35);
-    DUMMY_ALU_DELAY_CASE(36);
-    DUMMY_ALU_DELAY_CASE(37);
-    DUMMY_ALU_DELAY_CASE(38);
-    DUMMY_ALU_DELAY_CASE(39);
-    DUMMY_ALU_DELAY_CASE(40);
-    DUMMY_ALU_DELAY_CASE(41);
-    DUMMY_ALU_DELAY_CASE(42);
-    DUMMY_ALU_DELAY_CASE(43);
-    DUMMY_ALU_DELAY_CASE(44);
-    DUMMY_ALU_DELAY_CASE(45);
-    DUMMY_ALU_DELAY_CASE(46);
-    DUMMY_ALU_DELAY_CASE(47);
-    DUMMY_ALU_DELAY_CASE(48);
-    DUMMY_ALU_DELAY_CASE(49);
-    DUMMY_ALU_DELAY_CASE(50);
-    DUMMY_ALU_DELAY_CASE(51);
-    DUMMY_ALU_DELAY_CASE(52);
-    DUMMY_ALU_DELAY_CASE(53);
-    DUMMY_ALU_DELAY_CASE(54);
-    DUMMY_ALU_DELAY_CASE(55);
-    DUMMY_ALU_DELAY_CASE(56);
-    DUMMY_ALU_DELAY_CASE(57);
-    DUMMY_ALU_DELAY_CASE(58);
-    DUMMY_ALU_DELAY_CASE(59);
-    DUMMY_ALU_DELAY_CASE(60);
-    DUMMY_ALU_DELAY_CASE(61);
-    DUMMY_ALU_DELAY_CASE(62);
-    DUMMY_ALU_DELAY_CASE(63);
-    DUMMY_ALU_DELAY_CASE(64);
-    DUMMY_ALU_DELAY_CASE(65);
-    DUMMY_ALU_DELAY_CASE(66);
-    DUMMY_ALU_DELAY_CASE(67);
-    DUMMY_ALU_DELAY_CASE(68);
-    DUMMY_ALU_DELAY_CASE(69);
-    DUMMY_ALU_DELAY_CASE(70);
-    DUMMY_ALU_DELAY_CASE(71);
-    DUMMY_ALU_DELAY_CASE(72);
-    DUMMY_ALU_DELAY_CASE(73);
-    DUMMY_ALU_DELAY_CASE(74);
-    DUMMY_ALU_DELAY_CASE(75);
-    DUMMY_ALU_DELAY_CASE(76);
-    DUMMY_ALU_DELAY_CASE(77);
-    DUMMY_ALU_DELAY_CASE(78);
-    DUMMY_ALU_DELAY_CASE(79);
-    DUMMY_ALU_DELAY_CASE(80);
-    DUMMY_ALU_DELAY_CASE(81);
-    DUMMY_ALU_DELAY_CASE(82);
-    DUMMY_ALU_DELAY_CASE(83);
-    DUMMY_ALU_DELAY_CASE(84);
-    DUMMY_ALU_DELAY_CASE(85);
-    DUMMY_ALU_DELAY_CASE(86);
-    DUMMY_ALU_DELAY_CASE(87);
-    DUMMY_ALU_DELAY_CASE(88);
-    DUMMY_ALU_DELAY_CASE(89);
-    DUMMY_ALU_DELAY_CASE(90);
-    DUMMY_ALU_DELAY_CASE(91);
-    DUMMY_ALU_DELAY_CASE(92);
-    DUMMY_ALU_DELAY_CASE(93);
-    DUMMY_ALU_DELAY_CASE(94);
-    DUMMY_ALU_DELAY_CASE(95);
-    DUMMY_ALU_DELAY_CASE(96);
-    DUMMY_ALU_DELAY_CASE(97);
-    DUMMY_ALU_DELAY_CASE(98);
-    DUMMY_ALU_DELAY_CASE(99);
-    DUMMY_ALU_DELAY_CASE(100);
-    DUMMY_ALU_DELAY_CASE(101);
-    DUMMY_ALU_DELAY_CASE(102);
-    DUMMY_ALU_DELAY_CASE(103);
-    DUMMY_ALU_DELAY_CASE(104);
-    DUMMY_ALU_DELAY_CASE(105);
-    DUMMY_ALU_DELAY_CASE(106);
-    DUMMY_ALU_DELAY_CASE(107);
-    DUMMY_ALU_DELAY_CASE(108);
-    DUMMY_ALU_DELAY_CASE(109);
-    DUMMY_ALU_DELAY_CASE(110);
-    DUMMY_ALU_DELAY_CASE(111);
-    DUMMY_ALU_DELAY_CASE(112);
-    DUMMY_ALU_DELAY_CASE(113);
-    DUMMY_ALU_DELAY_CASE(114);
-    DUMMY_ALU_DELAY_CASE(115);
-    DUMMY_ALU_DELAY_CASE(116);
-    DUMMY_ALU_DELAY_CASE(117);
-    DUMMY_ALU_DELAY_CASE(118);
-    DUMMY_ALU_DELAY_CASE(119);
-    DUMMY_ALU_DELAY_CASE(120);
-    DUMMY_ALU_DELAY_CASE(121);
-    DUMMY_ALU_DELAY_CASE(122);
-    DUMMY_ALU_DELAY_CASE(123);
-    DUMMY_ALU_DELAY_CASE(124);
-    DUMMY_ALU_DELAY_CASE(125);
-    DUMMY_ALU_DELAY_CASE(126);
-    DUMMY_ALU_DELAY_CASE(127);
-    DUMMY_ALU_DELAY_CASE(128);
-    default:
-      return dummy_alu_delay_runtime(insts, seed);
-  }
-#else
-  (void)insts;
-  (void)seed;
-  return 0;
-#endif
-}
-
-#undef DUMMY_ALU_DELAY_CASE
-
-__device__ __forceinline__ uint64_t dependent_clock64(uint32_t dependency) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  uint64_t now;
-  asm volatile(
-      "{ .reg .u64 dep64; .reg .u64 t; "
-      "cvt.u64.u32 dep64, %1; "
-      "mov.u64 t, %%clock64; "
-      "add.u64 %0, t, dep64; "
-      "sub.u64 %0, %0, dep64; }"
-      : "=l"(now)
-      : "r"(dependency)
-      : "memory");
-  return now;
-#else
-  (void)dependency;
-  return clock64();
-#endif
-}
-
-__device__ __forceinline__ uint32_t dependent_tmem_addr(uint32_t taddr,
-                                                        uint32_t dependency) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  uint32_t out;
-  asm volatile(
-      "{ .reg .u32 tmp; "
-      "add.u32 tmp, %1, %2; "
-      "sub.u32 %0, tmp, %1; }"
-      : "=r"(out)
-      : "r"(dependency), "r"(taddr)
-      : "memory");
-  return out;
-#else
-  (void)dependency;
-  return taddr;
-#endif
-}
-
 #define TCGEN05_LD_X64_OUTPUTS(a)                                            \
   "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
       "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),    \
@@ -528,6 +317,54 @@ __device__ __forceinline__ uint32_t dependent_tmem_addr(uint32_t taddr,
       : TCGEN05_LD_X64_OUTPUTS(out_regs)                                     \
       : "r"(src_taddr)                                                       \
       : "memory")
+
+#define DUMMY_ALU_ASM_ADD "add.u32 dep, dep, 0x9e3779b9; "
+#define DUMMY_ALU_ASM_0 ""
+#define DUMMY_ALU_ASM_1 DUMMY_ALU_ASM_ADD
+#define DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_1 DUMMY_ALU_ASM_1
+#define DUMMY_ALU_ASM_3 DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_1
+#define DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_2 DUMMY_ALU_ASM_2
+#define DUMMY_ALU_ASM_5 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_1
+#define DUMMY_ALU_ASM_6 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_2
+#define DUMMY_ALU_ASM_7 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_3
+#define DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_4 DUMMY_ALU_ASM_4
+#define DUMMY_ALU_ASM_9 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_1
+#define DUMMY_ALU_ASM_10 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_2
+#define DUMMY_ALU_ASM_11 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_3
+#define DUMMY_ALU_ASM_12 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_4
+#define DUMMY_ALU_ASM_13 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_5
+#define DUMMY_ALU_ASM_14 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_6
+#define DUMMY_ALU_ASM_15 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_7
+#define DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_8 DUMMY_ALU_ASM_8
+#define DUMMY_ALU_ASM_24 DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_8
+#define DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_16 DUMMY_ALU_ASM_16
+#define DUMMY_ALU_ASM_48 DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_16
+#define DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_32 DUMMY_ALU_ASM_32
+#define DUMMY_ALU_ASM_96 DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_32
+#define DUMMY_ALU_ASM_128 DUMMY_ALU_ASM_64 DUMMY_ALU_ASM_64
+#define DUMMY_ALU_ASM_256 DUMMY_ALU_ASM_128 DUMMY_ALU_ASM_128
+
+#define TCGEN05_DELAYED_LD_X64(src_taddr, seed, delay_asm, out_regs, ld_clock) \
+  asm volatile(                                                               \
+      "{ .reg .u32 dep; .reg .u32 addr; .reg .pred p; .reg .u64 t; "          \
+      "mov.u32 dep, %66; " delay_asm                                          \
+      "or.b32 dep, dep, 1; "                                                  \
+      "add.u32 addr, dep, %65; "                                              \
+      "sub.u32 addr, addr, dep; "                                             \
+      "setp.ne.u32 p, dep, 0; "                                               \
+      "@p mov.u64 t, %%clock64; "                                             \
+      "mov.u64 %64, t; "                                                      \
+      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS      \
+      "}, [addr]; }"                                                          \
+      : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
+      : "r"(src_taddr), "r"(seed)                                             \
+      : "memory")
+
+#define TCGEN05_DELAYED_LD_CASE(n)                                            \
+  case n:                                                                     \
+    TCGEN05_DELAYED_LD_X64(target_taddr, delay_seed, DUMMY_ALU_ASM_##n,        \
+                           early_regs, ld_clock);                             \
+    break
 
 __device__ __forceinline__ void issue_target_mma(int mma,
                                                  uint32_t target_taddr,
@@ -686,15 +523,40 @@ void early_commit_race_kernel(Record* __restrict__ records,
     if (lane == 0) rec.early_wait_end = early_wait_end;
     const uint32_t delay_seed = static_cast<uint32_t>(early_wait_end) ^
                                 static_cast<uint32_t>(early_wait_end >> 32);
-    const uint32_t delay_dependency =
-        consumer_delay_instructions(static_cast<uint32_t>(delay_cycles_after_early_wait),
-                                    delay_seed);
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
-    const uint32_t delayed_target_taddr = dependent_tmem_addr(target_taddr, delay_dependency);
-    const uint64_t ld_start = dependent_clock64(delayed_target_taddr) - base_clock;
-    TCGEN05_LD_X64(delayed_target_taddr, early_regs);
+    uint64_t ld_clock = 0;
+    switch (delay_cycles_after_early_wait) {
+      TCGEN05_DELAYED_LD_CASE(0);
+      TCGEN05_DELAYED_LD_CASE(1);
+      TCGEN05_DELAYED_LD_CASE(2);
+      TCGEN05_DELAYED_LD_CASE(3);
+      TCGEN05_DELAYED_LD_CASE(4);
+      TCGEN05_DELAYED_LD_CASE(5);
+      TCGEN05_DELAYED_LD_CASE(6);
+      TCGEN05_DELAYED_LD_CASE(7);
+      TCGEN05_DELAYED_LD_CASE(8);
+      TCGEN05_DELAYED_LD_CASE(9);
+      TCGEN05_DELAYED_LD_CASE(10);
+      TCGEN05_DELAYED_LD_CASE(11);
+      TCGEN05_DELAYED_LD_CASE(12);
+      TCGEN05_DELAYED_LD_CASE(13);
+      TCGEN05_DELAYED_LD_CASE(14);
+      TCGEN05_DELAYED_LD_CASE(15);
+      TCGEN05_DELAYED_LD_CASE(16);
+      TCGEN05_DELAYED_LD_CASE(24);
+      TCGEN05_DELAYED_LD_CASE(32);
+      TCGEN05_DELAYED_LD_CASE(48);
+      TCGEN05_DELAYED_LD_CASE(64);
+      TCGEN05_DELAYED_LD_CASE(96);
+      TCGEN05_DELAYED_LD_CASE(128);
+      TCGEN05_DELAYED_LD_CASE(256);
+      default:
+        asm volatile("trap;" ::: "memory");
+        break;
+    }
+    const uint64_t ld_start = ld_clock - base_clock;
     tcgen05_wait_ld();
     const uint64_t ld_end = clock64() - base_clock;
     if (lane == 0) {
@@ -919,6 +781,33 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
 }
 
 #undef TCGEN05_LD_X64
+#undef TCGEN05_DELAYED_LD_CASE
+#undef TCGEN05_DELAYED_LD_X64
+#undef DUMMY_ALU_ASM_256
+#undef DUMMY_ALU_ASM_128
+#undef DUMMY_ALU_ASM_96
+#undef DUMMY_ALU_ASM_64
+#undef DUMMY_ALU_ASM_48
+#undef DUMMY_ALU_ASM_32
+#undef DUMMY_ALU_ASM_24
+#undef DUMMY_ALU_ASM_16
+#undef DUMMY_ALU_ASM_15
+#undef DUMMY_ALU_ASM_14
+#undef DUMMY_ALU_ASM_13
+#undef DUMMY_ALU_ASM_12
+#undef DUMMY_ALU_ASM_11
+#undef DUMMY_ALU_ASM_10
+#undef DUMMY_ALU_ASM_9
+#undef DUMMY_ALU_ASM_8
+#undef DUMMY_ALU_ASM_7
+#undef DUMMY_ALU_ASM_6
+#undef DUMMY_ALU_ASM_5
+#undef DUMMY_ALU_ASM_4
+#undef DUMMY_ALU_ASM_3
+#undef DUMMY_ALU_ASM_2
+#undef DUMMY_ALU_ASM_1
+#undef DUMMY_ALU_ASM_0
+#undef DUMMY_ALU_ASM_ADD
 #undef TCGEN05_LD_X64_OUTPUTS
 #undef TCGEN05_LD_X64_OPERANDS
 
@@ -950,6 +839,38 @@ std::vector<int> parse_list(const char* text) {
   return values;
 }
 
+bool is_supported_delay(int delay) {
+  switch (delay) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 14:
+    case 15:
+    case 16:
+    case 24:
+    case 32:
+    case 48:
+    case 64:
+    case 96:
+    case 128:
+    case 256:
+      return true;
+    default:
+      return false;
+  }
+}
+
 void parse_args(int argc, char** argv, Args* args) {
   if (has_flag(argc, argv, "--help")) {
     std::printf(
@@ -961,7 +882,7 @@ void parse_args(int argc, char** argv, Args* args) {
         "                         [--probe-gap-cycles N]\n\n"
         "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
         "target_mmas=%d, full_extra_mmas=%d.\n"
-        "Default sweep: early_targets=8, early_extras=0, dummy ALU delays=0..128.\n",
+        "Default sweep: early_targets=8, early_extras=0, fixed dummy ALU delays=0..128.\n",
         kCompileTimeTargetMmas, kCompileTimeFullExtraMmas);
     std::exit(0);
   }
@@ -994,6 +915,13 @@ std::vector<Combo> make_combos(const Args& args) {
         if (early_target < 0 || early_target > args.target_mmas) continue;
         if (early_extra < 0 || early_extra > args.full_extra_mmas) continue;
         if (delay < 0) continue;
+        if (!is_supported_delay(delay)) {
+          std::fprintf(stderr,
+                       "unsupported delay=%d; supported fixed dummy ALU counts are "
+                       "0..16,24,32,48,64,96,128,256\n",
+                       delay);
+          std::exit(1);
+        }
         combos.push_back({early_target, early_extra, delay});
       }
     }
