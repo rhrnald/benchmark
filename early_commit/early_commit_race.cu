@@ -352,8 +352,6 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       "mov.u64 t, %%clock64; "                                                \
       "mov.u64 %64, t; "                                                      \
       "@p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
-      "}, [%65]; "                                                            \
-      "@!p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS  \
       "}, [%65]; }"                                                           \
       : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
       : "r"(src_taddr), "r"(seed)                                             \
