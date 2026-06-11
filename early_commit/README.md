@@ -12,8 +12,8 @@ The benchmark is intentionally independent from `0.attention`:
    tile before the early commit.
 4. The consumer warp waits on that early commit, executes `delay_cycles`
    dependent dummy ALU instructions inside the same inline PTX block as the
-   timestamp and `tcgen05.ld.x64`. The dependency is folded through a
-   value-preserving TMEM address calculation before the load.
+   timestamp and `tcgen05.ld.x64`. The load predicate depends on the dummy
+   chain, so the value read from TMEM is unchanged while LD issue is delayed.
 5. After the producer's full commit completes, the consumer loads the same TMEM
    address again and compares all 32 lanes x 64 registers.
 
@@ -96,6 +96,6 @@ make run TARGET_MMAS=8 FULL_EXTRA_MMAS=0 EARLY_TARGETS=7 EARLY_EXTRAS=0
 The detail CSV keeps per-CTA timings and signatures for debugging.
 Use `early_wait_to_ld_start` for the actual measured delay in cycles; the
 `delay_cycles` argument is only the requested dummy ALU instruction count. The
-early LD consumes a TMEM address register derived from that dummy chain, so the
+early LD is predicated on a value derived from that dummy chain, so the
 requested delay is attached to the load instead of only to the timestamp.
 Supported fixed delay counts are `0..16,24,32,48,64,96,128,256`.

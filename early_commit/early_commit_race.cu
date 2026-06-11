@@ -346,14 +346,15 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
 
 #define TCGEN05_DELAYED_LD_X64(src_taddr, seed, delay_asm, out_regs, ld_clock) \
   asm volatile(                                                               \
-      "{ .reg .u32 dep; .reg .u32 addr; .reg .u64 t; "                        \
+      "{ .reg .u32 dep; .reg .pred p; .reg .u64 t; "                          \
       "mov.u32 dep, %66; " delay_asm                                          \
-      "add.u32 addr, dep, %65; "                                              \
-      "sub.u32 addr, addr, dep; "                                             \
+      "setp.ne.u32 p, dep, 0xffffffff; "                                      \
       "mov.u64 t, %%clock64; "                                                \
       "mov.u64 %64, t; "                                                      \
-      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS      \
-      "}, [addr]; }"                                                          \
+      "@p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS   \
+      "}, [%65]; "                                                            \
+      "@!p tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS  \
+      "}, [%65]; }"                                                           \
       : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
       : "r"(src_taddr), "r"(seed)                                             \
       : "memory")
