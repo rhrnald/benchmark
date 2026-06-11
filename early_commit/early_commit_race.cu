@@ -367,7 +367,7 @@ __device__ __forceinline__ void issue_extra_mma(int mma,
   tcgen05_mma_bf16_ss(extra_taddr, q_desc[mma & 7], k_desc[mma & 7], idesc, mma != 0);
 }
 
-template <int EarlyTargetMmas, int EarlyExtraMmas>
+template <int EarlyTargetMmas, int EarlyExtraMmas, bool UseDummyDelay>
 __global__ __launch_bounds__(kThreads, 1)
 void early_commit_race_kernel(Record* __restrict__ records,
                               int delay_cycles_after_early_wait,
@@ -435,7 +435,9 @@ void early_commit_race_kernel(Record* __restrict__ records,
     rec.mismatch_lanes = 0;
     rec.early_sig = 0;
     rec.ref_sig = 0;
-    zero_mask_shared = 0;
+    if constexpr (UseDummyDelay) {
+      zero_mask_shared = 0;
+    }
     mbarrier_init(&early_done, 1);
     mbarrier_init(&full_done, 1);
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
@@ -514,7 +516,7 @@ void early_commit_race_kernel(Record* __restrict__ records,
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
     uint64_t ld_clock = 0;
-    if (delay_cycles_after_early_wait > 0) {
+    if constexpr (UseDummyDelay) {
       const uint32_t zero_mask =
           *reinterpret_cast<volatile uint32_t*>(&zero_mask_shared);
       TCGEN05_DUMMY_DELAYED_LD_X64(
@@ -1107,21 +1109,21 @@ void print_model_summary(const std::vector<ModelRecord>& rows) {
   std::exit(1);
 }
 
-template <int EarlyTargetMmas, int EarlyExtraMmas>
+template <int EarlyTargetMmas, int EarlyExtraMmas, bool UseDummyDelay>
 void launch_specialized_combo(const Args& args,
                               const Combo& combo,
                               uint32_t combo_id,
                               Record* d_records) {
   CUDA_CHECK(cudaFuncSetAttribute(
-      early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>,
+      early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, UseDummyDelay>,
       cudaFuncAttributeMaxDynamicSharedMemorySize, kDynamicSmemBytes));
   for (int i = 0; i < args.warmup; ++i) {
-    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
+    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, UseDummyDelay>
         <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
   }
   CUDA_CHECK(cudaPeekAtLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
-  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
+  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, UseDummyDelay>
       <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
   CUDA_CHECK(cudaPeekAtLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -1133,8 +1135,13 @@ void dispatch_early_extra(const Args& args,
                           uint32_t combo_id,
                           Record* d_records) {
   if (combo.early_extra_mmas == EarlyExtraMmas) {
-    launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas>(args, combo, combo_id,
-                                                             d_records);
+    if (combo.delay_cycles == 0) {
+      launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas, false>(args, combo, combo_id,
+                                                                      d_records);
+    } else {
+      launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas, true>(args, combo, combo_id,
+                                                                     d_records);
+    }
     return;
   }
   if constexpr (EarlyExtraMmas < kCompileTimeFullExtraMmas) {

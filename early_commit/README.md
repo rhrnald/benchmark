@@ -36,7 +36,9 @@ binary name includes those values, for example `early_commit_race_t8_f0`.
 dispatch. One binary can sweep multiple values, but each kernel launch is a
 separate specialization with constant producer loop bounds. `delay_cycles` is a
 runtime loop count so the dummy ALU loop cannot be folded away as a compile-time
-constant.
+constant. The host uses a raw no-delay kernel for `delay_cycles=0` and a
+dummy-delay kernel for `delay_cycles>0` so the baseline path is not perturbed by
+the delayed-load code.
 
 ## Smoke
 
