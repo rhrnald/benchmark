@@ -286,8 +286,8 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
 }
 
 template <int Insts>
-__device__ __forceinline__ uint32_t dummy_alu_delay_unrolled() {
-  uint32_t sink = static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
+__device__ __forceinline__ uint32_t dummy_alu_delay_unrolled(uint32_t seed) {
+  uint32_t sink = seed ^ static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
 #pragma unroll
   for (int i = 0; i < Insts; ++i) {
@@ -298,8 +298,8 @@ __device__ __forceinline__ uint32_t dummy_alu_delay_unrolled() {
   return sink;
 }
 
-__device__ __forceinline__ uint32_t dummy_alu_delay_runtime(uint32_t insts) {
-  uint32_t sink = static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
+__device__ __forceinline__ uint32_t dummy_alu_delay_runtime(uint32_t insts, uint32_t seed) {
+  uint32_t sink = seed ^ static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   for (uint32_t i = 0; i < insts; ++i) {
     asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
@@ -313,9 +313,9 @@ __device__ __forceinline__ uint32_t dummy_alu_delay_runtime(uint32_t insts) {
 
 #define DUMMY_ALU_DELAY_CASE(n) \
   case n:                      \
-    return dummy_alu_delay_unrolled<n>()
+    return dummy_alu_delay_unrolled<n>(seed)
 
-__device__ __forceinline__ uint32_t consumer_delay_instructions(uint32_t insts) {
+__device__ __forceinline__ uint32_t consumer_delay_instructions(uint32_t insts, uint32_t seed) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   switch (insts) {
     DUMMY_ALU_DELAY_CASE(0);
@@ -448,10 +448,11 @@ __device__ __forceinline__ uint32_t consumer_delay_instructions(uint32_t insts) 
     DUMMY_ALU_DELAY_CASE(127);
     DUMMY_ALU_DELAY_CASE(128);
     default:
-      return dummy_alu_delay_runtime(insts);
+      return dummy_alu_delay_runtime(insts, seed);
   }
 #else
   (void)insts;
+  (void)seed;
   return 0;
 #endif
 }
@@ -661,8 +662,11 @@ void early_commit_race_kernel(Record* __restrict__ records,
     mbarrier_wait(&early_done, 0);
     const uint64_t early_wait_end = clock64() - base_clock;
     if (lane == 0) rec.early_wait_end = early_wait_end;
+    const uint32_t delay_seed = static_cast<uint32_t>(early_wait_end) ^
+                                static_cast<uint32_t>(early_wait_end >> 32);
     const uint32_t delay_dependency =
-        consumer_delay_instructions(static_cast<uint32_t>(delay_cycles_after_early_wait));
+        consumer_delay_instructions(static_cast<uint32_t>(delay_cycles_after_early_wait),
+                                    delay_seed);
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
