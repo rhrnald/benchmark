@@ -65,7 +65,7 @@ struct Args {
   int warmup = 1;
   const char* early_targets = "8";
   const char* early_extras = "0";
-  const char* delays = "0,32,64,96,128,160,192,224,256,320,384,448,512";
+  const char* delays = "0,1,2,3,4,5,6,7,8,10,12,16,24,32,48,64,96,128";
   const char* csv = "early_commit/log/early_commit_race_detail.csv";
   const char* summary_csv = "early_commit/log/early_commit_race_summary.csv";
   bool model = false;
@@ -278,12 +278,184 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
 #endif
 }
 
-__device__ __forceinline__ void delay_cycles(uint32_t cycles) {
+__device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
   if (cycles == 0) return;
   const uint64_t start = clock64();
   while (clock64() - start < static_cast<uint64_t>(cycles)) {
   }
 }
+
+template <int Insts>
+__device__ __forceinline__ void dummy_alu_delay_unrolled() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t sink = static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
+#pragma unroll
+  for (int i = 0; i < Insts; ++i) {
+    asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
+  }
+  asm volatile("" :: "r"(sink) : "memory");
+#endif
+}
+
+__device__ __forceinline__ void dummy_alu_delay_runtime(uint32_t insts) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t sink = static_cast<uint32_t>(threadIdx.x) ^ 0x9e3779b9u;
+  for (uint32_t i = 0; i < insts; ++i) {
+    asm volatile("add.u32 %0, %0, 0x9e3779b9;" : "+r"(sink));
+  }
+  asm volatile("" :: "r"(sink) : "memory");
+#else
+  (void)insts;
+#endif
+}
+
+#define DUMMY_ALU_DELAY_CASE(n) \
+  case n:                      \
+    dummy_alu_delay_unrolled<n>(); \
+    break
+
+__device__ __forceinline__ void consumer_delay_instructions(uint32_t insts) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  switch (insts) {
+    DUMMY_ALU_DELAY_CASE(0);
+    DUMMY_ALU_DELAY_CASE(1);
+    DUMMY_ALU_DELAY_CASE(2);
+    DUMMY_ALU_DELAY_CASE(3);
+    DUMMY_ALU_DELAY_CASE(4);
+    DUMMY_ALU_DELAY_CASE(5);
+    DUMMY_ALU_DELAY_CASE(6);
+    DUMMY_ALU_DELAY_CASE(7);
+    DUMMY_ALU_DELAY_CASE(8);
+    DUMMY_ALU_DELAY_CASE(9);
+    DUMMY_ALU_DELAY_CASE(10);
+    DUMMY_ALU_DELAY_CASE(11);
+    DUMMY_ALU_DELAY_CASE(12);
+    DUMMY_ALU_DELAY_CASE(13);
+    DUMMY_ALU_DELAY_CASE(14);
+    DUMMY_ALU_DELAY_CASE(15);
+    DUMMY_ALU_DELAY_CASE(16);
+    DUMMY_ALU_DELAY_CASE(17);
+    DUMMY_ALU_DELAY_CASE(18);
+    DUMMY_ALU_DELAY_CASE(19);
+    DUMMY_ALU_DELAY_CASE(20);
+    DUMMY_ALU_DELAY_CASE(21);
+    DUMMY_ALU_DELAY_CASE(22);
+    DUMMY_ALU_DELAY_CASE(23);
+    DUMMY_ALU_DELAY_CASE(24);
+    DUMMY_ALU_DELAY_CASE(25);
+    DUMMY_ALU_DELAY_CASE(26);
+    DUMMY_ALU_DELAY_CASE(27);
+    DUMMY_ALU_DELAY_CASE(28);
+    DUMMY_ALU_DELAY_CASE(29);
+    DUMMY_ALU_DELAY_CASE(30);
+    DUMMY_ALU_DELAY_CASE(31);
+    DUMMY_ALU_DELAY_CASE(32);
+    DUMMY_ALU_DELAY_CASE(33);
+    DUMMY_ALU_DELAY_CASE(34);
+    DUMMY_ALU_DELAY_CASE(35);
+    DUMMY_ALU_DELAY_CASE(36);
+    DUMMY_ALU_DELAY_CASE(37);
+    DUMMY_ALU_DELAY_CASE(38);
+    DUMMY_ALU_DELAY_CASE(39);
+    DUMMY_ALU_DELAY_CASE(40);
+    DUMMY_ALU_DELAY_CASE(41);
+    DUMMY_ALU_DELAY_CASE(42);
+    DUMMY_ALU_DELAY_CASE(43);
+    DUMMY_ALU_DELAY_CASE(44);
+    DUMMY_ALU_DELAY_CASE(45);
+    DUMMY_ALU_DELAY_CASE(46);
+    DUMMY_ALU_DELAY_CASE(47);
+    DUMMY_ALU_DELAY_CASE(48);
+    DUMMY_ALU_DELAY_CASE(49);
+    DUMMY_ALU_DELAY_CASE(50);
+    DUMMY_ALU_DELAY_CASE(51);
+    DUMMY_ALU_DELAY_CASE(52);
+    DUMMY_ALU_DELAY_CASE(53);
+    DUMMY_ALU_DELAY_CASE(54);
+    DUMMY_ALU_DELAY_CASE(55);
+    DUMMY_ALU_DELAY_CASE(56);
+    DUMMY_ALU_DELAY_CASE(57);
+    DUMMY_ALU_DELAY_CASE(58);
+    DUMMY_ALU_DELAY_CASE(59);
+    DUMMY_ALU_DELAY_CASE(60);
+    DUMMY_ALU_DELAY_CASE(61);
+    DUMMY_ALU_DELAY_CASE(62);
+    DUMMY_ALU_DELAY_CASE(63);
+    DUMMY_ALU_DELAY_CASE(64);
+    DUMMY_ALU_DELAY_CASE(65);
+    DUMMY_ALU_DELAY_CASE(66);
+    DUMMY_ALU_DELAY_CASE(67);
+    DUMMY_ALU_DELAY_CASE(68);
+    DUMMY_ALU_DELAY_CASE(69);
+    DUMMY_ALU_DELAY_CASE(70);
+    DUMMY_ALU_DELAY_CASE(71);
+    DUMMY_ALU_DELAY_CASE(72);
+    DUMMY_ALU_DELAY_CASE(73);
+    DUMMY_ALU_DELAY_CASE(74);
+    DUMMY_ALU_DELAY_CASE(75);
+    DUMMY_ALU_DELAY_CASE(76);
+    DUMMY_ALU_DELAY_CASE(77);
+    DUMMY_ALU_DELAY_CASE(78);
+    DUMMY_ALU_DELAY_CASE(79);
+    DUMMY_ALU_DELAY_CASE(80);
+    DUMMY_ALU_DELAY_CASE(81);
+    DUMMY_ALU_DELAY_CASE(82);
+    DUMMY_ALU_DELAY_CASE(83);
+    DUMMY_ALU_DELAY_CASE(84);
+    DUMMY_ALU_DELAY_CASE(85);
+    DUMMY_ALU_DELAY_CASE(86);
+    DUMMY_ALU_DELAY_CASE(87);
+    DUMMY_ALU_DELAY_CASE(88);
+    DUMMY_ALU_DELAY_CASE(89);
+    DUMMY_ALU_DELAY_CASE(90);
+    DUMMY_ALU_DELAY_CASE(91);
+    DUMMY_ALU_DELAY_CASE(92);
+    DUMMY_ALU_DELAY_CASE(93);
+    DUMMY_ALU_DELAY_CASE(94);
+    DUMMY_ALU_DELAY_CASE(95);
+    DUMMY_ALU_DELAY_CASE(96);
+    DUMMY_ALU_DELAY_CASE(97);
+    DUMMY_ALU_DELAY_CASE(98);
+    DUMMY_ALU_DELAY_CASE(99);
+    DUMMY_ALU_DELAY_CASE(100);
+    DUMMY_ALU_DELAY_CASE(101);
+    DUMMY_ALU_DELAY_CASE(102);
+    DUMMY_ALU_DELAY_CASE(103);
+    DUMMY_ALU_DELAY_CASE(104);
+    DUMMY_ALU_DELAY_CASE(105);
+    DUMMY_ALU_DELAY_CASE(106);
+    DUMMY_ALU_DELAY_CASE(107);
+    DUMMY_ALU_DELAY_CASE(108);
+    DUMMY_ALU_DELAY_CASE(109);
+    DUMMY_ALU_DELAY_CASE(110);
+    DUMMY_ALU_DELAY_CASE(111);
+    DUMMY_ALU_DELAY_CASE(112);
+    DUMMY_ALU_DELAY_CASE(113);
+    DUMMY_ALU_DELAY_CASE(114);
+    DUMMY_ALU_DELAY_CASE(115);
+    DUMMY_ALU_DELAY_CASE(116);
+    DUMMY_ALU_DELAY_CASE(117);
+    DUMMY_ALU_DELAY_CASE(118);
+    DUMMY_ALU_DELAY_CASE(119);
+    DUMMY_ALU_DELAY_CASE(120);
+    DUMMY_ALU_DELAY_CASE(121);
+    DUMMY_ALU_DELAY_CASE(122);
+    DUMMY_ALU_DELAY_CASE(123);
+    DUMMY_ALU_DELAY_CASE(124);
+    DUMMY_ALU_DELAY_CASE(125);
+    DUMMY_ALU_DELAY_CASE(126);
+    DUMMY_ALU_DELAY_CASE(127);
+    DUMMY_ALU_DELAY_CASE(128);
+    default:
+      dummy_alu_delay_runtime(insts);
+      break;
+  }
+#else
+  (void)insts;
+#endif
+}
+
+#undef DUMMY_ALU_DELAY_CASE
 
 #define TCGEN05_LD_X64_OUTPUTS(a)                                            \
   "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),       \
@@ -473,7 +645,7 @@ void early_commit_race_kernel(Record* __restrict__ records,
     mbarrier_wait(&early_done, 0);
     const uint64_t early_wait_end = clock64() - base_clock;
     if (lane == 0) rec.early_wait_end = early_wait_end;
-    delay_cycles(static_cast<uint32_t>(delay_cycles_after_early_wait));
+    consumer_delay_instructions(static_cast<uint32_t>(delay_cycles_after_early_wait));
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
@@ -664,11 +836,11 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
     tcgen05_commit(&late_done);
     rec.late_commit_issue_end = clock64() - base_clock;
 
-    delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
+    clock_delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
 
     tcgen05_mma_bf16_ss(ready_taddr, q_desc_shared[1], k_desc_shared[1], idesc, false);
     rec.ready_mma_issue_end = clock64() - base_clock;
-    delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
+    clock_delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
     rec.ready_commit_start = clock64() - base_clock;
     tcgen05_commit(&ready_done);
     rec.ready_commit_issue_end = clock64() - base_clock;
@@ -683,7 +855,7 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
     mbarrier_wait(&full_done, 0);
     if (lane == 0) rec.full_wait_end = clock64() - base_clock;
 
-    delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
+    clock_delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
     const uint64_t late_wait_start = clock64() - base_clock;
     if (lane == 0) rec.late_wait_start = late_wait_start;
     mbarrier_wait(&late_done, 0);
@@ -745,7 +917,7 @@ void parse_args(int argc, char** argv, Args* args) {
         "                         [--probe-gap-cycles N]\n\n"
         "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
         "target_mmas=%d, full_extra_mmas=%d.\n"
-        "Default sweep: early_targets=8, early_extras=0, delays=0..512 cycles.\n",
+        "Default sweep: early_targets=8, early_extras=0, dummy ALU delays=0..128.\n",
         kCompileTimeTargetMmas, kCompileTimeFullExtraMmas);
     std::exit(0);
   }
