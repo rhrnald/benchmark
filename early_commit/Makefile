@@ -14,13 +14,15 @@ EARLY_TARGETS ?= 8
 EARLY_EXTRAS ?= 0,1,2,3,4
 DELAYS ?= 0,32,64,96,128,160,192,224,256,320,384,448,512
 WARMUP ?= 1
+PROBE_GAP_CYCLES ?= 2048
 COMPILE_DEFS := -DEARLY_COMMIT_TARGET_MMAS=$(TARGET_MMAS) \
 	-DEARLY_COMMIT_FULL_EXTRA_MMAS=$(FULL_EXTRA_MMAS)
 
 DETAIL_CSV ?= $(OUT_DIR)/early_commit_race_detail.csv
 SUMMARY_CSV ?= $(OUT_DIR)/early_commit_race_summary.csv
+MODEL_CSV ?= $(OUT_DIR)/early_commit_model.csv
 
-.PHONY: build run smoke clean
+.PHONY: build run model smoke clean
 
 build: $(BIN)
 
@@ -38,6 +40,12 @@ run: $(BIN) | $(OUT_DIR)
 		--full-extra-mmas $(FULL_EXTRA_MMAS) --early-targets $(EARLY_TARGETS) \
 		--early-extras $(EARLY_EXTRAS) --delays $(DELAYS) --warmup $(WARMUP) \
 		--csv $(DETAIL_CSV) --summary-csv $(SUMMARY_CSV)
+
+model: $(BIN) | $(OUT_DIR)
+	$(BIN) --model --blocks $(BLOCKS) --target-mmas $(TARGET_MMAS) \
+		--full-extra-mmas $(FULL_EXTRA_MMAS) --early-targets $(EARLY_TARGETS) \
+		--warmup $(WARMUP) --probe-gap-cycles $(PROBE_GAP_CYCLES) \
+		--model-csv $(MODEL_CSV)
 
 smoke: $(BIN) | $(OUT_DIR)
 	$(BIN) --blocks 32 --target-mmas $(TARGET_MMAS) --full-extra-mmas $(FULL_EXTRA_MMAS) \

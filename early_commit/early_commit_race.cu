@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,9 @@ struct Args {
   const char* delays = "0,32,64,96,128,160,192,224,256,320,384,448,512";
   const char* csv = "early_commit/log/early_commit_race_detail.csv";
   const char* summary_csv = "early_commit/log/early_commit_race_summary.csv";
+  bool model = false;
+  int probe_gap_cycles = 2048;
+  const char* model_csv = "early_commit/log/early_commit_model.csv";
 };
 
 struct Record {
@@ -92,6 +96,33 @@ struct Combo {
   int early_target_mmas;
   int early_extra_mmas;
   int delay_cycles;
+};
+
+struct ModelRecord {
+  uint32_t block;
+  uint32_t target_mmas;
+  uint32_t early_target_mmas;
+  uint32_t probe_gap_cycles;
+  uint64_t early_commit_end;
+  uint64_t early_commit_issue_end;
+  uint64_t remaining_target_issue_start;
+  uint64_t target_issue_end;
+  uint64_t full_commit_start;
+  uint64_t full_commit_issue_end;
+  uint64_t producer_full_wait_end;
+  uint64_t early_wait_end;
+  uint64_t full_wait_start;
+  uint64_t full_wait_end;
+  uint64_t late_mma_issue_end;
+  uint64_t late_commit_start;
+  uint64_t late_commit_issue_end;
+  uint64_t late_wait_start;
+  uint64_t late_wait_end;
+  uint64_t ready_mma_issue_end;
+  uint64_t ready_commit_start;
+  uint64_t ready_commit_issue_end;
+  uint64_t ready_wait_start;
+  uint64_t ready_wait_end;
 };
 
 __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
@@ -497,6 +528,174 @@ void early_commit_race_kernel(Record* __restrict__ records,
 #endif
 }
 
+template <int EarlyTargetMmas>
+__global__ __launch_bounds__(kThreads, 1)
+void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_cycles) {
+  static_assert(EarlyTargetMmas >= 0, "EarlyTargetMmas must be non-negative");
+  static_assert(EarlyTargetMmas <= kCompileTimeTargetMmas,
+                "EarlyTargetMmas exceeds target MMA count");
+#if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
+  (void)records;
+  (void)probe_gap_cycles;
+#else
+  extern __shared__ uint32_t smem_raw[];
+  const uintptr_t smem_addr =
+      (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
+  uint32_t* smem_words = reinterpret_cast<uint32_t*>(smem_addr);
+
+  __shared__ uint64_t early_done;
+  __shared__ uint64_t full_done;
+  __shared__ uint64_t late_done;
+  __shared__ uint64_t ready_done;
+  __shared__ uint32_t tmem_smem;
+  __shared__ uint32_t tmem_base_shared;
+  __shared__ uint64_t base_clock_shared;
+  __shared__ uint64_t q_desc_shared[kMaxTargetMmas];
+  __shared__ uint64_t k_desc_shared[kMaxTargetMmas];
+
+  const int lane = threadIdx.x & 31;
+  const int warp_id = threadIdx.x >> 5;
+  const int tid = threadIdx.x;
+  ModelRecord& rec = records[blockIdx.x];
+
+  if (warp_id == kProducerWarp) {
+    setmaxnreg_dec_producer();
+  } else if (warp_id == kConsumerWarp) {
+    setmaxnreg_inc_consumer();
+  }
+
+  if (tid == 0) {
+    rec.block = blockIdx.x;
+    rec.target_mmas = static_cast<uint32_t>(kCompileTimeTargetMmas);
+    rec.early_target_mmas = static_cast<uint32_t>(EarlyTargetMmas);
+    rec.probe_gap_cycles = static_cast<uint32_t>(probe_gap_cycles);
+    rec.early_commit_end = 0;
+    rec.early_commit_issue_end = 0;
+    rec.remaining_target_issue_start = 0;
+    rec.target_issue_end = 0;
+    rec.full_commit_start = 0;
+    rec.full_commit_issue_end = 0;
+    rec.producer_full_wait_end = 0;
+    rec.early_wait_end = 0;
+    rec.full_wait_start = 0;
+    rec.full_wait_end = 0;
+    rec.late_mma_issue_end = 0;
+    rec.late_commit_start = 0;
+    rec.late_commit_issue_end = 0;
+    rec.late_wait_start = 0;
+    rec.late_wait_end = 0;
+    rec.ready_mma_issue_end = 0;
+    rec.ready_commit_start = 0;
+    rec.ready_commit_issue_end = 0;
+    rec.ready_wait_start = 0;
+    rec.ready_wait_end = 0;
+    mbarrier_init(&early_done, 1);
+    mbarrier_init(&full_done, 1);
+    mbarrier_init(&late_done, 1);
+    mbarrier_init(&ready_done, 1);
+    asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+  }
+
+  for (int i = tid; i < 2 * kTileWords; i += kThreads) {
+    const uint32_t lo = 0x3f80u ^ static_cast<uint32_t>((i * 17 + blockIdx.x * 13 + 3) & 0x7fu);
+    const uint32_t hi = 0x4000u ^ static_cast<uint32_t>((i * 29 + blockIdx.x * 7 + 5) & 0x7fu);
+    smem_words[i] = (hi << 16) | lo;
+  }
+  __syncthreads();
+
+  if (warp_id == kProducerWarp) {
+    const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
+    if (lane == 0) tmem_base_shared = taddr;
+  }
+  __syncthreads();
+
+  const uint32_t tmem_base = tmem_base_shared;
+  const uint32_t target_taddr = tmem_base;
+  const uint32_t late_taddr = tmem_base + 128u;
+  const uint32_t ready_taddr = tmem_base + 256u;
+  const uint32_t idesc = make_qk_idesc();
+  uint32_t* q_smem = smem_words;
+  uint32_t* k_smem = smem_words + kTileWords;
+
+  if (warp_id == kProducerWarp && lane == 0) {
+#pragma unroll
+    for (int mma = 0; mma < kMaxTargetMmas; ++mma) {
+      q_desc_shared[mma] = make_smem_desc(smem_ptr_u32(q_smem + mma * 1024));
+      k_desc_shared[mma] = make_smem_desc(smem_ptr_u32(k_smem + mma * 1024));
+    }
+  }
+  __syncthreads();
+
+  if (tid == 0) base_clock_shared = clock64();
+  __syncthreads();
+
+  const uint64_t base_clock = base_clock_shared;
+
+  if (warp_id == kProducerWarp && lane == 0) {
+#pragma unroll
+    for (int mma = 0; mma < EarlyTargetMmas; ++mma) {
+      issue_target_mma(mma, target_taddr, q_desc_shared, k_desc_shared, idesc);
+    }
+    rec.early_commit_end = clock64() - base_clock;
+    tcgen05_commit(&early_done);
+    rec.early_commit_issue_end = clock64() - base_clock;
+
+    rec.remaining_target_issue_start = clock64() - base_clock;
+#pragma unroll
+    for (int mma = EarlyTargetMmas; mma < kCompileTimeTargetMmas; ++mma) {
+      issue_target_mma(mma, target_taddr, q_desc_shared, k_desc_shared, idesc);
+    }
+    rec.target_issue_end = clock64() - base_clock;
+    rec.full_commit_start = clock64() - base_clock;
+    tcgen05_commit(&full_done);
+    rec.full_commit_issue_end = clock64() - base_clock;
+    mbarrier_wait(&full_done, 0);
+    rec.producer_full_wait_end = clock64() - base_clock;
+
+    tcgen05_mma_bf16_ss(late_taddr, q_desc_shared[0], k_desc_shared[0], idesc, false);
+    rec.late_mma_issue_end = clock64() - base_clock;
+    rec.late_commit_start = clock64() - base_clock;
+    tcgen05_commit(&late_done);
+    rec.late_commit_issue_end = clock64() - base_clock;
+
+    delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
+
+    tcgen05_mma_bf16_ss(ready_taddr, q_desc_shared[1], k_desc_shared[1], idesc, false);
+    rec.ready_mma_issue_end = clock64() - base_clock;
+    delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
+    rec.ready_commit_start = clock64() - base_clock;
+    tcgen05_commit(&ready_done);
+    rec.ready_commit_issue_end = clock64() - base_clock;
+  }
+
+  if (warp_id == kConsumerWarp) {
+    mbarrier_wait(&early_done, 0);
+    if (lane == 0) rec.early_wait_end = clock64() - base_clock;
+
+    const uint64_t full_wait_start = clock64() - base_clock;
+    if (lane == 0) rec.full_wait_start = full_wait_start;
+    mbarrier_wait(&full_done, 0);
+    if (lane == 0) rec.full_wait_end = clock64() - base_clock;
+
+    delay_cycles(static_cast<uint32_t>(probe_gap_cycles));
+    const uint64_t late_wait_start = clock64() - base_clock;
+    if (lane == 0) rec.late_wait_start = late_wait_start;
+    mbarrier_wait(&late_done, 0);
+    if (lane == 0) rec.late_wait_end = clock64() - base_clock;
+
+    const uint64_t ready_wait_start = clock64() - base_clock;
+    if (lane == 0) rec.ready_wait_start = ready_wait_start;
+    mbarrier_wait(&ready_done, 0);
+    if (lane == 0) rec.ready_wait_end = clock64() - base_clock;
+  }
+
+  __syncthreads();
+  if (warp_id == kProducerWarp) tcgen05_dealloc_512cols(tmem_base);
+  __syncthreads();
+  if (warp_id == kProducerWarp) tcgen05_relinquish_alloc_permit();
+#endif
+}
+
 #undef TCGEN05_LD_X64
 #undef TCGEN05_LD_X64_OUTPUTS
 #undef TCGEN05_LD_X64_OPERANDS
@@ -535,7 +734,9 @@ void parse_args(int argc, char** argv, Args* args) {
         "Usage: early_commit_race [--blocks N] [--target-mmas N] [--full-extra-mmas N]\n"
         "                         [--early-targets list] [--early-extras list]\n"
         "                         [--delays list] [--warmup N]\n"
-        "                         [--csv path] [--summary-csv path]\n\n"
+        "                         [--csv path] [--summary-csv path]\n"
+        "                         [--model] [--model-csv path]\n"
+        "                         [--probe-gap-cycles N]\n\n"
         "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
         "target_mmas=%d, full_extra_mmas=%d.\n"
         "Default sweep: early_targets=8, early_extras=0, delays=0..512 cycles.\n",
@@ -555,6 +756,9 @@ void parse_args(int argc, char** argv, Args* args) {
   args->delays = arg_value(argc, argv, "--delays", args->delays);
   args->csv = arg_value(argc, argv, "--csv", args->csv);
   args->summary_csv = arg_value(argc, argv, "--summary-csv", args->summary_csv);
+  args->model = has_flag(argc, argv, "--model");
+  args->probe_gap_cycles = std::atoi(arg_value(argc, argv, "--probe-gap-cycles", "2048"));
+  args->model_csv = arg_value(argc, argv, "--model-csv", args->model_csv);
 }
 
 std::vector<Combo> make_combos(const Args& args) {
@@ -741,6 +945,107 @@ void print_summary(const std::vector<Record>& rows, const std::vector<Combo>& co
   }
 }
 
+void write_model_csv(const char* path, const std::vector<ModelRecord>& rows) {
+  FILE* f = std::fopen(path, "w");
+  if (!f) {
+    std::perror(path);
+    std::exit(1);
+  }
+  std::fprintf(
+      f,
+      "block,target_mmas,early_target_mmas,probe_gap_cycles,"
+      "early_commit_end,early_commit_issue_end,remaining_target_issue_start,"
+      "target_issue_end,full_commit_start,full_commit_issue_end,"
+      "producer_full_wait_end,early_wait_end,full_wait_start,full_wait_end,"
+      "late_mma_issue_end,late_commit_start,late_commit_issue_end,"
+      "late_wait_start,late_wait_end,ready_mma_issue_end,ready_commit_start,"
+      "ready_commit_issue_end,ready_wait_start,ready_wait_end,"
+      "early_wait_after_early_commit,full_wait_after_early_wait,"
+      "full_wait_after_target_issue,t_late_wait,t_ready_from_commit_start,"
+      "t_ready_from_commit_end,v_est_late_wait,v_est_ready_commit_start,"
+      "v_est_ready_commit_end\n");
+  for (const ModelRecord& r : rows) {
+    const long long t_late_wait = signed_delta(r.late_wait_end, r.late_wait_start);
+    const long long t_ready_from_start = signed_delta(r.ready_wait_end, r.ready_commit_start);
+    const long long t_ready_from_end = signed_delta(r.ready_wait_end, r.ready_commit_issue_end);
+    std::fprintf(
+        f,
+        "%u,%u,%u,%u,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
+        "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,"
+        "%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n",
+        r.block, r.target_mmas, r.early_target_mmas, r.probe_gap_cycles,
+        static_cast<unsigned long long>(r.early_commit_end),
+        static_cast<unsigned long long>(r.early_commit_issue_end),
+        static_cast<unsigned long long>(r.remaining_target_issue_start),
+        static_cast<unsigned long long>(r.target_issue_end),
+        static_cast<unsigned long long>(r.full_commit_start),
+        static_cast<unsigned long long>(r.full_commit_issue_end),
+        static_cast<unsigned long long>(r.producer_full_wait_end),
+        static_cast<unsigned long long>(r.early_wait_end),
+        static_cast<unsigned long long>(r.full_wait_start),
+        static_cast<unsigned long long>(r.full_wait_end),
+        static_cast<unsigned long long>(r.late_mma_issue_end),
+        static_cast<unsigned long long>(r.late_commit_start),
+        static_cast<unsigned long long>(r.late_commit_issue_end),
+        static_cast<unsigned long long>(r.late_wait_start),
+        static_cast<unsigned long long>(r.late_wait_end),
+        static_cast<unsigned long long>(r.ready_mma_issue_end),
+        static_cast<unsigned long long>(r.ready_commit_start),
+        static_cast<unsigned long long>(r.ready_commit_issue_end),
+        static_cast<unsigned long long>(r.ready_wait_start),
+        static_cast<unsigned long long>(r.ready_wait_end),
+        signed_delta(r.early_wait_end, r.early_commit_end),
+        signed_delta(r.full_wait_end, r.early_wait_end),
+        signed_delta(r.full_wait_end, r.target_issue_end),
+        t_late_wait, t_ready_from_start, t_ready_from_end,
+        static_cast<long long>(r.full_wait_end) - t_late_wait,
+        static_cast<long long>(r.full_wait_end) - t_ready_from_start,
+        static_cast<long long>(r.full_wait_end) - t_ready_from_end);
+  }
+  std::fclose(f);
+}
+
+void print_model_summary(const std::vector<ModelRecord>& rows) {
+  std::vector<double> early_wait;
+  std::vector<double> full_wait;
+  std::vector<double> full_after_early;
+  std::vector<double> t_late;
+  std::vector<double> t_ready_start;
+  std::vector<double> t_ready_end;
+  std::vector<double> v_ready_start;
+  for (const ModelRecord& r : rows) {
+    early_wait.push_back(static_cast<double>(r.early_wait_end));
+    full_wait.push_back(static_cast<double>(r.full_wait_end));
+    full_after_early.push_back(static_cast<double>(signed_delta(r.full_wait_end, r.early_wait_end)));
+    const double late = static_cast<double>(signed_delta(r.late_wait_end, r.late_wait_start));
+    const double ready_start =
+        static_cast<double>(signed_delta(r.ready_wait_end, r.ready_commit_start));
+    const double ready_end =
+        static_cast<double>(signed_delta(r.ready_wait_end, r.ready_commit_issue_end));
+    t_late.push_back(late);
+    t_ready_start.push_back(ready_start);
+    t_ready_end.push_back(ready_end);
+    v_ready_start.push_back(static_cast<double>(r.full_wait_end) - ready_start);
+  }
+  std::printf("model rows=%zu\n", rows.size());
+  std::printf("E early_wait_end mean=%.3f min=%.3f max=%.3f\n", mean_or_zero(early_wait),
+              min_or_zero(early_wait), max_or_zero(early_wait));
+  std::printf("W full_wait_end mean=%.3f min=%.3f max=%.3f\n", mean_or_zero(full_wait),
+              min_or_zero(full_wait), max_or_zero(full_wait));
+  std::printf("W-E mean=%.3f min=%.3f max=%.3f\n", mean_or_zero(full_after_early),
+              min_or_zero(full_after_early), max_or_zero(full_after_early));
+  std::printf("T_late_wait mean=%.3f min=%.3f max=%.3f\n", mean_or_zero(t_late),
+              min_or_zero(t_late), max_or_zero(t_late));
+  std::printf("T_ready_commit_start mean=%.3f min=%.3f max=%.3f\n",
+              mean_or_zero(t_ready_start), min_or_zero(t_ready_start),
+              max_or_zero(t_ready_start));
+  std::printf("T_ready_commit_end mean=%.3f min=%.3f max=%.3f\n",
+              mean_or_zero(t_ready_end), min_or_zero(t_ready_end), max_or_zero(t_ready_end));
+  std::printf("V_est=W-T_ready_start mean=%.3f min=%.3f max=%.3f\n",
+              mean_or_zero(v_ready_start), min_or_zero(v_ready_start),
+              max_or_zero(v_ready_start));
+}
+
 [[noreturn]] void die_unsupported_combo(const Combo& combo) {
   std::fprintf(stderr,
                "unsupported compile-time combo: early_target=%d early_extra=%d. "
@@ -802,6 +1107,57 @@ void dispatch_early_target(const Args& args,
   }
 }
 
+[[noreturn]] void die_unsupported_model_target(int early_target_mmas) {
+  std::fprintf(stderr,
+               "unsupported model early_target=%d. "
+               "Rebuild with larger EARLY_COMMIT_TARGET_MMAS if needed.\n",
+               early_target_mmas);
+  std::exit(1);
+}
+
+template <int EarlyTargetMmas>
+void launch_model_specialized(const Args& args, ModelRecord* d_records) {
+  CUDA_CHECK(cudaFuncSetAttribute(early_commit_model_kernel<EarlyTargetMmas>,
+                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                  kDynamicSmemBytes));
+  for (int i = 0; i < args.warmup; ++i) {
+    early_commit_model_kernel<EarlyTargetMmas>
+        <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, args.probe_gap_cycles);
+  }
+  CUDA_CHECK(cudaPeekAtLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+  early_commit_model_kernel<EarlyTargetMmas>
+      <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, args.probe_gap_cycles);
+  CUDA_CHECK(cudaPeekAtLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+}
+
+template <int EarlyTargetMmas>
+void dispatch_model_target(const Args& args, int early_target_mmas, ModelRecord* d_records) {
+  if (early_target_mmas == EarlyTargetMmas) {
+    launch_model_specialized<EarlyTargetMmas>(args, d_records);
+    return;
+  }
+  if constexpr (EarlyTargetMmas < kCompileTimeTargetMmas) {
+    dispatch_model_target<EarlyTargetMmas + 1>(args, early_target_mmas, d_records);
+  } else {
+    die_unsupported_model_target(early_target_mmas);
+  }
+}
+
+void run_model(const Args& args, int early_target_mmas, std::vector<ModelRecord>* records) {
+  ModelRecord* d_records = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_records, static_cast<size_t>(args.blocks) * sizeof(ModelRecord)));
+  CUDA_CHECK(cudaMemset(d_records, 0, static_cast<size_t>(args.blocks) * sizeof(ModelRecord)));
+  dispatch_model_target<0>(args, early_target_mmas, d_records);
+
+  records->resize(args.blocks);
+  CUDA_CHECK(cudaMemcpy(records->data(), d_records,
+                        static_cast<size_t>(args.blocks) * sizeof(ModelRecord),
+                        cudaMemcpyDeviceToHost));
+  CUDA_CHECK(cudaFree(d_records));
+}
+
 void run_combo(const Args& args,
                const Combo& combo,
                uint32_t combo_id,
@@ -851,6 +1207,35 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "This benchmark requires SM100+; got sm_%d%d\n", prop.major,
                  prop.minor);
     return 1;
+  }
+
+  if (args.model) {
+    const std::vector<int> early_targets = parse_list(args.early_targets);
+    if (early_targets.empty()) {
+      std::fprintf(stderr, "--model requires one --early-targets value\n");
+      return 1;
+    }
+    if (early_targets.size() != 1) {
+      std::fprintf(stderr, "--model accepts exactly one --early-targets value\n");
+      return 1;
+    }
+    const int early_target_mmas = early_targets[0];
+    if (early_target_mmas < 0 || early_target_mmas > args.target_mmas) {
+      std::fprintf(stderr, "--early-targets value must be in [0,%d]\n", args.target_mmas);
+      return 1;
+    }
+    if (args.probe_gap_cycles < 0) {
+      std::fprintf(stderr, "--probe-gap-cycles must be non-negative\n");
+      return 1;
+    }
+    std::vector<ModelRecord> model_records;
+    std::printf("running model early_target=%d blocks=%d probe_gap_cycles=%d\n",
+                early_target_mmas, args.blocks, args.probe_gap_cycles);
+    run_model(args, early_target_mmas, &model_records);
+    write_model_csv(args.model_csv, model_records);
+    print_model_summary(model_records);
+    std::printf("model_csv=%s\n", args.model_csv);
+    return 0;
   }
 
   const std::vector<Combo> combos = make_combos(args);
