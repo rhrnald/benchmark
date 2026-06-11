@@ -1,0 +1,70 @@
+# Early Commit Race Microbenchmark
+
+This folder measures how early a consumer `tcgen05.ld` can start relative to a
+full `tcgen05.commit`/wait point while still reading stable TMEM data.
+
+The benchmark is intentionally independent from `0.attention`:
+
+1. A producer warp issues `target_mmas` BF16 MMAs into a target TMEM tile.
+2. It can issue only `early_target_mmas` of those target MMAs before an early
+   `tcgen05.commit`.
+3. It can also issue `early_extra_mmas` unrelated MMAs into a different TMEM
+   tile before the early commit.
+4. The consumer warp waits on that early commit, delays by `delay_cycles`, then
+   loads the target tile with `tcgen05.ld.x64`.
+5. After the producer's full commit completes, the consumer loads the same TMEM
+   address again and compares all 32 lanes x 64 registers.
+
+If the early load differs from the post-full-commit load, the sample is counted
+as unsafe.
+
+## Build
+
+```bash
+cd /path/to/benchmark/early_commit
+make build
+```
+
+## Smoke
+
+```bash
+make smoke
+```
+
+Outputs:
+
+- `log/smoke_detail.csv`
+- `log/smoke_summary.csv`
+
+## Main Sweep
+
+The default main sweep keeps the attention-like target sequence:
+
+- `target_mmas=8`
+- `full_extra_mmas=4`
+- `early_target_mmas=8`
+- `early_extra_mmas=0,1,2,3,4`
+- `delay_cycles=0..512`
+
+```bash
+make run
+```
+
+To test committing before all target MMAs have been issued:
+
+```bash
+make run EARLY_TARGETS=0,1,2,3,4,5,6,7,8 EARLY_EXTRAS=0 DELAYS=0,64,128,192,256,320,384,448,512
+```
+
+## Summary Columns
+
+- `safe_rate`: fraction of CTAs where early LD matched the full-commit reference.
+- `avg_ld_start_ahead`: average `full_done_end - ld_start` cycles.
+  Positive means LD started before full commit completion.
+- `avg_ld_end_ahead`: average `full_done_end - ld_end` cycles.
+  Positive means LD finished before full commit completion.
+- `max_safe_ld_start_ahead`: largest observed safe head start.
+- `min_unsafe_ld_start_ahead`: smallest observed unsafe head start.
+- `avg_mismatch_words`: average mismatched register count across 32 lanes x 64 regs.
+
+The detail CSV keeps per-CTA timings and signatures for debugging.
