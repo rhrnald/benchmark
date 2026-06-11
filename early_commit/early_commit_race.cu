@@ -510,13 +510,13 @@ void early_commit_race_kernel(Record* __restrict__ records,
     if (lane == 0) rec.early_wait_end = early_wait_end;
     const uint32_t delay_seed = static_cast<uint32_t>(early_wait_end) ^
                                 static_cast<uint32_t>(early_wait_end >> 32);
-    const uint32_t zero_mask =
-        *reinterpret_cast<volatile uint32_t*>(&zero_mask_shared);
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
     uint64_t ld_clock = 0;
     if (delay_cycles_after_early_wait > 0) {
+      const uint32_t zero_mask =
+          *reinterpret_cast<volatile uint32_t*>(&zero_mask_shared);
       TCGEN05_DUMMY_DELAYED_LD_X64(
           target_taddr, delay_seed, static_cast<uint32_t>(delay_cycles_after_early_wait),
           zero_mask, early_regs, ld_clock);
