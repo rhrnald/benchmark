@@ -22,8 +22,6 @@
 namespace {
 
 static constexpr int kWarpSize = 32;
-static constexpr int kWarps = 4;
-static constexpr int kThreads = kWarps * kWarpSize;
 static constexpr int kProducerWarp = 0;
 static constexpr int kConsumerWarp = 1;
 static constexpr int kTileM = 128;
@@ -42,8 +40,14 @@ static constexpr int kDynamicSmemBytes = 2 * kTileBytes + 1024;
 #define EARLY_COMMIT_FULL_EXTRA_MMAS 0
 #endif
 
+#ifndef EARLY_COMMIT_WARPS
+#define EARLY_COMMIT_WARPS 4
+#endif
+
 static constexpr int kCompileTimeTargetMmas = EARLY_COMMIT_TARGET_MMAS;
 static constexpr int kCompileTimeFullExtraMmas = EARLY_COMMIT_FULL_EXTRA_MMAS;
+static constexpr int kWarps = EARLY_COMMIT_WARPS;
+static constexpr int kThreads = kWarps * kWarpSize;
 static_assert(kCompileTimeTargetMmas >= 1, "EARLY_COMMIT_TARGET_MMAS must be positive");
 static_assert(kCompileTimeTargetMmas <= kMaxTargetMmas,
               "EARLY_COMMIT_TARGET_MMAS exceeds descriptor capacity");
@@ -51,6 +55,8 @@ static_assert(kCompileTimeFullExtraMmas >= 0,
               "EARLY_COMMIT_FULL_EXTRA_MMAS must be non-negative");
 static_assert(kCompileTimeFullExtraMmas <= kMaxTargetMmas,
               "EARLY_COMMIT_FULL_EXTRA_MMAS exceeds descriptor capacity");
+static_assert(kWarps >= 2, "EARLY_COMMIT_WARPS must include producer and consumer warps");
+static_assert(kWarps <= 32, "EARLY_COMMIT_WARPS is unexpectedly large");
 
 struct Args {
   int blocks = 512;
