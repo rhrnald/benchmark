@@ -463,10 +463,11 @@ __device__ __forceinline__ uint64_t dependent_clock64(uint32_t dependency) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   uint64_t now;
   asm volatile(
-      "{ .reg .pred p; "
-      "setp.ne.u32 p, %1, 0xffffffff; "
-      "@p mov.u64 %0, %%clock64; "
-      "@!p mov.u64 %0, %%clock64; }"
+      "{ .reg .u64 dep64; .reg .u64 t; "
+      "cvt.u64.u32 dep64, %1; "
+      "mov.u64 t, %%clock64; "
+      "add.u64 %0, t, dep64; "
+      "sub.u64 %0, %0, dep64; }"
       : "=l"(now)
       : "r"(dependency)
       : "memory");
@@ -474,6 +475,24 @@ __device__ __forceinline__ uint64_t dependent_clock64(uint32_t dependency) {
 #else
   (void)dependency;
   return clock64();
+#endif
+}
+
+__device__ __forceinline__ uint32_t dependent_tmem_addr(uint32_t taddr,
+                                                        uint32_t dependency) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t out;
+  asm volatile(
+      "{ .reg .u32 tmp; "
+      "add.u32 tmp, %1, %2; "
+      "sub.u32 %0, tmp, %1; }"
+      : "=r"(out)
+      : "r"(dependency), "r"(taddr)
+      : "memory");
+  return out;
+#else
+  (void)dependency;
+  return taddr;
 #endif
 }
 
@@ -673,8 +692,9 @@ void early_commit_race_kernel(Record* __restrict__ records,
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
-    const uint64_t ld_start = dependent_clock64(delay_dependency) - base_clock;
-    TCGEN05_LD_X64(target_taddr, early_regs);
+    const uint32_t delayed_target_taddr = dependent_tmem_addr(target_taddr, delay_dependency);
+    const uint64_t ld_start = dependent_clock64(delayed_target_taddr) - base_clock;
+    TCGEN05_LD_X64(delayed_target_taddr, early_regs);
     tcgen05_wait_ld();
     const uint64_t ld_end = clock64() - base_clock;
     if (lane == 0) {
