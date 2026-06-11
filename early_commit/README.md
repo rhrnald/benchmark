@@ -13,7 +13,7 @@ The benchmark is intentionally independent from `0.attention`:
 4. The consumer warp waits on that early commit, executes `delay_cycles`
    dependent dummy ALU instructions inside the same inline PTX block as the
    timestamp and `tcgen05.ld.x64`. The delay uses a fixed-count immediate loop
-   with an `add.u32` in the loop body, then issues the TMEM load.
+   with an `add.u32` in the loop body, then predicates and issues the TMEM load.
 5. After the producer's full commit completes, the consumer loads the same TMEM
    address again and compares all 32 lanes x 64 registers.
 
@@ -97,5 +97,6 @@ The detail CSV keeps per-CTA timings and signatures for debugging.
 Use `early_wait_to_ld_start` for the actual measured delay in cycles; the
 `delay_cycles` argument is only the requested dummy ALU instruction count. The
 early LD is placed after that inline PTX loop, so the requested delay is attached
-to the load instead of only to the timestamp.
+to the load instead of only to the timestamp; the LD predicate consumes the loop
+result to keep the dummy operations live.
 Supported fixed delay counts are `0..16,24,32,48,64,96,128,256`.
