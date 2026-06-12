@@ -329,28 +329,6 @@ __device__ __forceinline__ void clock_delay_cycles(uint32_t cycles) {
       : "r"(src_taddr)                                                        \
       : "memory")
 
-#define TCGEN05_DUMMY_DELAYED_LD_X64(src_taddr, seed, delay_count, zero_mask, \
-                                     out_regs, ld_clock)                      \
-  asm volatile(                                                               \
-      "{ .reg .u32 dep; .reg .u32 ctr; .reg .u32 offset; .reg .u32 addr; "    \
-      ".reg .pred lp; .reg .u64 t; "                                          \
-      "mov.u32 dep, %66; "                                                    \
-      "mov.u32 ctr, %67; "                                                    \
-      "L_delay_%=: "                                                          \
-      "add.u32 dep, dep, 0x9e3779b9; "                                        \
-      "add.u32 ctr, ctr, 0xffffffff; "                                        \
-      "setp.ne.u32 lp, ctr, 0; "                                              \
-      "@lp bra L_delay_%=; "                                                  \
-      "and.b32 offset, dep, %68; "                                            \
-      "add.u32 addr, %65, offset; "                                           \
-      "mov.u64 t, %%clock64; "                                                \
-      "mov.u64 %64, t; "                                                      \
-      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS      \
-      "}, [addr]; }"                                                          \
-      : TCGEN05_LD_X64_OUTPUTS(out_regs), "=&l"(ld_clock)                     \
-      : "r"(src_taddr), "r"(seed), "r"(delay_count), "r"(zero_mask)          \
-      : "memory")
-
 __device__ __forceinline__ void issue_target_mma(int mma,
                                                  uint32_t target_taddr,
                                                  const uint64_t* q_desc,
@@ -367,7 +345,7 @@ __device__ __forceinline__ void issue_extra_mma(int mma,
   tcgen05_mma_bf16_ss(extra_taddr, q_desc[mma & 7], k_desc[mma & 7], idesc, mma != 0);
 }
 
-template <int EarlyTargetMmas, int EarlyExtraMmas, bool UseDummyDelay>
+template <int EarlyTargetMmas, int EarlyExtraMmas>
 __global__ __launch_bounds__(kThreads, 1)
 void early_commit_race_kernel(Record* __restrict__ records,
                               int delay_cycles_after_early_wait,
@@ -392,7 +370,6 @@ void early_commit_race_kernel(Record* __restrict__ records,
   __shared__ uint64_t full_done;
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
-  __shared__ uint32_t zero_mask_shared;
   __shared__ uint64_t base_clock_shared;
   __shared__ uint64_t q_desc_shared[kMaxTargetMmas];
   __shared__ uint64_t k_desc_shared[kMaxTargetMmas];
@@ -435,9 +412,6 @@ void early_commit_race_kernel(Record* __restrict__ records,
     rec.mismatch_lanes = 0;
     rec.early_sig = 0;
     rec.ref_sig = 0;
-    if constexpr (UseDummyDelay) {
-      zero_mask_shared = 0;
-    }
     mbarrier_init(&early_done, 1);
     mbarrier_init(&full_done, 1);
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
@@ -510,21 +484,12 @@ void early_commit_race_kernel(Record* __restrict__ records,
     mbarrier_wait(&early_done, 0);
     const uint64_t early_wait_end = clock64() - base_clock;
     if (lane == 0) rec.early_wait_end = early_wait_end;
-    const uint32_t delay_seed = static_cast<uint32_t>(early_wait_end) ^
-                                static_cast<uint32_t>(early_wait_end >> 32);
+    clock_delay_cycles(static_cast<uint32_t>(delay_cycles_after_early_wait));
 
     uint32_t early_regs[64];
     uint32_t ref_regs[64];
     uint64_t ld_clock = 0;
-    if constexpr (UseDummyDelay) {
-      const uint32_t zero_mask =
-          *reinterpret_cast<volatile uint32_t*>(&zero_mask_shared);
-      TCGEN05_DUMMY_DELAYED_LD_X64(
-          target_taddr, delay_seed, static_cast<uint32_t>(delay_cycles_after_early_wait),
-          zero_mask, early_regs, ld_clock);
-    } else {
-      TCGEN05_TIMED_LD_X64(target_taddr, early_regs, ld_clock);
-    }
+    TCGEN05_TIMED_LD_X64(target_taddr, early_regs, ld_clock);
     const uint64_t ld_start = ld_clock - base_clock;
     tcgen05_wait_ld();
     const uint64_t ld_end = clock64() - base_clock;
@@ -750,7 +715,6 @@ void early_commit_model_kernel(ModelRecord* __restrict__ records, int probe_gap_
 }
 
 #undef TCGEN05_LD_X64
-#undef TCGEN05_DUMMY_DELAYED_LD_X64
 #undef TCGEN05_TIMED_LD_X64
 #undef TCGEN05_LD_X64_OUTPUTS
 #undef TCGEN05_LD_X64_OPERANDS
@@ -794,7 +758,7 @@ void parse_args(int argc, char** argv, Args* args) {
         "                         [--probe-gap-cycles N]\n\n"
         "target_mmas and full_extra_mmas are compile-time fixed by the build:\n"
         "target_mmas=%d, full_extra_mmas=%d.\n"
-        "Default sweep: early_targets=8, early_extras=0, runtime dummy ALU delays=0..128.\n",
+        "Default sweep: early_targets=8, early_extras=0, clock64 busy-wait delays=0..128.\n",
         kCompileTimeTargetMmas, kCompileTimeFullExtraMmas);
     std::exit(0);
   }
@@ -1109,21 +1073,21 @@ void print_model_summary(const std::vector<ModelRecord>& rows) {
   std::exit(1);
 }
 
-template <int EarlyTargetMmas, int EarlyExtraMmas, bool UseDummyDelay>
+template <int EarlyTargetMmas, int EarlyExtraMmas>
 void launch_specialized_combo(const Args& args,
                               const Combo& combo,
                               uint32_t combo_id,
                               Record* d_records) {
   CUDA_CHECK(cudaFuncSetAttribute(
-      early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, UseDummyDelay>,
+      early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>,
       cudaFuncAttributeMaxDynamicSharedMemorySize, kDynamicSmemBytes));
   for (int i = 0; i < args.warmup; ++i) {
-    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, UseDummyDelay>
+    early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
         <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
   }
   CUDA_CHECK(cudaPeekAtLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
-  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas, UseDummyDelay>
+  early_commit_race_kernel<EarlyTargetMmas, EarlyExtraMmas>
       <<<args.blocks, kThreads, kDynamicSmemBytes>>>(d_records, combo.delay_cycles, combo_id);
   CUDA_CHECK(cudaPeekAtLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -1135,13 +1099,8 @@ void dispatch_early_extra(const Args& args,
                           uint32_t combo_id,
                           Record* d_records) {
   if (combo.early_extra_mmas == EarlyExtraMmas) {
-    if (combo.delay_cycles == 0) {
-      launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas, false>(args, combo, combo_id,
-                                                                      d_records);
-    } else {
-      launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas, true>(args, combo, combo_id,
-                                                                     d_records);
-    }
+    launch_specialized_combo<EarlyTargetMmas, EarlyExtraMmas>(args, combo, combo_id,
+                                                             d_records);
     return;
   }
   if constexpr (EarlyExtraMmas < kCompileTimeFullExtraMmas) {
