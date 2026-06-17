@@ -152,7 +152,9 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         ("sync tmem", "startup_sync_tmem_start", "startup_sync_tmem_end", "#cbd5e1"),
     ]
     for name, start_key, end_key, color in startup_specs:
-        if _int_field(row, start_key, 0) and _int_field(row, end_key, 0):
+        start_value = _int_field(row, start_key, None)
+        end_value = _int_field(row, end_key, None)
+        if start_value is not None and end_value is not None and end_value > start_value:
             stages.append((name, start_key, end_key, color))
     q_tma_start_raw = _int_field(row, "q_tma_start", 0)
     q_tma_issue_end = _int_field(row, "q_tma_issue_end", 0)
@@ -722,7 +724,7 @@ def main():
     for row in rows:
         for key in ("startup_smem_layout_start", "q_tma_start", "tma_start"):
             value = _int_field(row, key, 0)
-            if value:
+            if key == "startup_smem_layout_start" or value:
                 base_candidates.append(value)
     base = min(base_candidates)
     write_summary(args.summary_csv, rows, base, args.clock_mhz, args.sms, args.ld_warps,
