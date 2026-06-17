@@ -1662,6 +1662,16 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const uint32_t q_smem_addr = smem_ptr_u32(q_smem);
       tma_load_2d(&q_map, q_smem_addr, &q_ready, 0, q_contig_row);
       tma_load_2d(&q_map, q_smem_addr + kTileBytes / 2, &q_ready, 32, q_contig_row);
+#if ATTENTION_CLOCK_TRACE
+      if (blockIdx.x == 0 && clock_trace != nullptr) {
+        const int q_tma_issue_slot =
+            clock_trace_iters * kClockTraceSlotsPerIter + 12;
+        write_clock_trace_record(clock_trace, q_tma_issue_slot,
+                                 kClockTraceQTmaIssue, -1, -1, warp_id, -1,
+                                 -1, q_tma_start_shared, clock64(),
+                                 clock_trace_base);
+      }
+#endif
     }
   }
 

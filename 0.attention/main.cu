@@ -181,6 +181,7 @@ struct ClockTraceRecord {
 
 struct TraceRecord {
   unsigned long long q_tma_start = 0;
+  unsigned long long q_tma_issue_end = 0;
   unsigned long long q_tma_end = 0;
   unsigned long long tma_start = 0;
   unsigned long long tma_issue_end = 0;
@@ -255,6 +256,7 @@ enum ClockTraceStage {
   kClockTracePvMmaIssue = 20,
   kClockTraceKTmaIssue = 21,
   kClockTraceVTmaIssue = 22,
+  kClockTraceQTmaIssue = 23,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -698,6 +700,8 @@ const char* clock_trace_stage_name(int stage) {
   switch (stage) {
     case kClockTraceQTma:
       return "q_tma";
+    case kClockTraceQTmaIssue:
+      return "q_tma_issue";
     case kClockTraceKTma:
       return "k_tma";
     case kClockTraceKTmaIssue:
@@ -805,11 +809,17 @@ void write_clock_trace_csv(const Args& args,
   unsigned long long tail_total_start = 0xffffffffffffffffull;
   unsigned long long tail_total_end = 0;
   unsigned long long q_tma_start = 0xffffffffffffffffull;
+  unsigned long long q_tma_issue_end = 0;
   unsigned long long q_tma_end = 0;
   int q_tma_warp_id = -1;
 
   for (const ClockTraceRecord& r : records) {
     if (r.stage == 0 || r.end <= r.start) continue;
+    if (r.stage == kClockTraceQTmaIssue) {
+      merge_trace_range(&q_tma_start, &q_tma_issue_end, r.start, r.end);
+      q_tma_warp_id = r.warp_id;
+      continue;
+    }
     if (r.stage == kClockTraceQTma) {
       merge_trace_range(&q_tma_start, &q_tma_end, r.start, r.end);
       q_tma_warp_id = r.warp_id;
@@ -959,6 +969,7 @@ void write_clock_trace_csv(const Args& args,
   }
   if (!rows.empty() && trace_cycles(q_tma_start, q_tma_end) > 0) {
     rows.front().q_tma_start = q_tma_start;
+    rows.front().q_tma_issue_end = q_tma_issue_end;
     rows.front().q_tma_end = q_tma_end;
     rows.front().q_tma_warp_id = q_tma_warp_id;
   }
@@ -970,7 +981,8 @@ void write_clock_trace_csv(const Args& args,
   }
   std::fprintf(csv,
                "mode,elapsed_ms,iter,pipe,warp_id,tma_warp_id,"
-               "q_tma_warp_id,q_tma_start,q_tma_end,q_tma_cycles,"
+               "q_tma_warp_id,q_tma_start,q_tma_issue_end,"
+               "q_tma_issue_cycles,q_tma_end,q_tma_cycles,q_tma_wait_cycles,"
                "tma_start,tma_end,tma_cycles,mma_start,mma_end,"
                "mma_cycles,tma_issue_end,tma_issue_cycles,tma_wait_cycles,"
                "mma_issue_end,mma_issue_cycles,mma_wait_cycles,"
@@ -1036,8 +1048,10 @@ void write_clock_trace_csv(const Args& args,
         trace_cycles(r.v_tma_h0_start, r.v_tma_h0_issue_end) > 0 ? r.v_tma_h0_issue_end : 0ull;
     const unsigned long long v_tma_h1_issue_end =
         trace_cycles(r.v_tma_h1_start, r.v_tma_h1_issue_end) > 0 ? r.v_tma_h1_issue_end : 0ull;
+    const unsigned long long q_tma_issue_end =
+        trace_cycles(r.q_tma_start, r.q_tma_issue_end) > 0 ? r.q_tma_issue_end : 0ull;
     std::fprintf(csv,
-                 "%s,%.6f,%u,%u,%u,%d,%d,%llu,%llu,%llu,"
+                 "%s,%.6f,%u,%u,%u,%d,%d,%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
                  "%llu,%llu,%llu,"
@@ -1047,8 +1061,10 @@ void write_clock_trace_csv(const Args& args,
                  "%llu,%llu,%llu,%llu,%llu,%llu,"
                  "%llu,%llu,%llu,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu,%d,%llu,%llu,%llu",
                  mode, result.ms, r.iter, r.pipe, r.warp_id, r.tma_warp_id,
-                 r.q_tma_warp_id, r.q_tma_start, r.q_tma_end,
-                 trace_cycles(r.q_tma_start, r.q_tma_end),
+                 r.q_tma_warp_id, r.q_tma_start, q_tma_issue_end,
+                 trace_cycles(r.q_tma_start, r.q_tma_issue_end),
+                 r.q_tma_end, trace_cycles(r.q_tma_start, r.q_tma_end),
+                 q_tma_issue_end ? trace_cycles(q_tma_issue_end, r.q_tma_end) : 0ull,
                  r.tma_start, r.tma_end, trace_cycles(r.tma_start, r.tma_end),
                  mma_start,
                  trace_end_or_zero(r.mma_start, r.mma_end),

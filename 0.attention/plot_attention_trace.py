@@ -139,8 +139,16 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         and row.get("st_end", "0") not in ("", "0")
     )
     stages = []
-    if row.get("q_tma_start", "0") not in ("", "0"):
-        stages.append(("Q TMA", "q_tma_start", "q_tma_end", "#5aa35a"))
+    q_tma_start_raw = _int_field(row, "q_tma_start", 0)
+    q_tma_issue_end = _int_field(row, "q_tma_issue_end", 0)
+    q_tma_end_raw = _int_field(row, "q_tma_end", 0)
+    if q_tma_start_raw:
+        if q_tma_issue_end and q_tma_start_raw < q_tma_issue_end:
+            stages.append(("Q TMA issue", "q_tma_start", "q_tma_issue_end", "#5aa35a"))
+            if q_tma_end_raw and q_tma_issue_end < q_tma_end_raw:
+                stages.append(("Q ready wait", "q_tma_issue_end", "q_tma_end", "#8fbf8f"))
+        else:
+            stages.append(("Q TMA", "q_tma_start", "q_tma_end", "#5aa35a"))
     tma_issue_end = _int_field(row, "tma_issue_end", 0)
     tma_start_raw = _int_field(row, "tma_start", 0)
     tma_end_raw = _int_field(row, "tma_end", 0)
@@ -529,6 +537,11 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
 
     tma_done_marks = []
     for row in rows:
+        q_done = _int_field(row, "q_tma_end", 0)
+        if q_done:
+            q_lane = ("producer", q_tma_stage_warp(row))
+            tma_done_marks.append((q_done - base, q_lane, int(row["iter"]),
+                                   int(row["pipe"]), "Q", "#5aa35a"))
         pipe = int(row["pipe"])
         iteration = int(row["iter"])
         k_done = _int_field(row, "tma_end", 0)
