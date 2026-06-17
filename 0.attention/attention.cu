@@ -1538,6 +1538,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ unsigned long long clock_trace_base_shared;
   __shared__ unsigned long long q_tma_start_shared;
   __shared__ unsigned long long k_tma_start_shared[kPipeCount * 2];
+  __shared__ unsigned long long startup_trace_start_shared[kClockTraceStartupCount];
+  __shared__ unsigned long long startup_trace_end_shared[kClockTraceStartupCount];
   __shared__ unsigned long long tail_total_start_shared;
   __shared__ unsigned long long tma_store_start_shared;
   if (threadIdx.x == 0) clock_trace_base_shared = clock64();
@@ -1548,11 +1550,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #define ATTENTION_WRITE_STARTUP_TRACE(idx, start_clock, end_clock)             \
   do {                                                                         \
     if (trace_startup) {                                                       \
-      write_clock_trace_record(                                                \
-          clock_trace, clock_trace_iters * kClockTraceSlotsPerIter +           \
-                           kClockTraceStartupSlotBase + (idx),                 \
-          kClockTraceStartup, -1, -1, 0, -1, (idx), (start_clock),              \
-          (end_clock), clock_trace_base_shared);                               \
+      startup_trace_start_shared[(idx)] = (start_clock);                       \
+      startup_trace_end_shared[(idx)] = (end_clock);                           \
     }                                                                          \
   } while (0)
 #else
@@ -1760,6 +1759,17 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
   const bool trace_cta = clock_trace != nullptr && blockIdx.x == 0;
   const int trace_extra_base = clock_trace_iters * kClockTraceSlotsPerIter;
+  if (trace_cta && threadIdx.x == 0) {
+#pragma unroll
+    for (int i = 0; i < kClockTraceStartupCount; ++i) {
+      write_clock_trace_record(clock_trace,
+                               trace_extra_base + kClockTraceStartupSlotBase + i,
+                               kClockTraceStartup, -1, -1, 0, -1, i,
+                               startup_trace_start_shared[i],
+                               startup_trace_end_shared[i],
+                               clock_trace_base);
+    }
+  }
 #else
   const bool trace_cta = false;
   const int trace_extra_base = 0;
