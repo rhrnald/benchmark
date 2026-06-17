@@ -827,16 +827,22 @@ __device__ __forceinline__ void attention_qk_pipe_role(
       }
     }
   }
+#if ATTENTION_CLOCK_TRACE
+  const bool trace_q_wait =
+      pipe == 0 && blockIdx.x == 0 && lane0 && clock_trace != nullptr;
+  const unsigned long long q_wait_start = trace_q_wait ? clock64() : 0ull;
+#endif
   mbarrier_wait(q_ready, 0);
 #if ATTENTION_CLOCK_TRACE
-  if (pipe == 0) {
-    if (blockIdx.x == 0 && lane0 && clock_trace != nullptr) {
-      const unsigned long long q_tma_end = clock64();
-      const int q_tma_slot = clock_trace_iters * kClockTraceSlotsPerIter + 11;
-      write_clock_trace_record(clock_trace, q_tma_slot, kClockTraceQTma, -1, -1,
-                               role_warp_id, -1, -1, q_tma_start_shared, q_tma_end,
-                               clock_trace_base);
-    }
+  if (trace_q_wait) {
+    const unsigned long long q_tma_end = clock64();
+    const int q_tma_slot = clock_trace_iters * kClockTraceSlotsPerIter + 11;
+    write_clock_trace_record(clock_trace, q_tma_slot, kClockTraceQTma, -1, -1,
+                             role_warp_id, -1, -1, q_tma_start_shared,
+                             q_tma_end, clock_trace_base);
+    write_clock_trace_record(clock_trace, q_tma_slot + 2, kClockTraceQWait, -1,
+                             -1, role_warp_id, -1, -1, q_wait_start,
+                             q_tma_end, clock_trace_base);
   }
 #endif
   int iter = pipe;

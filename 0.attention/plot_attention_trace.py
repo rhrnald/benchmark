@@ -142,10 +142,16 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
     q_tma_start_raw = _int_field(row, "q_tma_start", 0)
     q_tma_issue_end = _int_field(row, "q_tma_issue_end", 0)
     q_tma_end_raw = _int_field(row, "q_tma_end", 0)
+    q_wait_start = _int_field(row, "q_wait_start", 0)
+    q_wait_end = _int_field(row, "q_wait_end", 0)
     if q_tma_start_raw:
         if q_tma_issue_end and q_tma_start_raw < q_tma_issue_end:
             stages.append(("Q TMA issue", "q_tma_start", "q_tma_issue_end", "#5aa35a"))
-            if q_tma_end_raw and q_tma_issue_end < q_tma_end_raw:
+            if q_wait_start and q_tma_issue_end < q_wait_start:
+                stages.append(("Q pre-wait", "q_tma_issue_end", "q_wait_start", "#b5b5b5"))
+            if q_wait_start and q_wait_end and q_wait_start < q_wait_end:
+                stages.append(("Q wait", "q_wait_start", "q_wait_end", "#8fbf8f"))
+            elif q_tma_end_raw and q_tma_issue_end < q_tma_end_raw:
                 stages.append(("Q ready wait", "q_tma_issue_end", "q_tma_end", "#8fbf8f"))
         else:
             stages.append(("Q TMA", "q_tma_start", "q_tma_end", "#5aa35a"))
