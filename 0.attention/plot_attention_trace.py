@@ -139,6 +139,8 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         and row.get("st_end", "0") not in ("", "0")
     )
     stages = []
+    if row.get("q_tma_start", "0") not in ("", "0"):
+        stages.append(("Q TMA", "q_tma_start", "q_tma_end", "#5aa35a"))
     tma_issue_end = _int_field(row, "tma_issue_end", 0)
     tma_start_raw = _int_field(row, "tma_start", 0)
     tma_end_raw = _int_field(row, "tma_end", 0)
@@ -265,6 +267,10 @@ def k_tma_stage_warp(row):
     return _int_field(row, "tma_warp_id", int(row["warp_id"]))
 
 
+def q_tma_stage_warp(row):
+    return _int_field(row, "q_tma_warp_id", int(row["warp_id"]))
+
+
 def pv_consumer_lane(row, name, consumer_base, consumer_count, consumer_lane_mode):
     if not name.startswith("PV "):
         return None
@@ -307,7 +313,9 @@ def write_summary(path, rows, base, clock_mhz, sms, ld_warps, consumer_lane_mode
                     row, base, clock_mhz, sms, ld_warps):
                 if has_consumer_warp_stamps(row) and name in ("LD", "PACK", "ST"):
                     continue
-                if name.startswith("K TMA"):
+                if name.startswith("Q TMA"):
+                    warp = q_tma_stage_warp(row)
+                elif name.startswith("K TMA"):
                     warp = k_tma_stage_warp(row)
                 elif name.startswith("V TMA") or name.startswith("PV "):
                     warp = pv_stage_warp(row, name)
@@ -434,6 +442,8 @@ def write_svg(path, rows, base, clock_mhz, sms, ld_warps, title, consumer_lane_m
                 continue
             if name in ("LD", "PACK", "ST"):
                 lane = ("ld", pipe)
+            elif name.startswith("Q TMA"):
+                lane = ("producer", q_tma_stage_warp(row))
             elif name.startswith("K TMA"):
                 k_warp = k_tma_stage_warp(row)
                 if k_warp == 2 + pipe:
@@ -672,7 +682,13 @@ def main():
     rows = read_rows(args.trace, args.iter_start, args.num_iters)
     if not rows:
         raise SystemExit("no rows selected")
-    base = min(int(row["tma_start"]) for row in rows)
+    base_candidates = []
+    for row in rows:
+        for key in ("q_tma_start", "tma_start"):
+            value = _int_field(row, key, 0)
+            if value:
+                base_candidates.append(value)
+    base = min(base_candidates)
     write_summary(args.summary_csv, rows, base, args.clock_mhz, args.sms, args.ld_warps,
                   args.consumer_lane_mode)
     write_svg(args.svg, rows, base, args.clock_mhz, args.sms, args.ld_warps, args.title,
