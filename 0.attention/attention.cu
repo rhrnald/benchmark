@@ -1534,6 +1534,40 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)clock_trace_start;
 #endif
 #else
+#if ATTENTION_CLOCK_TRACE
+  __shared__ unsigned long long clock_trace_base_shared;
+  __shared__ unsigned long long q_tma_start_shared;
+  __shared__ unsigned long long k_tma_start_shared[kPipeCount * 2];
+  __shared__ unsigned long long tail_total_start_shared;
+  __shared__ unsigned long long tma_store_start_shared;
+  if (threadIdx.x == 0) clock_trace_base_shared = clock64();
+  const bool trace_startup =
+      clock_trace != nullptr && blockIdx.x == 0 && threadIdx.x == 0;
+  const unsigned long long startup_smem_start =
+      trace_startup ? clock_trace_base_shared : 0ull;
+#define ATTENTION_WRITE_STARTUP_TRACE(idx, start_clock, end_clock)             \
+  do {                                                                         \
+    if (trace_startup) {                                                       \
+      write_clock_trace_record(                                                \
+          clock_trace, clock_trace_iters * kClockTraceSlotsPerIter +           \
+                           kClockTraceStartupSlotBase + (idx),                 \
+          kClockTraceStartup, -1, -1, 0, -1, (idx), (start_clock),              \
+          (end_clock), clock_trace_base_shared);                               \
+    }                                                                          \
+  } while (0)
+#else
+  ClockTraceRecord* clock_trace = nullptr;
+  const int clock_trace_iters = 0;
+  const int clock_trace_start = 0;
+  const unsigned long long clock_trace_base_shared = 0ull;
+  const unsigned long long q_tma_start_shared = 0ull;
+  unsigned long long* k_tma_start_shared = nullptr;
+  const bool trace_startup = false;
+  const unsigned long long startup_smem_start = 0ull;
+#define ATTENTION_WRITE_STARTUP_TRACE(idx, start_clock, end_clock) \
+  do {                                                            \
+  } while (0)
+#endif
   const int loop_repeats = kFixedRepeats > 0 ? kFixedRepeats : repeats;
   const int loop_k_tiles = kFixedKTiles > 0 ? kFixedKTiles : k_tiles;
   extern __shared__ uint32_t smem_raw[];
@@ -1555,6 +1589,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   for (int p = 0; p < kPipeCount; ++p) {
     s_smem[p] = q_smem + (1 + kKBufferTileCount + kVBufferCount + p) * kTileWords;
   }
+  ATTENTION_WRITE_STARTUP_TRACE(0, startup_smem_start, clock64());
 
   __shared__ uint64_t q_ready;
   __shared__ uint64_t k_ready[kPipeCount];
@@ -1571,25 +1606,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ float row_sum_partial[kPipeCount][kTileM];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
-#if ATTENTION_CLOCK_TRACE
-  __shared__ unsigned long long clock_trace_base_shared;
-  __shared__ unsigned long long q_tma_start_shared;
-  __shared__ unsigned long long k_tma_start_shared[kPipeCount * 2];
-  __shared__ unsigned long long tail_total_start_shared;
-  __shared__ unsigned long long tma_store_start_shared;
-#else
-  ClockTraceRecord* clock_trace = nullptr;
-  const int clock_trace_iters = 0;
-  const int clock_trace_start = 0;
-  const unsigned long long clock_trace_base_shared = 0ull;
-  const unsigned long long q_tma_start_shared = 0ull;
-  unsigned long long* k_tma_start_shared = nullptr;
-#endif
-
   const int lane = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
   const bool lane0 = lane == 0;
 
+  const unsigned long long startup_setmaxnreg_start =
+      trace_startup ? clock64() : 0ull;
   if (warp_id == 0 || warp_id == 1) {
     setmaxnreg_dec_qk();
   } else if (warp_id == 2 || warp_id == 3) {
@@ -1597,7 +1619,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   } else {
     setmaxnreg_inc_consumer();
   }
+  ATTENTION_WRITE_STARTUP_TRACE(1, startup_setmaxnreg_start, clock64());
 
+  const unsigned long long startup_mbarrier_init_start =
+      trace_startup ? clock64() : 0ull;
   if (threadIdx.x == 0) {
     mbarrier_init(&q_ready, 1);
 #if ATTENTION_PIPE1_TMA_HEAD_MARKER
@@ -1622,29 +1647,45 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+    ATTENTION_WRITE_STARTUP_TRACE(2, startup_mbarrier_init_start, clock64());
   }
   if (output != nullptr && loop_repeats < kPipeCount) {
     for (int i = threadIdx.x; i < kPipeCount * kTileM; i += blockDim.x) {
       reinterpret_cast<float*>(row_sum_partial)[i] = 0.0f;
     }
   }
+  const unsigned long long startup_sync_init_start =
+      trace_startup ? clock64() : 0ull;
   __syncthreads();
+  ATTENTION_WRITE_STARTUP_TRACE(3, startup_sync_init_start, clock64());
 #if ATTENTION_CLOCK_TRACE
+  const unsigned long long startup_trace_init_start =
+      trace_startup ? clock64() : 0ull;
   if (threadIdx.x == 0) {
-    clock_trace_base_shared = clock64();
 #pragma unroll
     for (int i = 0; i < kPipeCount * 2; ++i) {
       k_tma_start_shared[i] = 0ull;
     }
   }
+  ATTENTION_WRITE_STARTUP_TRACE(4, startup_trace_init_start, clock64());
+  const unsigned long long startup_sync_trace_start =
+      trace_startup ? clock64() : 0ull;
   __syncthreads();
+  ATTENTION_WRITE_STARTUP_TRACE(5, startup_sync_trace_start, clock64());
 #endif
   const unsigned long long clock_trace_base = clock_trace_base_shared;
+  const unsigned long long startup_tmem_alloc_start =
+      trace_startup ? clock64() : 0ull;
   if (warp_id == 0) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
     if (lane == 0) tmem_base_shared = taddr;
   }
+  ATTENTION_WRITE_STARTUP_TRACE(6, startup_tmem_alloc_start, clock64());
+  const unsigned long long startup_sync_tmem_start =
+      trace_startup ? clock64() : 0ull;
   __syncthreads();
+  ATTENTION_WRITE_STARTUP_TRACE(7, startup_sync_tmem_start, clock64());
+#undef ATTENTION_WRITE_STARTUP_TRACE
 
   const uint32_t tmem_base = tmem_base_shared;
   const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};

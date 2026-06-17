@@ -185,6 +185,8 @@ struct TraceRecord {
   unsigned long long q_tma_end = 0;
   unsigned long long q_wait_start = 0;
   unsigned long long q_wait_end = 0;
+  unsigned long long startup_start[8];
+  unsigned long long startup_end[8];
   unsigned long long tma_start = 0;
   unsigned long long tma_issue_end = 0;
   unsigned long long tma_end = 0;
@@ -260,9 +262,12 @@ enum ClockTraceStage {
   kClockTraceVTmaIssue = 22,
   kClockTraceQTmaIssue = 23,
   kClockTraceQWait = 24,
+  kClockTraceStartup = 25,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
+static constexpr int kClockTraceStartupCount = 8;
+static constexpr int kClockTraceStartupSlotBase = 14;
 static constexpr int kClockTraceLdBase = 8;
 static constexpr int kClockTracePackStoreBase = 16;
 static constexpr int kClockTraceRowSumBase = 24;
@@ -689,6 +694,10 @@ void init_trace_record(TraceRecord* r, int iter) {
     r->sync_start[i] = 0xffffffffffffffffull;
     r->sync_end[i] = 0;
   }
+  for (int i = 0; i < kClockTraceStartupCount; ++i) {
+    r->startup_start[i] = 0xffffffffffffffffull;
+    r->startup_end[i] = 0;
+  }
   r->pack_start = 0xffffffffffffffffull;
   r->st_start = 0xffffffffffffffffull;
   r->pv_start = 0xffffffffffffffffull;
@@ -707,6 +716,8 @@ const char* clock_trace_stage_name(int stage) {
       return "q_tma_issue";
     case kClockTraceQWait:
       return "q_wait";
+    case kClockTraceStartup:
+      return "startup";
     case kClockTraceKTma:
       return "k_tma";
     case kClockTraceKTmaIssue:
@@ -835,6 +846,13 @@ void write_clock_trace_csv(const Args& args,
     if (r.stage == kClockTraceQWait) {
       merge_trace_range(&q_wait_start, &q_wait_end, r.start, r.end);
       q_tma_warp_id = r.warp_id;
+      continue;
+    }
+    if (r.stage == kClockTraceStartup) {
+      if (!rows.empty() && r.half >= 0 && r.half < kClockTraceStartupCount) {
+        merge_trace_range(&rows.front().startup_start[r.half],
+                          &rows.front().startup_end[r.half], r.start, r.end);
+      }
       continue;
     }
     if (r.iter == args.k_tiles) {
@@ -1012,6 +1030,13 @@ void write_clock_trace_csv(const Args& args,
                "pv_warp_id,pv_h0_start,pv_h0_end,"
                "pv_h0_cycles,pv_h0_warp_id,pv_h1_start,pv_h1_end,pv_h1_cycles,"
                "pv_h1_warp_id,total_start,total_end,total_cycles");
+  const char* startup_names[kClockTraceStartupCount] = {
+      "smem_layout", "setmaxnreg", "mbarrier_init", "sync_init",
+      "trace_init", "sync_trace", "tmem_alloc", "sync_tmem"};
+  for (int i = 0; i < kClockTraceStartupCount; ++i) {
+    std::fprintf(csv, ",startup_%s_start,startup_%s_end,startup_%s_cycles",
+                 startup_names[i], startup_names[i], startup_names[i]);
+  }
   for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
     std::fprintf(csv, ",ld_warp%d_start,ld_warp%d_end", w, w);
   }
@@ -1123,6 +1148,12 @@ void write_clock_trace_csv(const Args& args,
                  trace_cycles(r.pv_h1_start, r.pv_h1_end), r.pv_h1_warp_id,
                  total_start, total_end,
                  trace_cycles(total_start, total_end));
+    for (int i = 0; i < kClockTraceStartupCount; ++i) {
+      std::fprintf(csv, ",%llu,%llu,%llu",
+                   trace_start_or_zero(r.startup_start[i]),
+                   trace_end_or_zero(r.startup_start[i], r.startup_end[i]),
+                   trace_cycles(r.startup_start[i], r.startup_end[i]));
+    }
     for (int w = 0; w < kTraceConsumerLanesPerPipe; ++w) {
       std::fprintf(csv, ",%llu,%llu", trace_start_or_zero(r.ld_warp_start[w]),
                    r.ld_warp_end[w]);

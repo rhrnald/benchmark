@@ -41,6 +41,8 @@ def rate_text(stage, cycles, clock_mhz, sms, ld_warps):
         return "async"
     if stage == "WAIT":
         return "wait"
+    if stage == "SETUP":
+        return "setup"
     bytes_per_stage = K_BYTES if stage == "ST" else (LD_X64X2_BYTES_PER_WARP * ld_warps)
     value = bytes_per_stage * hz / cycles / 1.0e12 * sms
     return f"{value:.3f} TB/s"
@@ -139,6 +141,19 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
         and row.get("st_end", "0") not in ("", "0")
     )
     stages = []
+    startup_specs = [
+        ("setup smem", "startup_smem_layout_start", "startup_smem_layout_end", "#64748b"),
+        ("setmaxnreg", "startup_setmaxnreg_start", "startup_setmaxnreg_end", "#475569"),
+        ("mbarrier init", "startup_mbarrier_init_start", "startup_mbarrier_init_end", "#334155"),
+        ("sync init", "startup_sync_init_start", "startup_sync_init_end", "#cbd5e1"),
+        ("trace init", "startup_trace_init_start", "startup_trace_init_end", "#94a3b8"),
+        ("sync trace", "startup_sync_trace_start", "startup_sync_trace_end", "#cbd5e1"),
+        ("tmem alloc", "startup_tmem_alloc_start", "startup_tmem_alloc_end", "#7c3aed"),
+        ("sync tmem", "startup_sync_tmem_start", "startup_sync_tmem_end", "#cbd5e1"),
+    ]
+    for name, start_key, end_key, color in startup_specs:
+        if _int_field(row, start_key, 0) and _int_field(row, end_key, 0):
+            stages.append((name, start_key, end_key, color))
     q_tma_start_raw = _int_field(row, "q_tma_start", 0)
     q_tma_issue_end = _int_field(row, "q_tma_issue_end", 0)
     q_tma_end_raw = _int_field(row, "q_tma_end", 0)
@@ -243,6 +258,8 @@ def stage_items(row, base, clock_mhz, sms, ld_warps):
             rate_kind = "MMA"
         elif "TMA" in name:
             rate_kind = "TMA"
+        elif name.startswith("setup") or name.startswith("sync") or name in ("setmaxnreg", "mbarrier init", "trace init", "tmem alloc"):
+            rate_kind = "SETUP"
         else:
             rate_kind = name
         out.append((name, start, end, cycles, color,
@@ -703,7 +720,7 @@ def main():
         raise SystemExit("no rows selected")
     base_candidates = []
     for row in rows:
-        for key in ("q_tma_start", "tma_start"):
+        for key in ("startup_smem_layout_start", "q_tma_start", "tma_start"):
             value = _int_field(row, key, 0)
             if value:
                 base_candidates.append(value)
