@@ -5,6 +5,124 @@
 #define ATTENTION_EPILOGUE_CHUNK_COLS 16
 #endif
 
+#ifndef ATTENTION_EPILOGUE_O_IN_S_SMEM
+#define ATTENTION_EPILOGUE_O_IN_S_SMEM 1
+#endif
+
+#ifndef ATTENTION_PERSISTENT
+#define ATTENTION_PERSISTENT 0
+#endif
+
+#ifndef ATTENTION_PERSISTENT_NOINLINE_ROLES
+#define ATTENTION_PERSISTENT_NOINLINE_ROLES 0
+#endif
+#if ATTENTION_PERSISTENT && ATTENTION_PERSISTENT_NOINLINE_ROLES
+#define ATTENTION_PIPE_ROLE_INLINE __noinline__
+#else
+#define ATTENTION_PIPE_ROLE_INLINE __forceinline__
+#endif
+
+#ifndef ATTENTION_PERSISTENT_DESC_GEN
+#define ATTENTION_PERSISTENT_DESC_GEN ATTENTION_PERSISTENT
+#endif
+
+#ifndef ATTENTION_PERSISTENT_OVERLAP
+#define ATTENTION_PERSISTENT_OVERLAP 0
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP && !ATTENTION_PERSISTENT
+#error "ATTENTION_PERSISTENT_OVERLAP requires ATTENTION_PERSISTENT"
+#endif
+#ifndef ATTENTION_PERSISTENT_OVERLAP_PREFETCH
+#define ATTENTION_PERSISTENT_OVERLAP_PREFETCH ATTENTION_PERSISTENT_OVERLAP
+#endif
+
+#ifndef ATTENTION_PERSISTENT_OVERLAP_EARLY
+#define ATTENTION_PERSISTENT_OVERLAP_EARLY 0
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY && !ATTENTION_PERSISTENT_OVERLAP_PREFETCH
+#error "ATTENTION_PERSISTENT_OVERLAP_EARLY requires ATTENTION_PERSISTENT_OVERLAP_PREFETCH"
+#endif
+
+#ifndef ATTENTION_PERSISTENT_OVERLAP_O_IN_V
+#define ATTENTION_PERSISTENT_OVERLAP_O_IN_V 0
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_O_IN_V && !ATTENTION_PERSISTENT
+#error "ATTENTION_PERSISTENT_OVERLAP_O_IN_V requires ATTENTION_PERSISTENT"
+#endif
+
+#ifndef ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#define ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE 0
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE && \
+    !(ATTENTION_PERSISTENT_OVERLAP_O_IN_V && ATTENTION_PERSISTENT_OVERLAP_EARLY)
+#error "ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE requires O_IN_V and EARLY"
+#endif
+
+#ifndef ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+#define ATTENTION_PERSISTENT_OVERLAP_QK_PEEL 0
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#error "ATTENTION_PERSISTENT_OVERLAP_QK_PEEL requires ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE"
+#endif
+
+#ifndef ATTENTION_PEEL_PREARM
+#define ATTENTION_PEEL_PREARM 0
+#endif
+
+#ifndef ATTENTION_PEEL_HB
+#define ATTENTION_PEEL_HB 0
+#endif
+#if ATTENTION_PEEL_HB
+__device__ unsigned int g_peel_hb[16];
+#define PEEL_HB_SET(slot, val)                              \
+  do {                                                      \
+    if (blockIdx.x == 0 && lane0) {                         \
+      g_peel_hb[(slot)] = (val);                            \
+      __threadfence();                                      \
+    }                                                       \
+  } while (0)
+#else
+#define PEEL_HB_SET(slot, val) do { } while (0)
+#endif
+
+#ifndef ATTENTION_PEEL_ISO
+#define ATTENTION_PEEL_ISO 0
+#endif
+#if ATTENTION_PEEL_ISO && !ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#error "ATTENTION_PEEL_ISO requires ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE"
+#endif
+#ifndef ATTENTION_ISO_ARRAY
+#define ATTENTION_ISO_ARRAY 0
+#endif
+
+#ifndef ATTENTION_PEEL_ROLE_NOSKIP
+#define ATTENTION_PEEL_ROLE_NOSKIP 0
+#endif
+
+#ifndef ATTENTION_PEEL_PIPE0_ONLY
+#define ATTENTION_PEEL_PIPE0_ONLY 0
+#endif
+
+#ifndef ATTENTION_PEEL_DURING_DRAIN
+#define ATTENTION_PEEL_DURING_DRAIN 0
+#endif
+
+#ifndef ATTENTION_PEEL_AFTER_SYNC
+#define ATTENTION_PEEL_AFTER_SYNC 0
+#endif
+
+#ifndef ATTENTION_PEEL_DD_PRESYNC
+#define ATTENTION_PEEL_DD_PRESYNC 0
+#endif
+
+#ifndef ATTENTION_PEEL_DD_SINGLE_ISSUER
+#define ATTENTION_PEEL_DD_SINGLE_ISSUER 0
+#endif
+
+#ifndef ATTENTION_PEEL_DD_SERIAL_COMMIT
+#define ATTENTION_PEEL_DD_SERIAL_COMMIT 0
+#endif
+
 #ifndef ATTENTION_ROW_MAX_ONLY
 #define ATTENTION_ROW_MAX_ONLY 0
 #endif
@@ -43,6 +161,10 @@
 
 #ifndef ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES
 #define ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES 1728
+#endif
+
+#ifndef ATTENTION_PIPE1_TMA_HEAD_DELAY_MIN_REPEATS
+#define ATTENTION_PIPE1_TMA_HEAD_DELAY_MIN_REPEATS 0
 #endif
 
 #ifndef ATTENTION_PIPE1_TMA_HEAD_MARKER
@@ -270,7 +392,7 @@ void real_attention_bf16_d128_kernel(RealAttentionParams p) {
 }
 
 template <int kFixedKTiles>
-__device__ __forceinline__ void attention_pv_pipe_role(
+__device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
     const CUtensorMap* k_map,
     const CUtensorMap* v_map,
     uint32_t* const (&k_smem)[kPipeCount],
@@ -292,6 +414,13 @@ __device__ __forceinline__ void attention_pv_pipe_role(
     int clock_trace_iters,
     int clock_trace_start,
     unsigned long long clock_trace_base,
+    bool k_prefetched,
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+    bool wait_prev_store,
+#endif
+#if ATTENTION_PEEL_HB
+    bool hb_peeled,
+#endif
     int lane) {
   const int role_warp_id = 2 + pipe;
   const bool lane0 = lane == 0;
@@ -301,6 +430,12 @@ __device__ __forceinline__ void attention_pv_pipe_role(
 #endif
   int iter = pipe;
   int local = 0;
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+  if (pipe == 0 && lane0 && wait_prev_store) {
+    tma_store_wait_group_read();
+  }
+  __syncwarp();
+#endif
   if (iter < loop_repeats) {
 #if ATTENTION_PIPE1_TMA_HEAD_MARKER
     if (pipe == 1) {
@@ -308,8 +443,11 @@ __device__ __forceinline__ void attention_pv_pipe_role(
     }
 #endif
 #if ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES > 0
-    if (pipe == 1) {
-      attention_clock_delay(ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES);
+    if constexpr (kFixedKTiles == 0 ||
+                  kFixedKTiles >= ATTENTION_PIPE1_TMA_HEAD_DELAY_MIN_REPEATS) {
+      if (pipe == 1) {
+        attention_clock_delay(ATTENTION_PIPE1_TMA_HEAD_DELAY_CYCLES);
+      }
     }
 #endif
     const int k_tile = local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
@@ -339,8 +477,10 @@ __device__ __forceinline__ void attention_pv_pipe_role(
       __threadfence_block();
     }
 #endif
-    issue_k_tma_tile(k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
-                     lane0);
+    if (!k_prefetched) {
+      issue_k_tma_tile(k_map, k_smem[pipe], &k_ready[pipe], global_k_tile,
+                       lane0);
+    }
 #if ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_K_ISSUE || \
     ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_KV_ISSUE
     if (pipe == 0 && lane0) {
@@ -467,7 +607,13 @@ __device__ __forceinline__ void attention_pv_pipe_role(
         qk_wait_start = clock64();
       }
 #endif
+#if ATTENTION_PEEL_HB
+      if (hb_peeled && local == 0) PEEL_HB_SET(6 + pipe, 1u);
+#endif
       mbarrier_wait(&qk_done[pipe], phase);
+#if ATTENTION_PEEL_HB
+      if (hb_peeled && local == 0) PEEL_HB_SET(6 + pipe, 2u);
+#endif
 #if ATTENTION_CLOCK_TRACE
       if (qk_wait_start != 0ull) {
         write_clock_trace_record(clock_trace,
@@ -770,7 +916,7 @@ __device__ __forceinline__ void attention_pv_pipe_role(
 }
 
 template <int kFixedKTiles>
-__device__ __forceinline__ void attention_qk_pipe_role(
+__device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
     uint32_t* q_smem,
     uint32_t* const (&k_smem)[kPipeCount],
     uint64_t* q_ready,
@@ -794,6 +940,13 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     unsigned long long clock_trace_base,
     unsigned long long q_tma_start_shared,
     unsigned long long* k_tma_start_shared,
+    unsigned int q_ready_phase,
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+    uint64_t* qk_all_done_bar,
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+    bool qk_peeled,
+#endif
     int lane) {
   const int role_warp_id = pipe;
   const bool lane0 = lane == 0;
@@ -804,6 +957,12 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
   const uint32_t idesc = make_qk_idesc();
   const uint32_t pv_idesc = make_qk_idesc() | (1u << 16);
+#if ATTENTION_PERSISTENT_DESC_GEN
+  QkDescGen q_desc{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
+  QkDescGen k_desc{static_cast<uint32_t>(smem_ptr_u32(k_smem[pipe]) >> 4)};
+  PvSDescGen pv_s_desc{static_cast<uint32_t>(smem_ptr_u32(s_smem[pipe]) >> 4)};
+  PvVDescGen pv_v_desc{static_cast<uint32_t>(smem_ptr_u32(v_smem[pipe]) >> 4)};
+#else
   uint64_t q_desc[8];
   uint64_t k_desc[8];
   uint64_t pv_s_desc[8];
@@ -827,7 +986,11 @@ __device__ __forceinline__ void attention_qk_pipe_role(
       }
     }
   }
-  mbarrier_wait(q_ready, 0);
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+  if (!qk_peeled)
+#endif
+  mbarrier_wait(q_ready, q_ready_phase);
 #if ATTENTION_CLOCK_TRACE
   if (pipe == 0) {
     if (blockIdx.x == 0 && lane0 && clock_trace != nullptr) {
@@ -841,6 +1004,13 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
   int iter = pipe;
   int local = 0;
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+  if (qk_peeled) {
+    iter = pipe + kActivePipeStride;
+    local = 1;
+    PEEL_HB_SET(8 + pipe, 100u);
+  } else
+#endif
   if (iter < loop_repeats) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
 #if ATTENTION_CLOCK_TRACE
@@ -913,6 +1083,9 @@ __device__ __forceinline__ void attention_qk_pipe_role(
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+    if (qk_peeled) PEEL_HB_SET(8 + pipe, 200u + static_cast<unsigned int>(local));
+#endif
 #if ATTENTION_CLOCK_TRACE
     const int trace_idx = iter - clock_trace_start;
     const bool trace_iter =
@@ -1071,6 +1244,9 @@ __device__ __forceinline__ void attention_qk_pipe_role(
   if (local > 0) {
     const uint32_t tail_phase = static_cast<uint32_t>((local - 1) & 1);
     mbarrier_wait(&qk_done[pipe], tail_phase);
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+    if (lane0) mbarrier_arrive(qk_all_done_bar);
+#endif
 #if ATTENTION_CLOCK_TRACE
     const int done_iter = iter - kActivePipeStride;
     const int done_trace_idx = done_iter - clock_trace_start;
@@ -1262,7 +1438,7 @@ attention_row_sum_update_h1_cold(uint32_t row_taddr,
 }
 #endif
 
-__device__ __forceinline__ void attention_consumer_pipe_role(
+__device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     uint32_t* const (&s_smem)[kPipeCount],
     uint64_t (&qk_done)[kPipeCount],
     uint64_t (&p_done)[kPipeCount],
@@ -1496,6 +1672,99 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
 #endif
 }
 
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+template <int PIPE>
+__device__ __forceinline__ void attention_issue_qk_peel(
+    uint32_t* q_smem, uint32_t* const k_smem[kPipeCount],
+    const uint32_t p_taddr[kPipeCount], uint64_t* q_ready,
+    uint64_t k_ready[kPipeCount], uint64_t qk_peel_done[kPipeCount],
+    unsigned int peel_q_phase, bool lane0) {
+  mbarrier_wait(q_ready, peel_q_phase);
+  mbarrier_wait(&k_ready[PIPE], 0u);
+  if (lane0) {
+#if !ATTENTION_PEEL_PREARM
+    mbarrier_init(&qk_peel_done[PIPE], 1);
+    asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+#endif
+#if !ATTENTION_PEEL_NO_FENCE
+    tcgen05_fence_after_thread_sync();
+#endif
+    const uint32_t peel_idesc = make_qk_idesc();
+#if ATTENTION_PERSISTENT_DESC_GEN
+    const QkDescGen qd{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
+    const QkDescGen kd{static_cast<uint32_t>(smem_ptr_u32(k_smem[PIPE]) >> 4)};
+#pragma unroll
+    for (int mma = 0; mma < kMmasPerTile; ++mma) {
+      tcgen05_mma_bf16_ss(p_taddr[PIPE], qd[mma], kd[mma], peel_idesc, mma != 0);
+    }
+#else
+    const uint32_t q16 = smem_ptr_u32(q_smem) >> 4;
+    const uint32_t k16 = smem_ptr_u32(k_smem[PIPE]) >> 4;
+#pragma unroll
+    for (int mma = 0; mma < kMmasPerTile; ++mma) {
+      tcgen05_mma_bf16_ss(p_taddr[PIPE],
+                          make_sw128_major_k_smem_desc_addr16(q16, mma),
+                          make_sw128_major_k_smem_desc_addr16(k16, mma), peel_idesc,
+                          mma != 0);
+    }
+#endif
+    tcgen05_commit(&qk_peel_done[PIPE]);
+#if !ATTENTION_PEEL_NO_FENCE
+    tcgen05_fence_before_thread_sync();
+#endif
+  }
+}
+
+template <int PIPE>
+__device__ __forceinline__ void attention_peel_issue_mma_only(
+    uint32_t* q_smem, uint32_t* const k_smem[kPipeCount],
+    const uint32_t p_taddr[kPipeCount], uint64_t* q_ready,
+    uint64_t k_ready[kPipeCount], uint64_t qk_peel_done[kPipeCount],
+    unsigned int peel_q_phase, bool lane0) {
+  mbarrier_wait(q_ready, peel_q_phase);
+  mbarrier_wait(&k_ready[PIPE], 0u);
+  if (lane0) {
+#if !ATTENTION_PEEL_PREARM
+    mbarrier_init(&qk_peel_done[PIPE], 1);
+    asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+#endif
+#if !ATTENTION_PEEL_NO_FENCE
+    tcgen05_fence_after_thread_sync();
+#endif
+    const uint32_t peel_idesc = make_qk_idesc();
+#if ATTENTION_PERSISTENT_DESC_GEN
+    const QkDescGen qd{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
+    const QkDescGen kd{static_cast<uint32_t>(smem_ptr_u32(k_smem[PIPE]) >> 4)};
+#pragma unroll
+    for (int mma = 0; mma < kMmasPerTile; ++mma) {
+      tcgen05_mma_bf16_ss(p_taddr[PIPE], qd[mma], kd[mma], peel_idesc, mma != 0);
+    }
+#else
+    const uint32_t q16 = smem_ptr_u32(q_smem) >> 4;
+    const uint32_t k16 = smem_ptr_u32(k_smem[PIPE]) >> 4;
+#pragma unroll
+    for (int mma = 0; mma < kMmasPerTile; ++mma) {
+      tcgen05_mma_bf16_ss(p_taddr[PIPE],
+                          make_sw128_major_k_smem_desc_addr16(q16, mma),
+                          make_sw128_major_k_smem_desc_addr16(k16, mma), peel_idesc,
+                          mma != 0);
+    }
+#endif
+  }
+}
+
+template <int PIPE>
+__device__ __forceinline__ void attention_peel_commit_only(
+    uint64_t qk_peel_done[kPipeCount], bool lane0) {
+  if (lane0) {
+    tcgen05_commit(&qk_peel_done[PIPE]);
+#if !ATTENTION_PEEL_NO_FENCE
+    tcgen05_fence_before_thread_sync();
+#endif
+  }
+}
+#endif
+
 template <int kFixedRepeats = 0, int kFixedKTiles = 0>
 __global__ __launch_bounds__(kMainThreads, 1)
 void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
@@ -1505,7 +1774,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                           int repeats,
                           int k_tiles,
                           float score_to_exp2_scale,
-                          void* __restrict__ output
+                          void* __restrict__ output,
+                          int total_tiles
 #if ATTENTION_CLOCK_TRACE
                           ,
                           ClockTraceRecord* __restrict__ clock_trace,
@@ -1522,6 +1792,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)k_tiles;
   (void)score_to_exp2_scale;
   (void)output;
+  (void)total_tiles;
 #if ATTENTION_CLOCK_TRACE
   (void)clock_trace;
   (void)clock_trace_iters;
@@ -1531,6 +1802,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const int loop_repeats = kFixedRepeats > 0 ? kFixedRepeats : repeats;
   const int loop_k_tiles = kFixedKTiles > 0 ? kFixedKTiles : k_tiles;
   extern __shared__ uint32_t smem_raw[];
+#if !ATTENTION_PERSISTENT
   const uintptr_t smem_addr =
       (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
   uint32_t* q_smem = reinterpret_cast<uint32_t*>(smem_addr);
@@ -1549,15 +1821,22 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   for (int p = 0; p < kPipeCount; ++p) {
     s_smem[p] = q_smem + (1 + kKBufferTileCount + kVBufferCount + p) * kTileWords;
   }
+#endif
 
   __shared__ uint64_t q_ready;
   __shared__ uint64_t k_ready[kPipeCount];
   __shared__ uint64_t qk_done[kPipeCount];
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+  __shared__ uint64_t qk_peel_done[kPipeCount];
+#endif
   __shared__ uint64_t p_done[kPipeCount];
   __shared__ uint64_t s_h1_done[kPipeCount];
   __shared__ uint64_t v_ready[kPipeCount];
   __shared__ uint64_t v_h1_ready[kPipeCount];
   __shared__ uint64_t pv_done[kPipeCount];
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+  __shared__ uint64_t qk_all_done;
+#endif
   __shared__ uint32_t k_issue_gen[kPipeCount];
   __shared__ uint32_t v_issue_gen[kPipeCount];
   __shared__ uint32_t qk_issue_gen[kPipeCount];
@@ -1592,14 +1871,80 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     setmaxnreg_inc_consumer();
   }
 
-  if (threadIdx.x == 0) {
+#if ATTENTION_PERSISTENT
+  if (warp_id == 0) {
+    const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
+    if (lane == 0) tmem_base_shared = taddr;
+  }
+  __syncthreads();
+  for (int tile = blockIdx.x; tile < total_tiles;
+       tile += static_cast<int>(gridDim.x)) {
+  uintptr_t smem_addr =
+      (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
+  asm volatile("" : "+l"(smem_addr));
+  uint32_t* q_smem = reinterpret_cast<uint32_t*>(smem_addr);
+  uint32_t* k_smem[kPipeCount];
+#pragma unroll
+  for (int p = 0; p < kPipeCount; ++p) {
+    k_smem[p] = q_smem + (1 + p) * kTileWords;
+  }
+  uint32_t* v_smem[kPipeCount];
+#pragma unroll
+  for (int p = 0; p < kPipeCount; ++p) {
+    v_smem[p] = q_smem + (1 + kKBufferTileCount + p) * kTileWords;
+  }
+  uint32_t* s_smem[kPipeCount];
+#pragma unroll
+  for (int p = 0; p < kPipeCount; ++p) {
+    s_smem[p] = q_smem + (1 + kKBufferTileCount + kVBufferCount + p) * kTileWords;
+  }
+  volatile uint32_t* tmem_base_reload = &tmem_base_shared;
+  const uint32_t tmem_base = *tmem_base_reload;
+  const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
+  const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
+#endif
+
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+  const bool qk_peeled =
+#if ATTENTION_PEEL_ROLE_NOSKIP
+      false;
+#else
+      output != nullptr && tile != static_cast<int>(blockIdx.x) &&
+      loop_repeats >= kActivePipeStride;
+#endif
+#else
+  const bool qk_peeled = false;
+#endif
+  (void)qk_peeled;
+
+#if ATTENTION_PERSISTENT_OVERLAP
+  if (tile == static_cast<int>(blockIdx.x) && threadIdx.x == 0) {
     mbarrier_init(&q_ready, 1);
+#pragma unroll
+    for (int p = 0; p < kPipeCount; ++p) {
+      mbarrier_init(&k_ready[p], 1);
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PEEL_NO_INITONCE
+      mbarrier_init(&qk_peel_done[p], 1);
+#endif
+    }
+    asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+  }
+#endif
+  if (threadIdx.x == 0) {
+#if !ATTENTION_PERSISTENT_OVERLAP
+    mbarrier_init(&q_ready, 1);
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+    mbarrier_init(&qk_all_done, 2);
+#endif
 #if ATTENTION_PIPE1_TMA_HEAD_MARKER
     mbarrier_init(&tma_head_marker, 1);
 #endif
 #pragma unroll
     for (int p = 0; p < kPipeCount; ++p) {
+#if !ATTENTION_PERSISTENT_OVERLAP
       mbarrier_init(&k_ready[p], 1);
+#endif
       mbarrier_init(&qk_done[p], 1);
       mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
       mbarrier_init(&s_h1_done[p], kConsumerWarpsPerPipe);
@@ -1623,6 +1968,33 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
   }
   __syncthreads();
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+  if (qk_peeled && warp_id == 0) {
+    PEEL_HB_SET(12, 1u);
+    mbarrier_wait(&qk_peel_done[0], 0u);
+    PEEL_HB_SET(12, 2u);
+    if (lane0) mbarrier_arrive(&qk_done[0]);
+#if ATTENTION_PEEL_PREARM
+    if (lane0) {
+      mbarrier_init(&qk_peel_done[0], 1);
+      asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+    }
+#endif
+    PEEL_HB_SET(12, 3u);
+  } else if (qk_peeled && warp_id == 1) {
+    PEEL_HB_SET(13, 1u);
+    mbarrier_wait(&qk_peel_done[1], 0u);
+    PEEL_HB_SET(13, 2u);
+    if (lane0) mbarrier_arrive(&qk_done[1]);
+#if ATTENTION_PEEL_PREARM
+    if (lane0) {
+      mbarrier_init(&qk_peel_done[1], 1);
+      asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+    }
+#endif
+    PEEL_HB_SET(13, 3u);
+  }
+#endif
 #if ATTENTION_CLOCK_TRACE
   if (threadIdx.x == 0) {
     clock_trace_base_shared = clock64();
@@ -1634,6 +2006,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __syncthreads();
 #endif
   const unsigned long long clock_trace_base = clock_trace_base_shared;
+#if !ATTENTION_PERSISTENT
   if (warp_id == 0) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
     if (lane == 0) tmem_base_shared = taddr;
@@ -1643,17 +2016,36 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const uint32_t tmem_base = tmem_base_shared;
   const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
   const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
+  const int tile = static_cast<int>(blockIdx.x);
+#endif
   float* row_max_scratch =
       output != nullptr
           ? reinterpret_cast<float*>(output) +
-                static_cast<size_t>(blockIdx.x) * kTileWords
+                static_cast<size_t>(tile) * kTileWords
           : nullptr;
-  const int q_contig_row = static_cast<int>(blockIdx.x) * kTileM;
+  const int q_contig_row = tile * kTileM;
   const int kv_tile_base =
-      kv_tile_base_for_block<kFixedKTiles>(static_cast<int>(blockIdx.x),
-                                           loop_k_tiles);
+      kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles);
+#if ATTENTION_PERSISTENT_OVERLAP
+  const int tile_local_idx =
+      (tile - static_cast<int>(blockIdx.x)) / static_cast<int>(gridDim.x);
+  const unsigned int q_ready_phase = static_cast<unsigned int>(tile_local_idx & 1);
+  const bool k_prefetched = ATTENTION_PERSISTENT_OVERLAP_PREFETCH &&
+      output != nullptr && tile != static_cast<int>(blockIdx.x);
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+  const bool wait_prev_store =
+      output != nullptr && tile != static_cast<int>(blockIdx.x);
+#endif
+#else
+  const unsigned int q_ready_phase = 0u;
+  const bool k_prefetched = false;
+#endif
 
-  if (warp_id == 0) {
+  if (warp_id == 0
+#if ATTENTION_PERSISTENT_OVERLAP && ATTENTION_PERSISTENT_OVERLAP_PREFETCH
+      && (output == nullptr || tile == static_cast<int>(blockIdx.x))
+#endif
+  ) {
 #if ATTENTION_CLOCK_TRACE
     if (lane0) q_tma_start_shared = clock64();
 #endif
@@ -1686,7 +2078,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         qk_done, pv_done,
         k_issue_gen, v_issue_gen, &tma_head_marker,
         k_tma_start_shared, pipe, loop_repeats, loop_k_tiles, kv_tile_base, clock_trace,
-        clock_trace_iters, clock_trace_start, clock_trace_base, lane);
+        clock_trace_iters, clock_trace_start, clock_trace_base, k_prefetched,
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+        wait_prev_store,
+#endif
+#if ATTENTION_PEEL_HB
+        qk_peeled,
+#endif
+        lane);
   }
 
 	  if (warp_id == 0 || warp_id == 1) {
@@ -1697,7 +2096,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 	        s_smem, v_smem, v_ready, v_h1_ready, p_taddr, o_taddr, pipe,
         loop_repeats, clock_trace,
         clock_trace_iters, clock_trace_start, clock_trace_base,
-        q_tma_start_shared, k_tma_start_shared, lane);
+        q_tma_start_shared, k_tma_start_shared, q_ready_phase,
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+        &qk_all_done,
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+        qk_peeled,
+#endif
+        lane);
   }
 
 #if ATTENTION_CLOCK_TRACE
@@ -1721,6 +2127,30 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     const int pipe0_local_count =
         (loop_repeats + 1) / 2;
     const int pipe1_local_count = loop_repeats / 2;
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+    if (warp_id == 2 || warp_id == 3) {
+      const int next_tile = tile + static_cast<int>(gridDim.x);
+      if (next_tile < total_tiles) {
+        mbarrier_wait(&qk_all_done, 0);
+        if (warp_id == 2) {
+          mbarrier_expect_tx(&q_ready, kTileBytes);
+          if (lane0) {
+            const uint32_t q_smem_addr = smem_ptr_u32(q_smem);
+            const int next_q_row = next_tile * kTileM;
+            tma_load_2d(&q_map, q_smem_addr, &q_ready, 0, next_q_row);
+            tma_load_2d(&q_map, q_smem_addr + kTileBytes / 2, &q_ready, 32, next_q_row);
+          }
+        }
+        const int pf_pipe = warp_id - 2;
+        const int next_kv_base =
+            kv_tile_base_for_block<kFixedKTiles>(next_tile, loop_k_tiles);
+        const int pf_k_tile =
+            local_k_tile_for_iter<kFixedKTiles>(pf_pipe, loop_k_tiles);
+        issue_k_tma_tile(&k_map, k_smem[pf_pipe], &k_ready[pf_pipe],
+                         next_kv_base + pf_k_tile, lane0);
+      }
+    }
+#endif
     if (pipe0_local_count > 0) {
       mbarrier_wait(&pv_done[0], static_cast<uint32_t>((pipe0_local_count - 1) & 1));
 #if ATTENTION_CLOCK_TRACE
@@ -1751,6 +2181,67 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
 #endif
     }
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PEEL_DURING_DRAIN && \
+    !ATTENTION_PEEL_AFTER_SYNC
+#if ATTENTION_PEEL_DD_PRESYNC
+    __syncthreads();
+#endif
+#if ATTENTION_PEEL_DD_SINGLE_ISSUER
+    if (warp_id == 0 && loop_repeats >= kActivePipeStride) {
+      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
+      if (peel_next_tile < total_tiles) {
+        const unsigned int peel_q_phase =
+            static_cast<unsigned int>((tile_local_idx + 1) & 1);
+        PEEL_HB_SET(0, 3u);
+        attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                   qk_peel_done, peel_q_phase, lane0);
+        PEEL_HB_SET(0, 4u);
+        PEEL_HB_SET(1, 3u);
+        attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                   qk_peel_done, peel_q_phase, lane0);
+        PEEL_HB_SET(1, 4u);
+      }
+    }
+#elif ATTENTION_PEEL_DD_SERIAL_COMMIT
+    if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
+      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
+      if (peel_next_tile < total_tiles) {
+        const unsigned int peel_q_phase =
+            static_cast<unsigned int>((tile_local_idx + 1) & 1);
+        PEEL_HB_SET(warp_id, 3u);
+        if (warp_id == 0) {
+          attention_peel_issue_mma_only<0>(q_smem, k_smem, p_taddr, &q_ready,
+                                           k_ready, qk_peel_done, peel_q_phase, lane0);
+        } else {
+          attention_peel_issue_mma_only<1>(q_smem, k_smem, p_taddr, &q_ready,
+                                           k_ready, qk_peel_done, peel_q_phase, lane0);
+        }
+        asm volatile("bar.sync 6, 64;" ::: "memory");
+        if (warp_id == 0) attention_peel_commit_only<0>(qk_peel_done, lane0);
+        asm volatile("bar.sync 6, 64;" ::: "memory");
+        if (warp_id == 1) attention_peel_commit_only<1>(qk_peel_done, lane0);
+        PEEL_HB_SET(warp_id, 4u);
+      }
+    }
+#else
+    if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
+      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
+      if (peel_next_tile < total_tiles) {
+        const unsigned int peel_q_phase =
+            static_cast<unsigned int>((tile_local_idx + 1) & 1);
+        PEEL_HB_SET(warp_id, 3u);
+        if (warp_id == 0) {
+          attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                     qk_peel_done, peel_q_phase, lane0);
+        } else {
+          attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                     qk_peel_done, peel_q_phase, lane0);
+        }
+        PEEL_HB_SET(warp_id, 4u);
+      }
+    }
+#endif
+#endif
 #if ATTENTION_CLOCK_TRACE
     if (trace_cta && threadIdx.x == 0) {
       const unsigned long long tail_wait_end = clock64();
@@ -1759,8 +2250,58 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                tail_wait_end, clock_trace_base);
     }
 #endif
+#if ATTENTION_PERSISTENT_OVERLAP_PREFETCH && !ATTENTION_PERSISTENT_OVERLAP_EARLY
+    {
+      const int next_tile = tile + static_cast<int>(gridDim.x);
+      if (next_tile < total_tiles) {
+        if (warp_id == 2) {
+          mbarrier_expect_tx(&q_ready, kTileBytes);
+          if (lane0) {
+            const uint32_t q_smem_addr = smem_ptr_u32(q_smem);
+            const int next_q_row = next_tile * kTileM;
+            tma_load_2d(&q_map, q_smem_addr, &q_ready, 0, next_q_row);
+            tma_load_2d(&q_map, q_smem_addr + kTileBytes / 2, &q_ready, 32, next_q_row);
+          }
+        }
+        if (warp_id == 2 || warp_id == 3) {
+          const int pf_pipe = warp_id - 2;
+          const int next_kv_base =
+              kv_tile_base_for_block<kFixedKTiles>(next_tile, loop_k_tiles);
+          const int pf_k_tile =
+              local_k_tile_for_iter<kFixedKTiles>(pf_pipe, loop_k_tiles);
+          issue_k_tma_tile(&k_map, k_smem[pf_pipe], &k_ready[pf_pipe],
+                           next_kv_base + pf_k_tile, lane0);
+        }
+      }
+    }
+#endif
     __syncthreads();
+#if ATTENTION_PERSISTENT_OVERLAP_O_IN_V
+    uint32_t* output_bf16_smem = v_smem[0];
+#elif ATTENTION_EPILOGUE_O_IN_S_SMEM
+    uint32_t* output_bf16_smem = s_smem[0];
+#else
     uint32_t* output_bf16_smem = reinterpret_cast<uint32_t*>(q_smem);
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PEEL_DURING_DRAIN && \
+    ATTENTION_PEEL_AFTER_SYNC
+    if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
+      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
+      if (peel_next_tile < total_tiles) {
+        const unsigned int peel_q_phase =
+            static_cast<unsigned int>((tile_local_idx + 1) & 1);
+        PEEL_HB_SET(warp_id, 3u);
+        if (warp_id == 0) {
+          attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                     qk_peel_done, peel_q_phase, lane0);
+        } else {
+          attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                     qk_peel_done, peel_q_phase, lane0);
+        }
+        PEEL_HB_SET(warp_id, 4u);
+      }
+    }
+#endif
     const bool epilogue_warp =
         warp_id >= kConsumerBaseWarp &&
         warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe;
@@ -1856,14 +2397,82 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     tma_store_fence();
     __syncthreads();
+#if ATTENTION_PEEL_ISO
+#if ATTENTION_ISO_ARRAY
+    __shared__ uint64_t iso_bar[kPipeCount];
+#ifndef ATTENTION_ISO_ARRAY_IDX
+#define ATTENTION_ISO_ARRAY_IDX warp_id
+#endif
+    uint64_t* const iso_b = &iso_bar[ATTENTION_ISO_ARRAY_IDX];
+#else
+    __shared__ uint64_t iso_bar;
+    uint64_t* const iso_b = &iso_bar;
+#endif
+    if (warp_id == 0 && loop_repeats >= kActivePipeStride) {
+      const int next_tile = tile + static_cast<int>(gridDim.x);
+      if (next_tile < total_tiles && lane0) {
+        PEEL_HB_SET(0, 1u);
+        const unsigned int iso_q_phase =
+            static_cast<unsigned int>((tile_local_idx + 1) & 1);
+        mbarrier_wait(&q_ready, iso_q_phase);
+        PEEL_HB_SET(0, 2u);
+        mbarrier_wait(&k_ready[0], 0u);
+        PEEL_HB_SET(0, 3u);
+        mbarrier_init(iso_b, 1);
+        asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+#if !ATTENTION_PEEL_NO_FENCE
+        tcgen05_fence_after_thread_sync();
+#endif
+        const uint32_t iso_idesc = make_qk_idesc();
+        const QkDescGen iso_q_desc{
+            static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
+        const QkDescGen iso_k_desc{
+            static_cast<uint32_t>(smem_ptr_u32(k_smem[0]) >> 4)};
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile; ++mma) {
+          tcgen05_mma_bf16_ss(p_taddr[0], iso_q_desc[mma], iso_k_desc[mma],
+                              iso_idesc, mma != 0);
+        }
+        tcgen05_commit(iso_b);
+#if !ATTENTION_PEEL_NO_FENCE
+        tcgen05_fence_before_thread_sync();
+#endif
+        PEEL_HB_SET(0, 4u);
+        mbarrier_wait(iso_b, 0u);
+        PEEL_HB_SET(0, 5u);
+      }
+    }
+#endif
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PEEL_DURING_DRAIN
+    if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
+      const int next_tile = tile + static_cast<int>(gridDim.x);
+      if (next_tile < total_tiles) {
+        const unsigned int peel_q_phase =
+            static_cast<unsigned int>((tile_local_idx + 1) & 1);
+        PEEL_HB_SET(warp_id, 3u);
+        if (warp_id == 0) {
+          attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                     qk_peel_done, peel_q_phase, lane0);
+        } else {
+          attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
+                                     qk_peel_done, peel_q_phase, lane0);
+        }
+        PEEL_HB_SET(warp_id, 4u);
+      }
+    }
+#endif
 #if ATTENTION_CLOCK_TRACE
     if (trace_cta && threadIdx.x == 0) {
       tma_store_start_shared = clock64();
     }
 #endif
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+    if (lane0 && warp_id == 2) {
+#else
     if (lane0 && warp_id == 0) {
+#endif
       tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0,
-                   static_cast<int>(blockIdx.x), 0);
+                   tile, 0);
       tma_store_commit_group();
     }
   }
@@ -1873,12 +2482,16 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
   __syncthreads();
 
+#if !ATTENTION_PERSISTENT
   if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
   __syncthreads();
   if (warp_id == 0) tcgen05_relinquish_alloc_permit();
+#endif
+#if !ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
   if (output != nullptr && lane0 && warp_id == 0) {
     tma_store_wait_group_read();
   }
+#endif
 #if ATTENTION_CLOCK_TRACE
   if (output != nullptr && trace_cta && threadIdx.x == 0) {
     const unsigned long long store_end = clock64();
@@ -1891,6 +2504,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                              tail_total_start_shared, store_end,
                              clock_trace_base);
   }
+#endif
+#if ATTENTION_PERSISTENT
+  __syncthreads();
+  }
+
+#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+  if (output != nullptr && warp_id == 2 && lane0) {
+    tma_store_wait_group_read();
+  }
+  __syncthreads();
+#endif
+
+  volatile uint32_t* tmem_base_reload_final = &tmem_base_shared;
+  const uint32_t tmem_base_final = *tmem_base_reload_final;
+  if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base_final);
+  __syncthreads();
+  if (warp_id == 0) tcgen05_relinquish_alloc_permit();
 #endif
 #endif
 }

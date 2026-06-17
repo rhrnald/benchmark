@@ -27,6 +27,27 @@ make validation
 full-size benchmark. `make plot` captures a clock trace and writes the cycle
 timeline SVG. `make validation` runs the fused correctness path.
 
+## Sequence length (1k vs 32k)
+
+The default build and `make run`/`make validation` use the 32k base schedule (~1800 TFLOPS).
+To run the 1k shape you must pass an option:
+
+```bash
+make run SEQLEN=1k            # 1k on the base kernel (~818)
+make run SEQLEN=1k FAST=1     # 1k on the persistent QK-peel kernel (~963)
+```
+
+`FAST=1` builds a separate persistent occupancy-1 kernel that wins at 1k (~963 vs 818) but is
+~4% slower at 32k, so it is opt-in.
+
+- TODO: (1) push 1k higher by overlapping more of the epilogue's idle tensor core; (2) cut the
+persistent per-tile overhead at 32k (per-tile mbarrier re-init, the inter-tile `__syncthreads`)
+so one persistent build can coexist with / match the base 32k schedule.
+
+Validation is the same: `make validation` checks the default
+base kernel; add `FAST=1` to validate the persistent kernel. (1k uses extra warmup so the short
+iters reach the GPU boost clock; otherwise it under-reports ~954 instead of ~963.)
+
 ## Benchmark
 
 Default benchmark shape:

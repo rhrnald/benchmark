@@ -104,6 +104,25 @@ __host__ __device__ __forceinline__ uint64_t make_s_smem_desc(uint32_t matrix_st
   return make_s_smem_desc_addr16((matrix_start_addr & ~0xFu) >> 4);
 }
 
+struct QkDescGen {
+  uint32_t addr16;
+  __device__ __forceinline__ uint64_t operator[](int mma) const {
+    return make_sw128_major_k_smem_desc_addr16(addr16, mma);
+  }
+};
+struct PvVDescGen {
+  uint32_t addr16;
+  __device__ __forceinline__ uint64_t operator[](int mma) const {
+    return make_sw128_major_mn_smem_desc_addr16(addr16, mma);
+  }
+};
+struct PvSDescGen {
+  uint32_t addr16;
+  __device__ __forceinline__ uint64_t operator[](int mma) const {
+    return make_s_smem_desc_addr16(addr16 + static_cast<uint32_t>(mma) * (4096u >> 4));
+  }
+};
+
 __host__ __device__ __forceinline__ int atom_major_k_word_offset(int row, int col_pair) {
   const int k16_atom = col_pair >> 3;
   const int pair_in_atom = col_pair & 7;
@@ -465,6 +484,12 @@ __device__ __forceinline__ void tcgen05_commit(uint64_t* barrier) {
 __device__ __forceinline__ void tcgen05_fence_after_thread_sync() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void tcgen05_fence_before_thread_sync() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
 #endif
 }
 

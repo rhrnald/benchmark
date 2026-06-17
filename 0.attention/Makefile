@@ -13,10 +13,31 @@ TRACE_BIN ?= $(BUILD_DIR)/attention_custom_kernel_trace
 VALIDATION_BIN ?= $(BUILD_DIR)/attention_validation
 
 BLOCKS ?= 4096
-K_TILES ?= 256
+# support seqlen 1k, 32k
+SEQLEN ?= 32k
+ifeq ($(SEQLEN),1k)
+SEQLEN_K_TILES := 8
+else ifeq ($(SEQLEN),32k)
+SEQLEN_K_TILES := 256
+else
+$(error SEQLEN must be 1k or 32k (or set K_TILES directly))
+endif
+K_TILES ?= $(SEQLEN_K_TILES)
+# 1k iters are ~0.3ms each, need more warmup to reach the GPU boost clock
+ifeq ($(SEQLEN),1k)
+WARMUP ?= 20
+ITERS ?= 50
+else
 WARMUP ?= 3
 ITERS ?= 10
+endif
 RUN_CSV ?= log/best.csv
+
+# persistent occupancy-1 kernel with cross-tile QK peel: ~963 TFLOPS at
+ifeq ($(FAST),1)
+NVCCFLAGS += -DATTENTION_PERSISTENT=1 -DATTENTION_PERSISTENT_OVERLAP=1 -DATTENTION_PERSISTENT_OVERLAP_EARLY=1 -DATTENTION_PERSISTENT_OVERLAP_O_IN_V=1 -DATTENTION_PERSISTENT_OVERLAP_DEFER_STORE=1 -DATTENTION_PERSISTENT_OVERLAP_QK_PEEL=1 -DATTENTION_PEEL_PREARM=1 -DATTENTION_PEEL_DURING_DRAIN=1 -DATTENTION_PEEL_AFTER_SYNC=1 -diag-suppress 177
+FASTEST_BIN := $(BUILD_DIR)/attention_custom_kernel_fast
+endif
 
 TRACE_START ?= 56
 TRACE_ITERS ?= 8

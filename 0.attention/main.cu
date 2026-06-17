@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -93,6 +94,15 @@ static constexpr int kVBufferCount = kPipeCount;
 static constexpr int kSBufferCount = kPipeCount;
 static constexpr int kFixedBenchmarkRepeats = 256;
 static constexpr int kFixedBenchmarkKTiles = 256;
+#ifndef ATTENTION_FORCE_DYNAMIC_DISPATCH
+#define ATTENTION_FORCE_DYNAMIC_DISPATCH 0
+#endif
+#ifndef ATTENTION_SMALL_KTILES_DISPATCH
+#define ATTENTION_SMALL_KTILES_DISPATCH 1
+#endif
+#ifndef ATTENTION_O_CHECKSUM
+#define ATTENTION_O_CHECKSUM 0
+#endif
 #ifndef ATTENTION_EX2_EMU_FREQ
 #define ATTENTION_EX2_EMU_FREQ 10
 #endif
@@ -116,8 +126,10 @@ static constexpr double kFlopsPerMma =
 template <int kFixedKTiles>
 __device__ __forceinline__ int kv_tile_base_for_block(int block_idx,
                                                       int loop_k_tiles) {
-  if constexpr (kFixedKTiles == kFixedBenchmarkKTiles) {
-    return block_idx & ~(kFixedBenchmarkKTiles - 1);
+  if constexpr (kFixedKTiles > 0) {
+    static_assert((kFixedKTiles & (kFixedKTiles - 1)) == 0,
+                  "fixed k_tiles must be a power of two");
+    return block_idx & ~(kFixedKTiles - 1);
   } else {
     return (block_idx / loop_k_tiles) * loop_k_tiles;
   }
@@ -126,7 +138,7 @@ __device__ __forceinline__ int kv_tile_base_for_block(int block_idx,
 template <int kFixedKTiles>
 __device__ __forceinline__ int local_k_tile_for_iter(int iter,
                                                      int loop_k_tiles) {
-  if constexpr (kFixedKTiles == kFixedBenchmarkKTiles) {
+  if constexpr (kFixedKTiles > 0) {
     return iter;
   } else {
     return iter % loop_k_tiles;
@@ -476,6 +488,38 @@ double tflops_from_flops(double flops, double ms) {
   return ms > 0.0 ? flops / (ms * 1.0e-3) / 1.0e12 : 0.0;
 }
 
+using AttentionKernel = decltype(&qk_tma_mma_ld_kernel<0, 0>);
+
+AttentionKernel select_attention_kernel(int repeats, int k_tiles) {
+#if !ATTENTION_FORCE_DYNAMIC_DISPATCH
+  if (repeats == k_tiles) {
+    switch (k_tiles) {
+#if ATTENTION_SMALL_KTILES_DISPATCH
+      case 8:
+        return qk_tma_mma_ld_kernel<8, 8>;
+      case 16:
+        return qk_tma_mma_ld_kernel<16, 16>;
+      case 32:
+        return qk_tma_mma_ld_kernel<32, 32>;
+      case 64:
+        return qk_tma_mma_ld_kernel<64, 64>;
+      case 128:
+        return qk_tma_mma_ld_kernel<128, 128>;
+#endif
+      case kFixedBenchmarkKTiles:
+        return qk_tma_mma_ld_kernel<kFixedBenchmarkRepeats,
+                                    kFixedBenchmarkKTiles>;
+      default:
+        break;
+    }
+  }
+#else
+  (void)repeats;
+  (void)k_tiles;
+#endif
+  return qk_tma_mma_ld_kernel<0, 0>;
+}
+
 RunResult run_kernel(const Args& args,
                      const CUtensorMap& q_map,
                      const CUtensorMap& k_map,
@@ -491,21 +535,63 @@ RunResult run_kernel(const Args& args,
 #endif
                      ) {
   RunResult result{};
-  auto kernel = args.repeats == kFixedBenchmarkRepeats &&
-                        args.k_tiles == kFixedBenchmarkKTiles
-                    ? qk_tma_mma_ld_kernel<kFixedBenchmarkRepeats,
-                                            kFixedBenchmarkKTiles>
-                    : qk_tma_mma_ld_kernel<0, 0>;
+  auto kernel = select_attention_kernel(args.repeats, args.k_tiles);
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
   CUDA_CHECK(cudaOccupancyMaxActiveBlocksPerMultiprocessor(
       active_ctas_per_sm, kernel, kMainThreads, kDynamicSmemBytes));
 
-  for (int i = 0; i < args.warmup; ++i) {
-    kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
+#if ATTENTION_PERSISTENT
+  int sm_count = 0;
+  CUDA_CHECK(
+      cudaDeviceGetAttribute(&sm_count, cudaDevAttrMultiProcessorCount, 0));
+  int launch_grid = sm_count * (*active_ctas_per_sm);
+  if (launch_grid <= 0) launch_grid = sm_count;
+  if (launch_grid > args.blocks) launch_grid = args.blocks;
+#else
+  const int launch_grid = args.blocks;
+#endif
+
+#if ATTENTION_PEEL_HB
+  if (std::getenv("PEEL_HB") != nullptr) {
+    cudaStream_t ks, hs;
+    cudaStreamCreateWithFlags(&ks, cudaStreamNonBlocking);
+    cudaStreamCreateWithFlags(&hs, cudaStreamNonBlocking);
+    unsigned int zero[16] = {0};
+    CUDA_CHECK(cudaMemcpyToSymbol(g_peel_hb, zero, sizeof(zero)));
+    kernel<<<launch_grid, kMainThreads, kDynamicSmemBytes, ks>>>(
         q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
-        score_to_exp2_scale, output
+        score_to_exp2_scale, output, args.blocks
+#if ATTENTION_CLOCK_TRACE
+        ,
+        clock_trace, clock_trace_iters, args.clock_trace_start
+#endif
+        );
+    unsigned int hb[16];
+    for (int t = 0; t < 40; ++t) {
+      struct timespec ts {0, 100000000L};  // 100 ms
+      nanosleep(&ts, nullptr);
+      cudaMemcpyFromSymbolAsync(hb, g_peel_hb, sizeof(hb), 0,
+                                cudaMemcpyDeviceToHost, hs);
+      cudaStreamSynchronize(hs);
+      const bool done = (cudaStreamQuery(ks) == cudaSuccess);
+      std::fprintf(stderr,
+                   "PEELHB t=%d done=%d | peel0=%u peel1=%u qkrole0=%u qkrole1=%u "
+                   "pv0=%u pv1=%u fwd0=%u fwd1=%u\n",
+                   t, done ? 1 : 0, hb[0], hb[1], hb[8], hb[9], hb[6], hb[7],
+                   hb[12], hb[13]);
+      if (done) break;
+    }
+    result.status = "peel_hb_done";
+    return result;
+  }
+#endif
+
+  for (int i = 0; i < args.warmup; ++i) {
+    kernel<<<launch_grid, kMainThreads, kDynamicSmemBytes>>>(
+        q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
+        score_to_exp2_scale, output, args.blocks
 #if ATTENTION_CLOCK_TRACE
         ,
         clock_trace, clock_trace_iters, args.clock_trace_start
@@ -532,9 +618,9 @@ RunResult run_kernel(const Args& args,
   CUDA_CHECK(cudaEventCreate(&stop));
   CUDA_CHECK(cudaEventRecord(start));
   for (int i = 0; i < args.iters; ++i) {
-    kernel<<<args.blocks, kMainThreads, kDynamicSmemBytes>>>(
+    kernel<<<launch_grid, kMainThreads, kDynamicSmemBytes>>>(
         q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
-        score_to_exp2_scale, output
+        score_to_exp2_scale, output, args.blocks
 #if ATTENTION_CLOCK_TRACE
         ,
         clock_trace, clock_trace_iters, args.clock_trace_start
@@ -1871,12 +1957,13 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
 #endif
   encode_bf16_output_tma_map(&o_map, d_o, 1);
 
-  CUDA_CHECK(cudaFuncSetAttribute(qk_tma_mma_ld_kernel<0, 0>,
+  auto kernel = select_attention_kernel(args.k_tiles, args.k_tiles);
+  CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
-  qk_tma_mma_ld_kernel<0, 0><<<1, kMainThreads, kDynamicSmemBytes>>>(
+  kernel<<<1, kMainThreads, kDynamicSmemBytes>>>(
       q_map, k_map, v_map, o_map, args.k_tiles, args.k_tiles,
-      resolved_score_to_exp2_scale(args), d_o
+      resolved_score_to_exp2_scale(args), d_o, 1
 #if ATTENTION_CLOCK_TRACE
       ,
       nullptr, 0, 0
@@ -2096,6 +2183,21 @@ int run_benchmark(const Args& args_in) {
     write_benchmark_csv(args, active, result);
   }
 
+#if ATTENTION_O_CHECKSUM
+  if (d_o != nullptr && result.error == cudaSuccess) {
+    const size_t o_words = static_cast<size_t>(args.blocks) * kTileWords;
+    std::vector<uint32_t> h_o_all(o_words);
+    CUDA_CHECK(cudaMemcpy(h_o_all.data(), d_o, o_words * sizeof(uint32_t),
+                          cudaMemcpyDeviceToHost));
+    uint64_t o_hash = 1469598103934665603ull;  // FNV-1a 64-bit
+    for (size_t i = 0; i < o_words; ++i) {
+      o_hash = (o_hash ^ h_o_all[i]) * 1099511628211ull;
+    }
+    std::printf("O_CHECKSUM,blocks=%d,k_tiles=%d,%016llx\n", args.blocks,
+                args.k_tiles, static_cast<unsigned long long>(o_hash));
+    std::fflush(stdout);
+  }
+#endif
   CUDA_CHECK(cudaFree(d_q));
   CUDA_CHECK(cudaFree(d_k));
   CUDA_CHECK(cudaFree(d_v));
