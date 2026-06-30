@@ -5,6 +5,10 @@
 #define ATTENTION_EPILOGUE_CHUNK_COLS 16
 #endif
 
+#ifndef ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+#define ATTENTION_OUTPUT_TMA_SWIZZLE_128B 1
+#endif
+
 #ifndef ATTENTION_ROW_MAX_ONLY
 #define ATTENTION_ROW_MAX_ONLY 0
 #endif
@@ -1796,47 +1800,116 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const uint32_t row_taddr1 =
           o_taddr[1] + (static_cast<uint32_t>(consumer_warp * 32) << 16) +
           static_cast<uint32_t>(consumer_half * 64);
+      const int col_pair_base = consumer_half * (kTileN / 4);
+#if !ATTENTION_OUTPUT_TMA_SWIZZLE_128B
       uint32_t* row_dst =
           output_bf16_smem + static_cast<size_t>(row) * (kTileN / 2) +
-          consumer_half * (kTileN / 4);
+          col_pair_base;
+#endif
 #if ATTENTION_EPILOGUE_CHUNK_COLS == 16
 #pragma unroll
       for (int chunk = 0; chunk < 4; ++chunk) {
         const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 16);
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+        const int col_pair = col_pair_base + chunk * 8;
+#endif
         if (pipe1_local_count > 0) {
 #if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+          store_tmem_x16_pair_scale_norm_bf16_smem_sw128(
+              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+              output_bf16_smem, row, col_pair, pipe0_scale, pipe1_scale,
+              inv_sum);
+#else
           store_tmem_x16_pair_scale_norm_bf16_smem(
               row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
               row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
+#endif
+#else
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+          store_tmem_x16_pair_norm_bf16_smem_sw128(
+              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+              output_bf16_smem, row, col_pair, inv_sum);
 #else
           store_tmem_x16_pair_norm_bf16_smem(
               row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
               row_dst + chunk * 8, inv_sum);
 #endif
+#endif
         } else {
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+          store_tmem_x16_norm_bf16_smem_sw128(
+              row_taddr0 + chunk_offset, output_bf16_smem, row, col_pair,
+              inv_sum);
+#else
           store_tmem_x16_norm_bf16_smem(row_taddr0 + chunk_offset,
                                         row_dst + chunk * 8, inv_sum);
+#endif
         }
       }
 #elif ATTENTION_EPILOGUE_CHUNK_COLS == 32
       if (pipe1_local_count > 0) {
 #if ATTENTION_PIPE_SHIFT_EPILOGUE_SCALE
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+        store_tmem_x16_pair_scale_norm_bf16_smem_sw128(
+            row_taddr0, row_taddr1, output_bf16_smem, row, col_pair_base,
+            pipe0_scale, pipe1_scale, inv_sum);
+        store_tmem_x16_pair_scale_norm_bf16_smem_sw128(
+            row_taddr0 + 16u, row_taddr1 + 16u, output_bf16_smem, row,
+            col_pair_base + 8, pipe0_scale, pipe1_scale, inv_sum);
+        store_tmem_x16_pair_scale_norm_bf16_smem_sw128(
+            row_taddr0 + 32u, row_taddr1 + 32u, output_bf16_smem, row,
+            col_pair_base + 16, pipe0_scale, pipe1_scale, inv_sum);
+        store_tmem_x16_pair_scale_norm_bf16_smem_sw128(
+            row_taddr0 + 48u, row_taddr1 + 48u, output_bf16_smem, row,
+            col_pair_base + 24, pipe0_scale, pipe1_scale, inv_sum);
+#else
         store_tmem_x32_pair_scale_norm_bf16_smem(
             row_taddr0, row_taddr1, row_dst, pipe0_scale, pipe1_scale,
             inv_sum);
         store_tmem_x32_pair_scale_norm_bf16_smem(
             row_taddr0 + 32u, row_taddr1 + 32u, row_dst + 16,
             pipe0_scale, pipe1_scale, inv_sum);
+#endif
+#else
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+        store_tmem_x16_pair_norm_bf16_smem_sw128(
+            row_taddr0, row_taddr1, output_bf16_smem, row, col_pair_base,
+            inv_sum);
+        store_tmem_x16_pair_norm_bf16_smem_sw128(
+            row_taddr0 + 16u, row_taddr1 + 16u, output_bf16_smem, row,
+            col_pair_base + 8, inv_sum);
+        store_tmem_x16_pair_norm_bf16_smem_sw128(
+            row_taddr0 + 32u, row_taddr1 + 32u, output_bf16_smem, row,
+            col_pair_base + 16, inv_sum);
+        store_tmem_x16_pair_norm_bf16_smem_sw128(
+            row_taddr0 + 48u, row_taddr1 + 48u, output_bf16_smem, row,
+            col_pair_base + 24, inv_sum);
 #else
         store_tmem_x32_pair_norm_bf16_smem(row_taddr0, row_taddr1, row_dst,
                                            inv_sum);
         store_tmem_x32_pair_norm_bf16_smem(row_taddr0 + 32u, row_taddr1 + 32u,
                                            row_dst + 16, inv_sum);
 #endif
+#endif
       } else {
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+        store_tmem_x16_norm_bf16_smem_sw128(
+            row_taddr0, output_bf16_smem, row, col_pair_base, inv_sum);
+        store_tmem_x16_norm_bf16_smem_sw128(
+            row_taddr0 + 16u, output_bf16_smem, row, col_pair_base + 8,
+            inv_sum);
+        store_tmem_x16_norm_bf16_smem_sw128(
+            row_taddr0 + 32u, output_bf16_smem, row, col_pair_base + 16,
+            inv_sum);
+        store_tmem_x16_norm_bf16_smem_sw128(
+            row_taddr0 + 48u, output_bf16_smem, row, col_pair_base + 24,
+            inv_sum);
+#else
         store_tmem_x32_norm_bf16_smem(row_taddr0, row_dst, inv_sum);
         store_tmem_x32_norm_bf16_smem(row_taddr0 + 32u, row_dst + 16,
                                       inv_sum);
+#endif
       }
 #else
 #error "ATTENTION_EPILOGUE_CHUNK_COLS must be 16 or 32"
@@ -1862,8 +1935,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
 #endif
     if (lane0 && warp_id == 0) {
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+      tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0, 0,
+                   static_cast<int>(blockIdx.x));
+#else
       tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0,
                    static_cast<int>(blockIdx.x), 0);
+#endif
       tma_store_commit_group();
     }
   }

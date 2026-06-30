@@ -1374,6 +1374,15 @@ __device__ __forceinline__ uint32_t pack_bf16_pair_device(float lo, float hi) {
          (static_cast<uint32_t>(float_to_bf16_bits_device(hi)) << 16);
 }
 
+__host__ __device__ __forceinline__ int output_tma_sw128_bf16_word_offset(
+    int row,
+    int col_pair) {
+  const int half = col_pair >> 5;
+  const int in_half = col_pair & 31;
+  return half * (kTileM * kTileN / 4) + row * (kTileN / 4) +
+         (in_half ^ ((row & 7) << 2));
+}
+
 __device__ __noinline__ void store_tmem_x32_pair_norm_bf16_smem(
     uint32_t src0_taddr,
     uint32_t src1_taddr,
@@ -1534,6 +1543,121 @@ __device__ __noinline__ void store_tmem_x16_norm_bf16_smem(
 #else
   (void)src_taddr;
   (void)dst_bf16_smem;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x16_pair_norm_bf16_smem_sw128(
+    uint32_t src0_taddr,
+    uint32_t src1_taddr,
+    uint32_t* dst_bf16_smem,
+    int row,
+    int col_pair,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r0[16];
+  uint32_t r1[16];
+  TCGEN05_LD_X16(src0_taddr, r0);
+  TCGEN05_LD_X16(src1_taddr, r1);
+  tcgen05_wait_ld();
+  uint32_t p[8];
+#pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    const float lo =
+        (__uint_as_float(r0[i]) + __uint_as_float(r1[i])) * inv_sum;
+    const float hi =
+        (__uint_as_float(r0[i + 1]) + __uint_as_float(r1[i + 1])) * inv_sum;
+    p[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+  store_packed4_s_cpp(dst_bf16_smem,
+                      output_tma_sw128_bf16_word_offset(row, col_pair),
+                      p[0], p[1], p[2], p[3]);
+  store_packed4_s_cpp(dst_bf16_smem,
+                      output_tma_sw128_bf16_word_offset(row, col_pair + 4),
+                      p[4], p[5], p[6], p[7]);
+#else
+  (void)src0_taddr;
+  (void)src1_taddr;
+  (void)dst_bf16_smem;
+  (void)row;
+  (void)col_pair;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x16_pair_scale_norm_bf16_smem_sw128(
+    uint32_t src0_taddr,
+    uint32_t src1_taddr,
+    uint32_t* dst_bf16_smem,
+    int row,
+    int col_pair,
+    float scale0,
+    float scale1,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r0[16];
+  uint32_t r1[16];
+  TCGEN05_LD_X16(src0_taddr, r0);
+  TCGEN05_LD_X16(src1_taddr, r1);
+  tcgen05_wait_ld();
+  uint32_t p[8];
+#pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    const float lo =
+        (__uint_as_float(r0[i]) * scale0 + __uint_as_float(r1[i]) * scale1) *
+        inv_sum;
+    const float hi =
+        (__uint_as_float(r0[i + 1]) * scale0 +
+         __uint_as_float(r1[i + 1]) * scale1) *
+        inv_sum;
+    p[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+  store_packed4_s_cpp(dst_bf16_smem,
+                      output_tma_sw128_bf16_word_offset(row, col_pair),
+                      p[0], p[1], p[2], p[3]);
+  store_packed4_s_cpp(dst_bf16_smem,
+                      output_tma_sw128_bf16_word_offset(row, col_pair + 4),
+                      p[4], p[5], p[6], p[7]);
+#else
+  (void)src0_taddr;
+  (void)src1_taddr;
+  (void)dst_bf16_smem;
+  (void)row;
+  (void)col_pair;
+  (void)scale0;
+  (void)scale1;
+  (void)inv_sum;
+#endif
+}
+
+__device__ __noinline__ void store_tmem_x16_norm_bf16_smem_sw128(
+    uint32_t src_taddr,
+    uint32_t* dst_bf16_smem,
+    int row,
+    int col_pair,
+    float inv_sum) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint32_t r[16];
+  TCGEN05_LD_X16(src_taddr, r);
+  tcgen05_wait_ld();
+  uint32_t p[8];
+#pragma unroll
+  for (int i = 0; i < 16; i += 2) {
+    const float lo = __uint_as_float(r[i]) * inv_sum;
+    const float hi = __uint_as_float(r[i + 1]) * inv_sum;
+    p[i >> 1] = pack_bf16_pair_device(lo, hi);
+  }
+  store_packed4_s_cpp(dst_bf16_smem,
+                      output_tma_sw128_bf16_word_offset(row, col_pair),
+                      p[0], p[1], p[2], p[3]);
+  store_packed4_s_cpp(dst_bf16_smem,
+                      output_tma_sw128_bf16_word_offset(row, col_pair + 4),
+                      p[4], p[5], p[6], p[7]);
+#else
+  (void)src_taddr;
+  (void)dst_bf16_smem;
+  (void)row;
+  (void)col_pair;
   (void)inv_sum;
 #endif
 }
