@@ -52,6 +52,7 @@ venv/
 /build_*/
 /blackwell_pipeline_overlap_bench
 /mma_four_warpgroups_consume_bench
+/n.mma/cublas_gemm_bench
 /qk_two_producer_consume_pipeline
 /qk_two_producer_consume_pipeline.default
 /qk_two_producer_consume_pipeline.r128
