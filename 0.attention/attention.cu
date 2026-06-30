@@ -470,6 +470,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
 #if ATTENTION_PEEL_HB
     bool hb_peeled,
 #endif
+    unsigned int qk_done_carry,
     int lane) {
   const int role_warp_id = 2 + pipe;
   const bool lane0 = lane == 0;
@@ -676,7 +677,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
 #if ATTENTION_PEEL_HB
       if (hb_peeled && local == 0) PEEL_HB_SET(6 + pipe, 1u);
 #endif
-      mbarrier_wait(&qk_done[pipe], phase);
+      mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
 #if ATTENTION_PEEL_HB
       if (hb_peeled && local == 0) PEEL_HB_SET(6 + pipe, 2u);
 #endif
@@ -1309,7 +1310,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
   }
   if (local > 0) {
     const uint32_t tail_phase = static_cast<uint32_t>((local - 1) & 1);
-    mbarrier_wait(&qk_done[pipe], tail_phase);
+    mbarrier_wait(&qk_done[pipe], tail_phase ^ q_ready_phase);
 #if ATTENTION_PERSISTENT_OVERLAP_EARLY
     if (lane0) mbarrier_arrive(qk_all_done_bar);
 #endif
@@ -1525,6 +1526,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #if ATTENTION_PEEL_SOFTMAX
     bool softmax_peeled,
 #endif
+    unsigned int qk_done_carry,
     int lane) {
   const int row = consumer_warp * 32 + lane;
   float row_sum_reg = 0.0f;
@@ -1560,7 +1562,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
   } else
 #endif
   if (iter < loop_repeats) {
-    mbarrier_wait(&qk_done[pipe], 0);
+    mbarrier_wait(&qk_done[pipe], qk_done_carry);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_COMPUTE_MAX
@@ -1606,7 +1608,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
        prefix_check < ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS; ++prefix_check) {
     if (iter < loop_repeats) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
-      mbarrier_wait(&qk_done[pipe], phase);
+      mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
       const uint32_t row_taddr =
           p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
       float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
@@ -1650,7 +1652,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #endif
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
-    mbarrier_wait(&qk_done[pipe], phase);
+    mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
@@ -1710,7 +1712,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #else
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
-    mbarrier_wait(&qk_done[pipe], phase);
+    mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_ROW_MAX_ONLY
@@ -1973,6 +1975,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ unsigned long long k_tma_start_shared[kPipeCount * 2];
   __shared__ unsigned long long tail_total_start_shared;
   __shared__ unsigned long long tma_store_start_shared;
+  // Timestamp right after the async O store is ISSUED (commit_group returns).
+  // Used as the O-store box end so it reflects the fire-and-forget issue and is
+  // independent of the store-tail softmax peel that follows it on the consumer
+  // warps (the real DMA is async / DEFER-waited in the next tile).
+  __shared__ unsigned long long tma_store_issued_shared;
 #else
   ClockTraceRecord* clock_trace = nullptr;
   const int clock_trace_iters = 0;
@@ -2041,11 +2048,28 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)qk_peeled;
 
 #if ATTENTION_PERSISTENT_OVERLAP
+  // Continuous inter-q-tile pipeline (14_CONTINUOUS_DESIGN.md): ALL pipeline
+  // barriers are init-once (first tile only) and cycle continuously across tile
+  // boundaries -- no per-tile re-init. The phase is carried by register
+  // (phase_carry below) for the odd-per-tile barriers, exactly as q_ready
+  // already does via q_ready_phase. This replaces the old per-tile re-init +
+  // peel-bridge scaffolding (qk_peel_done / AFTER_SYNC peel / store-tail
+  // softmax / body-start conversion+replay), which existed only because the old
+  // boundary wiped these barriers.
   if (tile == static_cast<int>(blockIdx.x) && threadIdx.x == 0) {
     mbarrier_init(&q_ready, 1);
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+    mbarrier_init(&qk_all_done, 2);
+#endif
 #pragma unroll
     for (int p = 0; p < kPipeCount; ++p) {
       mbarrier_init(&k_ready[p], 1);
+      mbarrier_init(&qk_done[p], 1);
+      mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
+      mbarrier_init(&s_h1_done[p], kConsumerWarpsPerPipe);
+      mbarrier_init(&v_ready[p], 1);
+      mbarrier_init(&v_h1_ready[p], 1);
+      mbarrier_init(&pv_done[p], 1);
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PEEL_NO_INITONCE
       mbarrier_init(&qk_peel_done[p], 1);
 #endif
@@ -2057,7 +2081,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if !ATTENTION_PERSISTENT_OVERLAP
     mbarrier_init(&q_ready, 1);
 #endif
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT_OVERLAP_EARLY && !ATTENTION_PERSISTENT_OVERLAP
     mbarrier_init(&qk_all_done, 2);
 #endif
 #if ATTENTION_PIPE1_TMA_HEAD_MARKER
@@ -2067,13 +2091,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     for (int p = 0; p < kPipeCount; ++p) {
 #if !ATTENTION_PERSISTENT_OVERLAP
       mbarrier_init(&k_ready[p], 1);
-#endif
       mbarrier_init(&qk_done[p], 1);
       mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
       mbarrier_init(&s_h1_done[p], kConsumerWarpsPerPipe);
       mbarrier_init(&v_ready[p], 1);
       mbarrier_init(&v_h1_ready[p], 1);
       mbarrier_init(&pv_done[p], 1);
+#endif
 #if ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_K_ISSUE || \
       ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_V_ISSUE || \
       ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_KV_ISSUE || \
@@ -2213,6 +2237,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const unsigned int q_ready_phase = 0u;
   const bool k_prefetched = false;
 #endif
+  // Continuous pipeline phase carry for odd-per-tile barriers (qk_done,
+  // qk_all_done): == tile_local_idx&1, the offset vs the role's phase-0-start
+  // assumption now that barriers are init-once (no per-tile re-init). The
+  // even-per-tile barriers (p_done/s_h1_done/v_ready/v_h1_ready/pv_done/k_ready)
+  // return to phase 0 each tile for power-of-2 R>=8 (n_p=R/2 even), so they need
+  // no carry -- just the re-init removal. See 14_CONTINUOUS_DESIGN.md §E.
+  const unsigned int phase_carry = q_ready_phase;
 
   if (warp_id == 0
 #if ATTENTION_PERSISTENT_OVERLAP && ATTENTION_PERSISTENT_OVERLAP_PREFETCH
@@ -2245,6 +2276,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_PEEL_SOFTMAX
         qk_peeled,
 #endif
+        phase_carry,
         lane);
   }
 
@@ -2262,6 +2294,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_PEEL_HB
         qk_peeled,
 #endif
+        phase_carry,
         lane);
   }
 
@@ -2308,7 +2341,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (warp_id == 2 || warp_id == 3) {
       const int next_tile = tile + static_cast<int>(gridDim.x);
       if (next_tile < total_tiles) {
-        mbarrier_wait(&qk_all_done, 0);
+        mbarrier_wait(&qk_all_done, phase_carry);
         if (warp_id == 2) {
           mbarrier_expect_tx(&q_ready, kTileBytes);
           if (lane0) {
@@ -2717,6 +2750,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       tma_store_4d(&o_map, smem_ptr_u32(output_bf16_smem), 0, 0,
                    tile, 0);
       tma_store_commit_group();
+#if ATTENTION_CLOCK_TRACE
+      if (trace_cta) tma_store_issued_shared = clock64();
+#endif
     }
 #if ATTENTION_PEEL_SOFTMAX
     // B3 store-tail softmax peel. The O TMA store above is async (DEFER_STORE
@@ -2849,9 +2885,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
   if (output != nullptr && trace_cta && threadIdx.x == 0) {
     const unsigned long long store_end = clock64();
+    // O-store box ends at the async ISSUE (commit_group), NOT at store_end:
+    // store_end is sampled after the store-tail peel + __syncthreads, which would
+    // make the box absorb the peel time even though the DMA is async/deferred.
     write_clock_trace_record(clock_trace_eff, trace_extra_base + 9,
                              kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
-                             tma_store_start_shared, store_end,
+                             tma_store_start_shared, tma_store_issued_shared,
                              clock_trace_base);
     write_clock_trace_record(clock_trace_eff, trace_extra_base + 10,
                              kClockTraceTailTotal, loop_repeats, -1, 0, -1, -1,
