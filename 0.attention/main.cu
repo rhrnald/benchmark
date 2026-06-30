@@ -270,6 +270,9 @@ enum ClockTraceStage {
   kClockTracePeelKWait = 24,
   kClockTracePeelIssue = 25,
   kClockTracePeelKTma = 26,
+  // B3 (softmax-peel): tile (t+1)'s iter0/1 consumer softmax run inside tile t's
+  // store-tail window, one box per consumer warp (recorded on tile t's page).
+  kClockTracePeelSoftmax = 27,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -837,6 +840,8 @@ const char* clock_trace_stage_name(int stage) {
       return "peel_issue";
     case kClockTracePeelKTma:
       return "peel_ktma";
+    case kClockTracePeelSoftmax:
+      return "peel_softmax";
     default:
       return "unknown";
   }

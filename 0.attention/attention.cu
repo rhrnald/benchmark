@@ -140,6 +140,29 @@ __device__ unsigned int g_peel_hb[16];
 #define ATTENTION_PEEL_DD_SERIAL_COMMIT 0
 #endif
 
+// B3 (softmax-peel): in tile t's store-tail (after the drain-pack, while the O
+// TMA store is async in flight) the consumer warps run tile (t+1)'s iter0/1
+// softmax on the QK that was peeled during tile t's drain (commit ->
+// qk_peel_done). This packs s_smem and reads p_taddr early, the precondition for
+// B1's iter2/3 QK-peel. No new tcgen05.commit is issued by the consumer, so the
+// deadlock risk is barrier phase accounting only. The p_done / s_h1_done arrives
+// are NOT issued in the store-tail (they would be wiped by tile (t+1)'s
+// body-start re-init); they are replayed at tile (t+1)'s body-start post-reinit
+// (search "B3 body-start replay"), mirroring the qk_peel_done -> qk_done
+// conversion. The peeled iter0/1 row_max/row_sum are carried into tile (t+1)'s
+// consumer role via row_sum_partial (sum, shared) + the next tile's
+// row_max_scratch (max, gmem -- no extra static smem), and that role then skips
+// its own first iteration.
+#ifndef ATTENTION_PEEL_SOFTMAX
+#define ATTENTION_PEEL_SOFTMAX 0
+#endif
+#if ATTENTION_PEEL_SOFTMAX &&                                                  \
+    !(ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PEEL_DURING_DRAIN &&   \
+      ATTENTION_PEEL_AFTER_SYNC && ATTENTION_PEEL_PREARM)
+#error                                                                         \
+    "ATTENTION_PEEL_SOFTMAX requires QK_PEEL + PEEL_DURING_DRAIN + PEEL_AFTER_SYNC + PEEL_PREARM"
+#endif
+
 #ifndef ATTENTION_ROW_MAX_ONLY
 #define ATTENTION_ROW_MAX_ONLY 0
 #endif
@@ -158,6 +181,15 @@ __device__ unsigned int g_peel_hb[16];
 
 #ifndef ATTENTION_FIRST_ITER_COMPUTE_MAX
 #define ATTENTION_FIRST_ITER_COMPUTE_MAX ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
+#endif
+
+// B3 mirrors the consumer first-iter COMPUTE_MAX + APPLY_SHIFT path verbatim, so
+// it needs all three on (the FAST default). Checked here, after they are defined.
+#if ATTENTION_PEEL_SOFTMAX &&                                                  \
+    !(ATTENTION_FIRST_ITER_ROW_MAX_SHIFT &&                                    \
+      ATTENTION_FIRST_ITER_APPLY_SHIFT && ATTENTION_FIRST_ITER_COMPUTE_MAX)
+#error                                                                         \
+    "ATTENTION_PEEL_SOFTMAX requires FIRST_ITER_ROW_MAX_SHIFT + APPLY_SHIFT + COMPUTE_MAX"
 #endif
 
 #ifndef ATTENTION_ROW_SUM_RARE_UPDATE
@@ -1490,6 +1522,9 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     int clock_trace_iters,
     int clock_trace_start,
     unsigned long long clock_trace_base,
+#if ATTENTION_PEEL_SOFTMAX
+    bool softmax_peeled,
+#endif
     int lane) {
   const int row = consumer_warp * 32 + lane;
   float row_sum_reg = 0.0f;
@@ -1506,6 +1541,23 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #if ATTENTION_ROW_SUM_RARE_UPDATE
   const float row_sum_update_limit =
       static_cast<float>(ATTENTION_ROW_SUM_UPDATE_LIMIT);
+#endif
+#if ATTENTION_PEEL_SOFTMAX
+  // B3: iter0/1 softmax (ld -> row_max -> pack+store -> p_done / s_h1_done) was
+  // already run in the PREVIOUS tile's store-tail. Pick up its carried state and
+  // resume at iter2 (local=1). The phantom qk_done arrive at the tile body start
+  // keeps qk_done's phase clock aligned, so the phase math below is unchanged.
+  if (softmax_peeled) {
+    // Carry from the previous tile's store-tail peel: row_max via this tile's
+    // own row_max_scratch (gmem, written there by the prior tile), row_sum via
+    // row_sum_partial. row_max_scratch is read here before this role overwrites
+    // it at the end, and the gmem load latency is hidden behind the qk_done wait
+    // in the prefix/steady loop below.
+    row_max_reg = row_max_scratch[pipe * kTileM + row];
+    if (do_row_sum) row_sum_reg = row_sum_partial[pipe][row];
+    iter = pipe + kActivePipeStride;
+    local = 1;
+  } else
 #endif
   if (iter < loop_repeats) {
     mbarrier_wait(&qk_done[pipe], 0);
@@ -2066,6 +2118,28 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     PEEL_HB_SET(13, 3u);
   }
 #endif
+#if ATTENTION_PEEL_SOFTMAX
+  // B3 body-start replay. Tile t's store-tail already ran THIS tile's iter0/1
+  // softmax (ld p_taddr -> pack s_smem), but deferred the p_done / s_h1_done
+  // arrives because those barriers are re-initialized just above (every tile,
+  // thread 0), which would have wiped a store-tail arrive. Replay them here,
+  // post-reinit, so the producer's first steady iter (waits p_done[pipe] and
+  // s_h1_done[pipe] phase 0) is released. The consumer (softmax_peeled) skips
+  // iter0/1 and never arrives them in its body, so this replay is the only
+  // source. Each pipe's kConsumerWarpsPerPipe consumer warps arrive once (lane0)
+  // -> the barrier count (kConsumerWarpsPerPipe) is met -> phase 0 completes,
+  // exactly as the in-body iter0/1 softmax would have. s_smem (packed in the
+  // store-tail) is already visible after the __syncthreads above. This mirrors
+  // the qk_peel_done -> qk_done conversion right before it.
+  if (qk_peeled && warp_id >= kConsumerBaseWarp &&
+      warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe) {
+    const int sm_pipe = (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
+    if (lane0) {
+      mbarrier_arrive(&p_done[sm_pipe]);
+      mbarrier_arrive(&s_h1_done[sm_pipe]);
+    }
+  }
+#endif
 #if ATTENTION_CLOCK_TRACE
 #if ATTENTION_CLOCK_TRACE_2TILE
   const int ct_tl_idx =
@@ -2167,7 +2241,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
         score_to_exp2_scale,
         output != nullptr, clock_trace_eff, clock_trace_iters, clock_trace_start,
-        clock_trace_base, lane);
+        clock_trace_base,
+#if ATTENTION_PEEL_SOFTMAX
+        qk_peeled,
+#endif
+        lane);
   }
 
   if (warp_id == 2 || warp_id == 3) {
@@ -2640,6 +2718,81 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                    tile, 0);
       tma_store_commit_group();
     }
+#if ATTENTION_PEEL_SOFTMAX
+    // B3 store-tail softmax peel. The O TMA store above is async (DEFER_STORE
+    // also defers its wait to the next tile), so this window is tensor-core /
+    // consumer idle. The 8 consumer warps run tile (t+1)'s iter0/1 softmax on
+    // the QK peeled during this tile's drain (AFTER_SYNC peel -> qk_peel_done).
+    // This mirrors the consumer first-iter block (attention_consumer_pipe_role,
+    // FIRST_ITER_COMPUTE_MAX + APPLY_SHIFT path): two row_max loads, then two
+    // pack+store+shift halves that arrive p_done (h1) and free p_taddr[pipe]
+    // early. row_max/row_sum are carried forward; tile (t+1)'s consumer skips
+    // its first iter. No new tcgen05.commit here -> phase-accounting risk only.
+    if (epilogue_warp && loop_repeats >= kActivePipeStride) {
+      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
+      if (peel_next_tile < total_tiles) {
+        const int sm_pipe =
+            (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
+        const int sm_warp =
+            (warp_id - kConsumerBaseWarp) - sm_pipe * kConsumerWarpsPerPipe;
+        const int sm_row = sm_warp * 32 + lane;
+#if ATTENTION_CLOCK_TRACE_2TILE
+        const bool sm_trace = trace_cta && lane0;
+        const unsigned long long sm_t0 = sm_trace ? clock64() : 0ull;
+#endif
+        // Wait for the peeled QK MMA result in p_taddr[sm_pipe] (commit ->
+        // qk_peel_done[sm_pipe], phase 0). The body-start conversion still
+        // re-arms qk_peel_done after the next __syncthreads, so the phase is
+        // consistent across tiles (see lines re: PREARM re-init).
+        mbarrier_wait(&qk_peel_done[sm_pipe], 0u);
+        const uint32_t sm_row_taddr =
+            p_taddr[sm_pipe] + (static_cast<uint32_t>(sm_warp * 32) << 16);
+        float sm_row_max = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+            sm_row_taddr, score_to_exp2_scale);
+        sm_row_max =
+            fmaxf(sm_row_max, tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+                                  sm_row_taddr + 64u, score_to_exp2_scale));
+        // Do the ld+pack work, but DO NOT arrive p_done / s_h1_done here. Those
+        // barriers are re-initialized at tile (t+1)'s body-start (every tile,
+        // thread 0), which would wipe any arrive issued in this store-tail and
+        // hang tile (t+1)'s producer (it waits p_done/s_h1_done phase 0). Instead
+        // the arrives are replayed post-reinit at tile (t+1)'s body-start (search
+        // ATTENTION_PEEL_SOFTMAX body-start replay) -- mirroring how qk_peel_done
+        // is converted into a qk_done arrive there. The data is already safe:
+        // p_taddr is fully read (both halves below) and s_smem is fully packed
+        // here, and the body-start __syncthreads makes the s_smem writes visible
+        // to the producer before it consumes them. Both halves pass arrive=false.
+        const float sm_sum0 =
+            tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+                sm_row_taddr, s_smem[sm_pipe], sm_warp, 0, &p_done[sm_pipe],
+                false, score_to_exp2_scale, sm_row_max, nullptr, 0, 0, 0ull,
+                sm_pipe, sm_pipe);
+        const float sm_sum1 =
+            tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
+                sm_row_taddr + 64u, s_smem[sm_pipe], sm_warp, 1,
+                &p_done[sm_pipe], false, score_to_exp2_scale, sm_row_max,
+                nullptr, 0, 0, 0ull, sm_pipe, sm_pipe);
+        // Carry to tile (t+1): row_max into ITS row_max_scratch (gmem, same
+        // thread reads it back next iteration -> no fence needed), row_sum into
+        // row_sum_partial (shared, free here since the drain-pack already read
+        // tile t's). row_max_scratch = output base + tile*kTileWords, so the
+        // next tile's scratch is +gridDim.x*kTileWords.
+        float* const sm_next_scratch =
+            row_max_scratch + static_cast<size_t>(gridDim.x) * kTileWords;
+        sm_next_scratch[sm_pipe * kTileM + sm_row] = sm_row_max;
+        row_sum_partial[sm_pipe][sm_row] = sm_sum0 + sm_sum1;
+#if ATTENTION_CLOCK_TRACE_2TILE
+        if (sm_trace) {
+          write_clock_trace_record(
+              clock_trace_eff,
+              trace_extra_base + 21 + (warp_id - kConsumerBaseWarp),
+              kClockTracePeelSoftmax, sm_pipe, sm_pipe, warp_id, sm_warp, -1,
+              sm_t0, clock64(), clock_trace_base);
+        }
+#endif
+      }
+    }
+#endif
   }
 
   if (threadIdx.x == 0) {
