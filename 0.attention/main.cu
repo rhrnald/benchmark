@@ -55,6 +55,10 @@
 #define ATTENTION_SPLIT_V_TMA 1
 #endif
 
+#ifndef ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+#define ATTENTION_OUTPUT_TMA_SWIZZLE_128B 1
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                         \
     cudaError_t err__ = (stmt);                                                \
@@ -446,6 +450,28 @@ void encode_contiguous_sw128_k16_half_tma_map(CUtensorMap* map, void* base,
 }
 
 void encode_bf16_output_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
+#if ATTENTION_OUTPUT_TMA_SWIZZLE_128B
+  const cuuint64_t global_dim[4] = {kTileN / 2, kTileM, 2, tiles};
+  const cuuint64_t global_stride[3] = {
+      kTileN * sizeof(uint16_t),
+      (kTileN / 2) * sizeof(uint16_t),
+      static_cast<cuuint64_t>(kTileN) * kTileM * sizeof(uint16_t)};
+  const cuuint32_t box_dim[4] = {kTileN / 2, kTileM, 2, 1};
+  const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
+  driver_check(cuTensorMapEncodeTiled(map,
+                                      CU_TENSOR_MAP_DATA_TYPE_BFLOAT16,
+                                      4,
+                                      base,
+                                      global_dim,
+                                      global_stride,
+                                      box_dim,
+                                      elem_stride,
+                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_128B,
+                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(output_bf16_sw128_single)");
+#else
   const cuuint64_t global_dim[4] = {kTileN, kTileM, tiles, 1};
   const cuuint64_t global_stride[3] = {
       kTileN * sizeof(uint16_t),
@@ -466,6 +492,7 @@ void encode_bf16_output_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
                                       CU_TENSOR_MAP_L2_PROMOTION_NONE,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(output_bf16)");
+#endif
 }
 
 double tbps_from_bytes(double bytes, double ms) {

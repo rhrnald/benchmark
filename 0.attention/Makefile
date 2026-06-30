@@ -11,6 +11,7 @@ BUILD_DIR ?= ../build/0.attention
 FASTEST_BIN ?= $(BUILD_DIR)/attention_custom_kernel
 TRACE_BIN ?= $(BUILD_DIR)/attention_custom_kernel_trace
 VALIDATION_BIN ?= $(BUILD_DIR)/attention_validation
+EPILOGUE_MICROBENCH_BIN ?= $(BUILD_DIR)/epilogue_store_conflict_microbench
 
 BLOCKS ?= 4096
 K_TILES ?= 256
@@ -33,7 +34,7 @@ VALIDATE_CSV ?= /tmp/attention_main_validate_rank1_k4.csv
 
 .DEFAULT_GOAL := build
 
-.PHONY: build run plot validation
+.PHONY: build run plot validation epilogue_microbench
 
 build: $(FASTEST_BIN)
 
@@ -48,6 +49,11 @@ $(TRACE_BIN): $(SRC) $(DEPS) | $(BUILD_DIR)
 
 $(VALIDATION_BIN): $(SRC) $(DEPS) | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) $(SRC) -o $@ -lcuda
+
+$(EPILOGUE_MICROBENCH_BIN): epilogue_store_conflict_microbench.cu | $(BUILD_DIR)
+	$(NVCC) $(NVCCFLAGS) $< -o $@ -lcuda
+
+epilogue_microbench: $(EPILOGUE_MICROBENCH_BIN)
 
 run: $(FASTEST_BIN)
 	$(PYTHON) run.py benchmark --binary $(FASTEST_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(WARMUP) --iters $(ITERS) --csv $(RUN_CSV)
