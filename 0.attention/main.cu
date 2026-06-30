@@ -271,8 +271,11 @@ enum ClockTraceStage {
   kClockTracePeelIssue = 25,
   kClockTracePeelKTma = 26,
   // B3 (softmax-peel): tile (t+1)'s iter0/1 consumer softmax run inside tile t's
-  // store-tail window, one box per consumer warp (recorded on tile t's page).
+  // store-tail window. Split per half so the SVG renders ld -> softmax -> ld ->
+  // softmax (like the body first-iter): the tmem read (PeelSoftmaxLd) and the
+  // exp2+pack+store (PeelSoftmax), each tagged with the `half` field.
   kClockTracePeelSoftmax = 27,
+  kClockTracePeelSoftmaxLd = 28,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -286,7 +289,11 @@ static constexpr int kClockTracePvMmaIssueSlot = 45;
 static constexpr int kClockTraceKTmaIssueSlot = 46;
 static constexpr int kClockTraceVTmaIssueSlot = 47;
 static constexpr int kClockTracePackDetailBase = 52;
-static constexpr int kClockTraceExtraSlots = 32;
+// Extra (non-per-iter) region. Slots 0..31 hold the tail/drain/store/peel-QK
+// marks; slots 32..63 hold the B3 store-tail softmax per-half detail
+// (8 consumer warps x {ld h0, sm h0, ld h1, sm h1} = 32 records).
+static constexpr int kClockTraceExtraSlots = 64;
+static constexpr int kClockTracePeelSoftmaxDetailBase = 32;
 
 #include "ptx_wrappers.cuh"
 #include "attention.cu"
@@ -842,6 +849,8 @@ const char* clock_trace_stage_name(int stage) {
       return "peel_ktma";
     case kClockTracePeelSoftmax:
       return "peel_softmax";
+    case kClockTracePeelSoftmaxLd:
+      return "peel_sm_ld";
     default:
       return "unknown";
   }

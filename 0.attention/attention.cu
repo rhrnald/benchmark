@@ -2738,7 +2738,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const int sm_row = sm_warp * 32 + lane;
 #if ATTENTION_CLOCK_TRACE_2TILE
         const bool sm_trace = trace_cta && lane0;
-        const unsigned long long sm_t0 = sm_trace ? clock64() : 0ull;
 #endif
         // Wait for the peeled QK MMA result in p_taddr[sm_pipe] (commit ->
         // qk_peel_done[sm_pipe], phase 0). The body-start conversion still
@@ -2747,31 +2746,77 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         mbarrier_wait(&qk_peel_done[sm_pipe], 0u);
         const uint32_t sm_row_taddr =
             p_taddr[sm_pipe] + (static_cast<uint32_t>(sm_warp * 32) << 16);
+        // row max over both halves (untraced, like the body's COMPUTE_MAX --
+        // the two halves of one row share a single max, so both reads must
+        // precede either pack).
         float sm_row_max = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
             sm_row_taddr, score_to_exp2_scale);
         sm_row_max =
             fmaxf(sm_row_max, tcgen05_ld_x64_wait_row_max_scaled_nvcc(
                                   sm_row_taddr + 64u, score_to_exp2_scale));
-        // Do the ld+pack work, but DO NOT arrive p_done / s_h1_done here. Those
-        // barriers are re-initialized at tile (t+1)'s body-start (every tile,
-        // thread 0), which would wipe any arrive issued in this store-tail and
-        // hang tile (t+1)'s producer (it waits p_done/s_h1_done phase 0). Instead
-        // the arrives are replayed post-reinit at tile (t+1)'s body-start (search
-        // ATTENTION_PEEL_SOFTMAX body-start replay) -- mirroring how qk_peel_done
-        // is converted into a qk_done arrive there. The data is already safe:
-        // p_taddr is fully read (both halves below) and s_smem is fully packed
-        // here, and the body-start __syncthreads makes the s_smem writes visible
-        // to the producer before it consumes them. Both halves pass arrive=false.
-        const float sm_sum0 =
-            tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
-                sm_row_taddr, s_smem[sm_pipe], sm_warp, 0, &p_done[sm_pipe],
-                false, score_to_exp2_scale, sm_row_max, nullptr, 0, 0, 0ull,
-                sm_pipe, sm_pipe);
-        const float sm_sum1 =
-            tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
-                sm_row_taddr + 64u, s_smem[sm_pipe], sm_warp, 1,
-                &p_done[sm_pipe], false, score_to_exp2_scale, sm_row_max,
-                nullptr, 0, 0, 0ull, sm_pipe, sm_pipe);
+        // Per-half ld -> exp2+pack, each traced separately so the SVG renders
+        // "ld -> softmax -> ld -> softmax" (the body first-iter shape) instead of
+        // one merged block. DO NOT arrive p_done / s_h1_done here: tile (t+1)'s
+        // body-start re-init (every tile, thread 0) would wipe them and hang the
+        // producer (waits p_done/s_h1_done phase 0). They are replayed post-reinit
+        // at tile (t+1)'s body-start (search "B3 body-start replay"), mirroring
+        // the qk_peel_done -> qk_done conversion. Data is safe: p_taddr fully read,
+        // s_smem fully packed, and the body-start __syncthreads makes the s_smem
+        // writes visible to the producer.
+#if ATTENTION_CLOCK_TRACE_2TILE
+        const int sm_detail_base =
+            trace_extra_base + kClockTracePeelSoftmaxDetailBase +
+            (warp_id - kConsumerBaseWarp) * 4;
+#endif
+        float sm_sum0;
+        float sm_sum1;
+        {
+          uint32_t r[64];
+#if ATTENTION_CLOCK_TRACE_2TILE
+          const unsigned long long ld0_s = sm_trace ? clock64() : 0ull;
+#endif
+          TCGEN05_LD_X64(sm_row_taddr, r);
+          tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE_2TILE
+          const unsigned long long ld0_e = sm_trace ? clock64() : 0ull;
+#endif
+          sm_sum0 = pack_store_x64_loop_shifted<true>(
+              s_smem[sm_pipe] + s_store_word_offset(sm_row, 0), r,
+              score_to_exp2_scale, sm_row_max);
+#if ATTENTION_CLOCK_TRACE_2TILE
+          if (sm_trace) {
+            write_clock_trace_record(clock_trace_eff, sm_detail_base + 0,
+                                     kClockTracePeelSoftmaxLd, sm_pipe, sm_pipe,
+                                     warp_id, sm_warp, 0, ld0_s, ld0_e,
+                                     clock_trace_base);
+            write_clock_trace_record(clock_trace_eff, sm_detail_base + 1,
+                                     kClockTracePeelSoftmax, sm_pipe, sm_pipe,
+                                     warp_id, sm_warp, 0, ld0_e, clock64(),
+                                     clock_trace_base);
+          }
+          const unsigned long long ld1_s = sm_trace ? clock64() : 0ull;
+#endif
+          TCGEN05_LD_X64(sm_row_taddr + 64u, r);
+          tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE_2TILE
+          const unsigned long long ld1_e = sm_trace ? clock64() : 0ull;
+#endif
+          sm_sum1 = pack_store_x64_loop_shifted<true>(
+              s_smem[sm_pipe] + s_store_word_offset(sm_row, 32), r,
+              score_to_exp2_scale, sm_row_max);
+#if ATTENTION_CLOCK_TRACE_2TILE
+          if (sm_trace) {
+            write_clock_trace_record(clock_trace_eff, sm_detail_base + 2,
+                                     kClockTracePeelSoftmaxLd, sm_pipe, sm_pipe,
+                                     warp_id, sm_warp, 1, ld1_s, ld1_e,
+                                     clock_trace_base);
+            write_clock_trace_record(clock_trace_eff, sm_detail_base + 3,
+                                     kClockTracePeelSoftmax, sm_pipe, sm_pipe,
+                                     warp_id, sm_warp, 1, ld1_e, clock64(),
+                                     clock_trace_base);
+          }
+#endif
+        }
         // Carry to tile (t+1): row_max into ITS row_max_scratch (gmem, same
         // thread reads it back next iteration -> no fence needed), row_sum into
         // row_sum_partial (shared, free here since the drain-pack already read
@@ -2781,15 +2826,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             row_max_scratch + static_cast<size_t>(gridDim.x) * kTileWords;
         sm_next_scratch[sm_pipe * kTileM + sm_row] = sm_row_max;
         row_sum_partial[sm_pipe][sm_row] = sm_sum0 + sm_sum1;
-#if ATTENTION_CLOCK_TRACE_2TILE
-        if (sm_trace) {
-          write_clock_trace_record(
-              clock_trace_eff,
-              trace_extra_base + 21 + (warp_id - kConsumerBaseWarp),
-              kClockTracePeelSoftmax, sm_pipe, sm_pipe, warp_id, sm_warp, -1,
-              sm_t0, clock64(), clock_trace_base);
-        }
-#endif
       }
     }
 #endif
