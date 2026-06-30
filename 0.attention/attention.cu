@@ -36,6 +36,23 @@
 #define ATTENTION_PERSISTENT_OVERLAP_PREFETCH ATTENTION_PERSISTENT_OVERLAP
 #endif
 
+// Inter-Q-tile clock trace: capture TWO consecutive tiles of the SAME persistent
+// CTA (blockIdx.x==0, tile_local_idx == ATTENTION_TRACE_TILE0 and +1) into two
+// pages of the clock-trace buffer, sharing ONE clock base so the two tiles land
+// on a common timeline (records store start-base) -> real cross-tile overlap.
+#ifndef ATTENTION_CLOCK_TRACE_2TILE
+#define ATTENTION_CLOCK_TRACE_2TILE 0
+#endif
+#ifndef ATTENTION_TRACE_TILE0
+#define ATTENTION_TRACE_TILE0 6
+#endif
+#if ATTENTION_CLOCK_TRACE_2TILE && !ATTENTION_CLOCK_TRACE
+#error "ATTENTION_CLOCK_TRACE_2TILE requires ATTENTION_CLOCK_TRACE"
+#endif
+#if ATTENTION_CLOCK_TRACE_2TILE && !ATTENTION_PERSISTENT_OVERLAP
+#error "ATTENTION_CLOCK_TRACE_2TILE requires ATTENTION_PERSISTENT_OVERLAP"
+#endif
+
 #ifndef ATTENTION_PERSISTENT_OVERLAP_EARLY
 #define ATTENTION_PERSISTENT_OVERLAP_EARLY 0
 #endif
@@ -431,9 +448,26 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
   int iter = pipe;
   int local = 0;
 #if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_CLOCK_TRACE
+  // Deferred-store completion: how long tile t blocks on tile (t-1)'s O store.
+  // This is the residual (un-hidden) store tail; it lands at tile t's start, so on
+  // the shared 2-tile timeline it shows the previous tile's store overlapping this one.
+  const unsigned long long sw_start =
+      (clock_trace != nullptr && pipe == 0 && lane0 && wait_prev_store)
+          ? clock64()
+          : 0ull;
+#endif
   if (pipe == 0 && lane0 && wait_prev_store) {
     tma_store_wait_group_read();
   }
+#if ATTENTION_CLOCK_TRACE
+  if (clock_trace != nullptr && pipe == 0 && lane0 && wait_prev_store) {
+    write_clock_trace_record(
+        clock_trace, clock_trace_iters * kClockTraceSlotsPerIter + 11,
+        kClockTraceStore, loop_repeats, pipe, role_warp_id, -1, -1, sw_start,
+        clock64(), clock_trace_base);
+  }
+#endif
   __syncwarp();
 #endif
   if (iter < loop_repeats) {
@@ -1678,9 +1712,39 @@ __device__ __forceinline__ void attention_issue_qk_peel(
     uint32_t* q_smem, uint32_t* const k_smem[kPipeCount],
     const uint32_t p_taddr[kPipeCount], uint64_t* q_ready,
     uint64_t k_ready[kPipeCount], uint64_t qk_peel_done[kPipeCount],
-    unsigned int peel_q_phase, bool lane0) {
+    unsigned int peel_q_phase, bool lane0
+#if ATTENTION_CLOCK_TRACE_2TILE
+    , ClockTraceRecord* peel_page = nullptr, int peel_slot_base = 0,
+    unsigned long long peel_ct_base = 0
+#endif
+    ) {
+#if ATTENTION_CLOCK_TRACE_2TILE
+  // Split the during-drain peel into its real sub-phases: wait(Q TMA) / wait(K
+  // TMA) / QK MMA issue. clock64 on lane0 brackets each (the waits are warp-wide
+  // so lane0's stamp after a wait ~= when that operand became ready).
+  const unsigned long long peel_t0 =
+      (peel_page != nullptr && lane0) ? clock64() : 0ull;
+#endif
   mbarrier_wait(q_ready, peel_q_phase);
+#if ATTENTION_CLOCK_TRACE_2TILE
+  unsigned long long peel_t1 = 0ull;
+  if (peel_page != nullptr && lane0) {
+    peel_t1 = clock64();
+    write_clock_trace_record(peel_page, peel_slot_base + 0, kClockTracePeelQWait,
+                             PIPE, PIPE, PIPE, -1, -1, peel_t0, peel_t1,
+                             peel_ct_base);
+  }
+#endif
   mbarrier_wait(&k_ready[PIPE], 0u);
+#if ATTENTION_CLOCK_TRACE_2TILE
+  unsigned long long peel_t2 = 0ull;
+  if (peel_page != nullptr && lane0) {
+    peel_t2 = clock64();
+    write_clock_trace_record(peel_page, peel_slot_base + 1, kClockTracePeelKWait,
+                             PIPE, PIPE, PIPE, -1, -1, peel_t1, peel_t2,
+                             peel_ct_base);
+  }
+#endif
   if (lane0) {
 #if !ATTENTION_PEEL_PREARM
     mbarrier_init(&qk_peel_done[PIPE], 1);
@@ -1711,6 +1775,13 @@ __device__ __forceinline__ void attention_issue_qk_peel(
     tcgen05_commit(&qk_peel_done[PIPE]);
 #if !ATTENTION_PEEL_NO_FENCE
     tcgen05_fence_before_thread_sync();
+#endif
+#if ATTENTION_CLOCK_TRACE_2TILE
+    if (peel_page != nullptr) {
+      write_clock_trace_record(peel_page, peel_slot_base + 2, kClockTracePeelIssue,
+                               PIPE, PIPE, PIPE, -1, -1, peel_t2, clock64(),
+                               peel_ct_base);
+    }
 #endif
   }
 }
@@ -1996,6 +2067,22 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
 #endif
 #if ATTENTION_CLOCK_TRACE
+#if ATTENTION_CLOCK_TRACE_2TILE
+  const int ct_tl_idx =
+      (tile - static_cast<int>(blockIdx.x)) / static_cast<int>(gridDim.x);
+  const bool ct_is_tile0 =
+      (static_cast<int>(blockIdx.x) == 0) && (ct_tl_idx == ATTENTION_TRACE_TILE0);
+  const bool ct_is_tile1 =
+      (static_cast<int>(blockIdx.x) == 0) && (ct_tl_idx == ATTENTION_TRACE_TILE0 + 1);
+  if (threadIdx.x == 0) {
+    if (ct_is_tile0) clock_trace_base_shared = clock64();
+    if (ct_is_tile0 || ct_is_tile1) {
+#pragma unroll
+      for (int i = 0; i < kPipeCount * 2; ++i) k_tma_start_shared[i] = 0ull;
+    }
+  }
+  __syncthreads();
+#else
   if (threadIdx.x == 0) {
     clock_trace_base_shared = clock64();
 #pragma unroll
@@ -2005,7 +2092,19 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
   __syncthreads();
 #endif
+#endif
   const unsigned long long clock_trace_base = clock_trace_base_shared;
+#if ATTENTION_CLOCK_TRACE_2TILE
+  ClockTraceRecord* const clock_trace_eff =
+      ct_is_tile0
+          ? clock_trace
+          : (ct_is_tile1 && clock_trace != nullptr
+                 ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
+                                  kClockTraceExtraSlots)
+                 : nullptr);
+#else
+  ClockTraceRecord* const clock_trace_eff = clock_trace;
+#endif
 #if !ATTENTION_PERSISTENT
   if (warp_id == 0) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
@@ -2067,7 +2166,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         s_smem, qk_done, p_done, s_h1_done, row_sum_partial,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
         score_to_exp2_scale,
-        output != nullptr, clock_trace, clock_trace_iters, clock_trace_start,
+        output != nullptr, clock_trace_eff, clock_trace_iters, clock_trace_start,
         clock_trace_base, lane);
   }
 
@@ -2077,7 +2176,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         &k_map, &v_map, k_smem, v_smem, k_ready, v_ready, v_h1_ready,
         qk_done, pv_done,
         k_issue_gen, v_issue_gen, &tma_head_marker,
-        k_tma_start_shared, pipe, loop_repeats, loop_k_tiles, kv_tile_base, clock_trace,
+        k_tma_start_shared, pipe, loop_repeats, loop_k_tiles, kv_tile_base, clock_trace_eff,
         clock_trace_iters, clock_trace_start, clock_trace_base, k_prefetched,
 #if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
         wait_prev_store,
@@ -2094,7 +2193,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 	        q_smem, k_smem, &q_ready, k_ready, qk_done, p_done, s_h1_done, pv_done,
 		        qk_issue_gen,
 	        s_smem, v_smem, v_ready, v_h1_ready, p_taddr, o_taddr, pipe,
-        loop_repeats, clock_trace,
+        loop_repeats, clock_trace_eff,
         clock_trace_iters, clock_trace_start, clock_trace_base,
         q_tma_start_shared, k_tma_start_shared, q_ready_phase,
 #if ATTENTION_PERSISTENT_OVERLAP_EARLY
@@ -2107,7 +2206,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
 
 #if ATTENTION_CLOCK_TRACE
-  const bool trace_cta = clock_trace != nullptr && blockIdx.x == 0;
+  const bool trace_cta = clock_trace_eff != nullptr;
   const int trace_extra_base = clock_trace_iters * kClockTraceSlotsPerIter;
 #else
   const bool trace_cta = false;
@@ -2137,8 +2236,28 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           if (lane0) {
             const uint32_t q_smem_addr = smem_ptr_u32(q_smem);
             const int next_q_row = next_tile * kTileM;
+#if ATTENTION_CLOCK_TRACE_2TILE
+            // tile (t+1)'s Q is TMA-prefetched here, during tile t's epilogue.
+            // Record the issue onto tile (t+1)'s trace page so the SVG shows the
+            // Q load launching inside tile t's drain window (the "fill hide").
+            ClockTraceRecord* const q_pf_page =
+                (clock_trace != nullptr && ct_is_tile0)
+                    ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
+                                     kClockTraceExtraSlots)
+                    : nullptr;
+            const unsigned long long q_pf_start =
+                (q_pf_page != nullptr) ? clock64() : 0ull;
+#endif
             tma_load_2d(&q_map, q_smem_addr, &q_ready, 0, next_q_row);
             tma_load_2d(&q_map, q_smem_addr + kTileBytes / 2, &q_ready, 32, next_q_row);
+#if ATTENTION_CLOCK_TRACE_2TILE
+            if (q_pf_page != nullptr) {
+              write_clock_trace_record(
+                  q_pf_page, clock_trace_iters * kClockTraceSlotsPerIter + 12,
+                  kClockTraceQTma, -1, -1, 2, -1, -1, q_pf_start, clock64(),
+                  clock_trace_base);
+            }
+#endif
           }
         }
         const int pf_pipe = warp_id - 2;
@@ -2146,8 +2265,28 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             kv_tile_base_for_block<kFixedKTiles>(next_tile, loop_k_tiles);
         const int pf_k_tile =
             local_k_tile_for_iter<kFixedKTiles>(pf_pipe, loop_k_tiles);
+#if ATTENTION_CLOCK_TRACE_2TILE
+        // EARLY first-K prefetch = the peel's K1 (warp2->pipe0) / K2 (warp3->
+        // pipe1). Record the issue onto tile (t+1)'s page so the SVG shows the
+        // peel's K TMA, separate from the QK MMA. slot = pf_pipe*64 + 5.
+        ClockTraceRecord* const k_pf_page =
+            (clock_trace != nullptr && ct_is_tile0)
+                ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
+                                 kClockTraceExtraSlots)
+                : nullptr;
+        const unsigned long long k_pf_start =
+            (k_pf_page != nullptr && lane0) ? clock64() : 0ull;
+#endif
         issue_k_tma_tile(&k_map, k_smem[pf_pipe], &k_ready[pf_pipe],
                          next_kv_base + pf_k_tile, lane0);
+#if ATTENTION_CLOCK_TRACE_2TILE
+        if (k_pf_page != nullptr && lane0) {
+          write_clock_trace_record(
+              k_pf_page, clock_trace_iters * kClockTraceSlotsPerIter + 19 + pf_pipe,
+              kClockTracePeelKTma, pf_pipe, pf_pipe, 2 + pf_pipe, -1, -1,
+              k_pf_start, clock64(), clock_trace_base);
+        }
+#endif
       }
     }
 #endif
@@ -2159,7 +2298,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         if (done_iter >= clock_trace_start &&
             done_iter < clock_trace_start + clock_trace_iters) {
           end_clock_trace_record(
-              clock_trace,
+              clock_trace_eff,
               (done_iter - clock_trace_start) * kClockTraceSlotsPerIter + 4,
               clock64(), clock_trace_base);
         }
@@ -2174,7 +2313,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         if (done_iter >= clock_trace_start &&
             done_iter < clock_trace_start + clock_trace_iters) {
           end_clock_trace_record(
-              clock_trace,
+              clock_trace_eff,
               (done_iter - clock_trace_start) * kClockTraceSlotsPerIter + 4,
               clock64(), clock_trace_base);
         }
@@ -2245,7 +2384,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
     if (trace_cta && threadIdx.x == 0) {
       const unsigned long long tail_wait_end = clock64();
-      write_clock_trace_record(clock_trace, trace_extra_base, kClockTraceTailWait,
+      write_clock_trace_record(clock_trace_eff, trace_extra_base, kClockTraceTailWait,
                                loop_repeats, -1, 0, -1, -1, tail_wait_start,
                                tail_wait_end, clock_trace_base);
     }
@@ -2291,12 +2430,38 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const unsigned int peel_q_phase =
             static_cast<unsigned int>((tile_local_idx + 1) & 1);
         PEEL_HB_SET(warp_id, 3u);
+#if ATTENTION_CLOCK_TRACE_2TILE
+        // The iter0/1 QK of tile (t+1) is peeled here (issued by tile t's w0/w1
+        // during tile t's drain). The helper records its sub-phases onto tile
+        // (t+1)'s page: wait(Q TMA) / wait(K TMA) / QK MMA issue, at slots
+        // warp_id*64 + {0,1,2}. Only when THIS tile is the trace's tile0.
+        ClockTraceRecord* const peel_trace_page =
+            (clock_trace != nullptr && ct_is_tile0)
+                ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
+                                 kClockTraceExtraSlots)
+                : nullptr;
+        // Write into the page's EXTRA region (alongside q_tma at +12), NOT the
+        // iter0/1 per-iter block — tile (t+1) still runs iter0/1's PV/done marks
+        // there and would overwrite the peel records. warp0 -> +13..15, warp1 -> +16..18.
+        const int peel_slot_base = clock_trace_iters * kClockTraceSlotsPerIter +
+                                   13 + warp_id * 3;
+#endif
         if (warp_id == 0) {
           attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
-                                     qk_peel_done, peel_q_phase, lane0);
+                                     qk_peel_done, peel_q_phase, lane0
+#if ATTENTION_CLOCK_TRACE_2TILE
+                                     , peel_trace_page, peel_slot_base,
+                                     clock_trace_base
+#endif
+          );
         } else {
           attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
-                                     qk_peel_done, peel_q_phase, lane0);
+                                     qk_peel_done, peel_q_phase, lane0
+#if ATTENTION_CLOCK_TRACE_2TILE
+                                     , peel_trace_page, peel_slot_base,
+                                     clock_trace_base
+#endif
+          );
         }
         PEEL_HB_SET(warp_id, 4u);
       }
@@ -2386,11 +2551,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (trace_epilogue) {
       const unsigned long long epilogue_end = clock64();
       const int consumer_warp = warp_id - kConsumerBaseWarp;
-      write_clock_trace_record(clock_trace, trace_extra_base + 1 + consumer_warp,
+      write_clock_trace_record(clock_trace_eff, trace_extra_base + 1 + consumer_warp,
                                kClockTraceTmemDrain, loop_repeats, -1, warp_id,
                                consumer_warp, -1, epilogue_start, epilogue_end,
                                clock_trace_base);
-      write_clock_trace_record(clock_trace, trace_extra_base + 5 + consumer_warp,
+      write_clock_trace_record(clock_trace_eff, trace_extra_base + 5 + consumer_warp,
                                kClockTracePackNorm, loop_repeats, -1, warp_id,
                                consumer_warp, -1, epilogue_start, epilogue_end,
                                clock_trace_base);
@@ -2495,11 +2660,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
   if (output != nullptr && trace_cta && threadIdx.x == 0) {
     const unsigned long long store_end = clock64();
-    write_clock_trace_record(clock_trace, trace_extra_base + 9,
+    write_clock_trace_record(clock_trace_eff, trace_extra_base + 9,
                              kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
                              tma_store_start_shared, store_end,
                              clock_trace_base);
-    write_clock_trace_record(clock_trace, trace_extra_base + 10,
+    write_clock_trace_record(clock_trace_eff, trace_extra_base + 10,
                              kClockTraceTailTotal, loop_repeats, -1, 0, -1, -1,
                              tail_total_start_shared, store_end,
                              clock_trace_base);

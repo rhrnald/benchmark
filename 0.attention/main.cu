@@ -264,6 +264,12 @@ enum ClockTraceStage {
   kClockTracePvMmaIssue = 20,
   kClockTraceKTmaIssue = 21,
   kClockTraceVTmaIssue = 22,
+  // 2TILE-only: peel sub-phases so the SVG can split the during-drain QK peel
+  // into wait(Q) / wait(K) / MMA-issue, plus the EARLY first-K (K1/K2) prefetch.
+  kClockTracePeelQWait = 23,
+  kClockTracePeelKWait = 24,
+  kClockTracePeelIssue = 25,
+  kClockTracePeelKTma = 26,
 };
 
 static constexpr int kClockTraceSlotsPerIter = 64;
@@ -823,6 +829,14 @@ const char* clock_trace_stage_name(int stage) {
       return "sync";
     case kClockTracePackDetail:
       return "pack_detail";
+    case kClockTracePeelQWait:
+      return "peel_qwait";
+    case kClockTracePeelKWait:
+      return "peel_kwait";
+    case kClockTracePeelIssue:
+      return "peel_issue";
+    case kClockTracePeelKTma:
+      return "peel_ktma";
     default:
       return "unknown";
   }
@@ -863,6 +877,35 @@ std::string epilogue_trace_path(const char* csv_path) {
   }
   return path;
 }
+
+#if ATTENTION_CLOCK_TRACE_2TILE
+// Inter-Q-tile raw dump: every nonzero ClockTraceRecord from both tile pages,
+// with a `tile` column (0 / 1). Both pages share one clock base (set on tile 0),
+// so `start`/`end` are directly comparable across the two tiles -> real overlap.
+void write_clock_trace_raw_csv(const Args& args,
+                               const std::vector<ClockTraceRecord>& records,
+                               int page_records) {
+  FILE* csv = std::fopen(args.csv, "w");
+  if (!csv) {
+    std::perror(args.csv);
+    return;
+  }
+  std::fprintf(csv,
+               "tile,slot,stage,stage_name,iter,pipe,warp_id,consumer_warp,half,"
+               "start,end\n");
+  for (int page = 0; page < 2; ++page) {
+    const int off = page * page_records;
+    for (int s = 0; s < page_records; ++s) {
+      const ClockTraceRecord& r = records[off + s];
+      if (r.stage == 0 || r.end <= r.start) continue;
+      std::fprintf(csv, "%d,%d,%d,%s,%d,%d,%d,%d,%d,%llu,%llu\n", page, s,
+                   r.stage, clock_trace_stage_name(r.stage), r.iter, r.pipe,
+                   r.warp_id, r.consumer_warp, r.half, r.start, r.end);
+    }
+  }
+  std::fclose(csv);
+}
+#endif
 
 void write_clock_trace_csv(const Args& args,
                            const RunResult& result,
@@ -2150,12 +2193,17 @@ int run_benchmark(const Args& args_in) {
 
 #if ATTENTION_CLOCK_TRACE
   const int clock_record_count = clock_trace_record_count(args);
+#if ATTENTION_CLOCK_TRACE_2TILE
+  const int clock_total_records = clock_record_count * 2;
+#else
+  const int clock_total_records = clock_record_count;
+#endif
   if (args.clock_trace) {
     CUDA_CHECK(cudaMalloc(&d_clock_trace,
-                          static_cast<size_t>(clock_record_count) *
+                          static_cast<size_t>(clock_total_records) *
                               sizeof(ClockTraceRecord)));
     CUDA_CHECK(cudaMemset(d_clock_trace, 0,
-                          static_cast<size_t>(clock_record_count) *
+                          static_cast<size_t>(clock_total_records) *
                               sizeof(ClockTraceRecord)));
   }
 #endif
@@ -2171,12 +2219,16 @@ int run_benchmark(const Args& args_in) {
                                 );
 #if ATTENTION_CLOCK_TRACE
   if (args.clock_trace && result.error == cudaSuccess) {
-    std::vector<ClockTraceRecord> h_clock_trace(clock_record_count);
+    std::vector<ClockTraceRecord> h_clock_trace(clock_total_records);
     CUDA_CHECK(cudaMemcpy(h_clock_trace.data(), d_clock_trace,
-                          static_cast<size_t>(clock_record_count) *
+                          static_cast<size_t>(clock_total_records) *
                               sizeof(ClockTraceRecord),
                           cudaMemcpyDeviceToHost));
+#if ATTENTION_CLOCK_TRACE_2TILE
+    write_clock_trace_raw_csv(args, h_clock_trace, clock_record_count);
+#else
     write_clock_trace_csv(args, result, h_clock_trace);
+#endif
   } else
 #endif
   {
