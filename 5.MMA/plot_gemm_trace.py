@@ -4,20 +4,30 @@ import csv
 import html
 
 
-STAGE_ROWS = {
-    "tma_issue": "TMA issue",
-    "tma_wait": "TMA wait",
-    "mma_issue": "MMA issue",
-    "mma_wait": "MMA wait",
-    "tmem_drain": "TMEM drain",
-}
+LANES = [
+    ("tma_issue", 0, "TMA producer w0: A[256x64] + B[64x256]"),
+    ("tma_wait", 1, "TMA ready wait w1"),
+    ("mma_issue", 1, "MMA issue w1: C00/C01/C10/C11"),
+    ("mma_wait", 1, "MMA completion wait w1"),
+    ("tmem_drain", 0, "TMEM drain w0: C00"),
+    ("tmem_drain", 1, "TMEM drain w1: C01"),
+    ("tmem_drain", 2, "TMEM drain w2: C10"),
+    ("tmem_drain", 3, "TMEM drain w3: C11"),
+]
 
 COLORS = {
-    "tma_issue": "#2f80ed",
-    "tma_wait": "#9bbff5",
-    "mma_issue": "#eb5757",
-    "mma_wait": "#f4a5a5",
-    "tmem_drain": "#27ae60",
+    "tma_issue": "#087f5b",
+    "tma_wait": "#9ddfc7",
+    "mma_issue": "#3564b7",
+    "mma_wait": "#b9c9f2",
+    "tmem_drain": "#7a4db3",
+}
+
+MARKERS = {
+    "tma_done": "#087f5b",
+    "mma_done": "#b42318",
+    "mainloop_done": "#111827",
+    "trace_done": "#7a4db3",
 }
 
 
@@ -44,107 +54,268 @@ def read_rows(path):
     return rows
 
 
-def lane_name(row):
-    label = STAGE_ROWS.get(row["stage"], row["stage"])
-    return f"{label} w{row['warp']}"
+def stage_slot(iteration):
+    return iteration % 3
+
+
+def lane_key(row):
+    return (row["stage"], row["warp"])
+
+
+def lane_name(key):
+    for stage, warp, label in LANES:
+        if key == (stage, warp):
+            return label
+    return f"{key[0]} w{key[1]}"
+
+
+def short_label(row):
+    kt = row["iter"]
+    s = stage_slot(kt)
+    if row["stage"] == "tma_issue":
+        return f"TMA kt{kt} s{s} A+B"
+    if row["stage"] == "tma_wait":
+        return f"wait TMA kt{kt}"
+    if row["stage"] == "mma_issue":
+        return f"MMA kt{kt} s{s} 4xC"
+    if row["stage"] == "mma_wait":
+        return f"wait MMA kt{kt}"
+    if row["stage"] == "tmem_drain":
+        tile = ("C00", "C01", "C10", "C11")[row["warp"]]
+        return f"drain {tile}"
+    return row["stage"]
+
+
+def long_label(row):
+    kt = row["iter"]
+    s = stage_slot(kt)
+    if row["stage"] == "tma_issue":
+        return f"kt{kt} stage{s}: issue TMA A[256x64] + B[64x256]"
+    if row["stage"] == "tma_wait":
+        return f"kt{kt} stage{s}: wait until TMA data is visible in shared memory"
+    if row["stage"] == "mma_issue":
+        return (
+            f"kt{kt} stage{s}: issue C00/C01/C10/C11, "
+            "each logical 128x128x64 MMA group"
+        )
+    if row["stage"] == "mma_wait":
+        return f"kt{kt} stage{s}: wait until tcgen05 MMA group completes"
+    if row["stage"] == "tmem_drain":
+        tile = ("C00", "C01", "C10", "C11")[row["warp"]]
+        return f"final TMEM drain for {tile}"
+    return short_label(row)
+
+
+def marker_text(kind, row):
+    kt = row["iter"]
+    if kind == "tma_done":
+        return f"TMA done kt{kt}"
+    if kind == "mma_done":
+        return f"MMA done kt{kt}"
+    return f"done kt{kt}"
+
+
+def ceil_to(value, step):
+    return ((value + step - 1) // step) * step
 
 
 def write_svg(path, rows, title):
     if not rows:
         raise SystemExit("trace CSV has no drawable rows")
 
-    lanes = []
-    seen = set()
-    for stage, warp in (
-        ("tma_issue", 0),
-        ("tma_wait", 1),
-        ("mma_issue", 1),
-        ("mma_wait", 1),
-    ):
-        name = f"{STAGE_ROWS[stage]} w{warp}"
-        lanes.append(name)
-        seen.add(name)
-    for warp in range(4):
-        name = f"TMEM drain w{warp}"
-        lanes.append(name)
-        seen.add(name)
+    lane_order = [(stage, warp) for stage, warp, _ in LANES]
+    seen = set(lane_order)
     for row in rows:
-        name = lane_name(row)
-        if name not in seen:
-            lanes.append(name)
-            seen.add(name)
+        key = lane_key(row)
+        if key not in seen:
+            lane_order.append(key)
+            seen.add(key)
+    lane_index = {key: idx for idx, key in enumerate(lane_order)}
 
-    lane_to_y = {name: i for i, name in enumerate(lanes)}
-    min_cycle = min(r["start"] for r in rows)
-    max_cycle = max(r["end"] for r in rows)
-    span = max(1, max_cycle - min_cycle)
-
-    left = 150
-    right = 32
-    top = 56
-    bottom = 48
-    lane_h = 30
-    plot_w = 1200
-    width = left + plot_w + right
-    height = top + bottom + lane_h * len(lanes)
+    non_drain = [r for r in rows if r["stage"] != "tmem_drain"]
+    if not non_drain:
+        raise SystemExit("trace CSV has no non-drain rows")
+    mainloop_done = max((r["end"] for r in rows if r["stage"] == "mma_wait"), default=max(r["end"] for r in non_drain))
+    trace_done = max(r["end"] for r in rows)
+    base = min(r["start"] for r in non_drain)
+    axis_end = ceil_to(trace_done - base, 1000)
+    scale = 0.095
+    left = 245
+    label_left = 22
+    top = 86
+    row_h = 58
+    bar_h = 34
+    right = 260
+    width = int(left + axis_end * scale + right)
+    height = top + len(lane_order) * row_h + 64
 
     def x(cycle):
-        return left + (cycle - min_cycle) * plot_w / span
+        return left + (cycle - base) * scale
+
+    def y_for(key):
+        return top + lane_index[key] * row_h
 
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
         f'viewBox="0 0 {width} {height}">',
-        "<style>",
-        "text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;fill:#202124}",
-        ".title{font-size:16px;font-weight:700}",
-        ".axis{stroke:#9aa0a6;stroke-width:1}",
-        ".grid{stroke:#e0e3e7;stroke-width:1}",
-        ".label{fill:#3c4043}",
-        ".bar{rx:3;ry:3}",
-        "</style>",
-        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#fff"/>',
-        f'<text class="title" x="24" y="28">{html.escape(title)}</text>',
-        f'<text x="24" y="46">window: {min_cycle}..{max_cycle} cycles, span={span}</text>',
+        '<rect width="100%" height="100%" fill="white"/>',
+        '<style>',
+        'text{font-family:Arial,sans-serif;fill:#1f2937}',
+        '.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}',
+        '.title{font-size:17px;font-weight:700}',
+        '.subtitle{font-size:12px;fill:#4b5563}',
+        '.label{font-size:13px;fill:#333}',
+        '.barText{font-size:12px;fill:white;font-weight:700}',
+        '.small{font-size:10px}',
+        '.grid{stroke:#e3e8ef;stroke-width:1}',
+        '.lane{stroke:#ccd5e0;stroke-width:1}',
+        '</style>',
+        f'<text class="title" x="{label_left}" y="26">{html.escape(title)}</text>',
+        (
+            f'<text class="subtitle mono" x="{label_left}" y="47">'
+            f'base raw cycle={base}, mainloop done={mainloop_done - base} cyc, '
+            f'trace done={trace_done - base} cyc</text>'
+        ),
+        (
+            f'<text class="subtitle" x="{label_left}" y="66">'
+            'TMA done markers use TMA wait end; MMA done markers use MMA wait end. '
+            'Drain bars are clamped to start no earlier than the last MMA done marker.</text>'
+        ),
     ]
 
-    tick_count = 8
-    for i in range(tick_count + 1):
-        cycle = min_cycle + span * i // tick_count
-        tx = x(cycle)
-        parts.append(f'<line class="grid" x1="{tx:.1f}" y1="{top}" x2="{tx:.1f}" y2="{height-bottom}"/>')
-        parts.append(f'<text x="{tx - 18:.1f}" y="{height - 18}">{cycle - min_cycle}</text>')
-    parts.append(f'<line class="axis" x1="{left}" y1="{height-bottom}" x2="{left+plot_w}" y2="{height-bottom}"/>')
-    parts.append(f'<text x="{left + plot_w/2 - 54:.1f}" y="{height - 4}">cycles from window start</text>')
-
-    for lane, idx in lane_to_y.items():
-        y = top + idx * lane_h
-        parts.append(f'<text class="label" x="18" y="{y + 19}">{html.escape(lane)}</text>')
-        parts.append(f'<line class="grid" x1="{left}" y1="{y + lane_h}" x2="{left + plot_w}" y2="{y + lane_h}"/>')
-
-    for row in rows:
-        y = top + lane_to_y[lane_name(row)] * lane_h + 6
-        x0 = x(row["start"])
-        x1 = x(row["end"])
-        w = max(1.0, x1 - x0)
-        color = COLORS.get(row["stage"], "#5f6368")
+    grid_step = 1000
+    for grid in range(0, axis_end + 1, grid_step):
+        gx = left + grid * scale
         parts.append(
-            f'<rect class="bar" x="{x0:.1f}" y="{y:.1f}" width="{w:.1f}" height="18" '
-            f'fill="{color}"><title>iter={row["iter"]} stage={row["stage"]} '
-            f'warp={row["warp"]} cycles={row["cycles"]}</title></rect>'
+            f'<line class="grid" x1="{gx:.1f}" y1="72" x2="{gx:.1f}" y2="{height - 36}"/>'
         )
-        if row["stage"] in ("tma_issue", "mma_issue") and w > 18:
+        parts.append(
+            f'<text class="mono small" x="{gx:.1f}" y="82" text-anchor="middle" fill="#667">{grid}</text>'
+        )
+
+    for idx, key in enumerate(lane_order):
+        y = top + idx * row_h
+        parts.append(
+            f'<text class="label" x="{label_left}" y="{y + 20}">{html.escape(lane_name(key))}</text>'
+        )
+        parts.append(
+            f'<line class="lane" x1="{left}" y1="{y + bar_h + 8}" '
+            f'x2="{left + axis_end * scale:.1f}" y2="{y + bar_h + 8}"/>'
+        )
+
+    blocks = []
+    for row in rows:
+        start = row["start"]
+        if row["stage"] == "tmem_drain":
+            start = max(start, mainloop_done)
+        end = max(row["end"], start + 1)
+        blocks.append((start, end, row))
+
+    for start, end, row in sorted(blocks, key=lambda item: (item[0], lane_index[lane_key(item[2])])):
+        key = lane_key(row)
+        y = y_for(key)
+        bx = x(start)
+        bw = max(1.0, (end - start) * scale)
+        color = COLORS.get(row["stage"], "#5f6368")
+        raw_note = ""
+        if row["stage"] == "tmem_drain" and row["start"] < start:
+            raw_note = f" raw_start={row['start'] - base} clamped_start={start - base}"
+        parts.append(
+            f'<rect x="{bx:.1f}" y="{y}" width="{bw:.1f}" height="{bar_h}" '
+            f'fill="{color}" stroke="#0f3768" stroke-width="1">'
+            f'<title>{html.escape(long_label(row))}: '
+            f'{end - start} cyc{raw_note}</title></rect>'
+        )
+        cx = bx + bw / 2
+        label = short_label(row)
+        if bw > 116:
             parts.append(
-                f'<text x="{x0 + 3:.1f}" y="{y + 13:.1f}" fill="#fff">{row["iter"]}</text>'
+                f'<text class="barText" x="{cx:.1f}" y="{y + 15}" text-anchor="middle">'
+                f'{html.escape(label)}</text>'
+            )
+            parts.append(
+                f'<text class="barText small" x="{cx:.1f}" y="{y + 29}" text-anchor="middle">'
+                f'{end - start} cyc</text>'
+            )
+        elif bw > 52:
+            parts.append(
+                f'<text class="barText small" x="{cx:.1f}" y="{y + 21}" text-anchor="middle">'
+                f'{html.escape(label)}</text>'
             )
 
-    legend_x = left + 8
-    legend_y = top - 22
-    for stage in ("tma_issue", "tma_wait", "mma_issue", "mma_wait", "tmem_drain"):
-        color = COLORS[stage]
-        label = STAGE_ROWS[stage]
+    def vertical_marker(cycle, y0, y1, color, text, text_y, dashed=False):
+        dash = ' stroke-dasharray="5 4"' if dashed else ""
+        mx = x(cycle)
+        parts.append(
+            f'<line x1="{mx:.1f}" y1="{y0:.1f}" x2="{mx:.1f}" y2="{y1:.1f}" '
+            f'stroke="{color}" stroke-width="3"{dash}/>'
+        )
+        parts.append(
+            f'<path d="M {mx - 5:.1f} {y0:.1f} L {mx + 5:.1f} {y0:.1f} L {mx:.1f} {y0 + 8:.1f} Z" '
+            f'fill="{color}"/>'
+        )
+        parts.append(
+            f'<text class="mono small" x="{mx + 5:.1f}" y="{text_y:.1f}" fill="{color}">'
+            f'{html.escape(text)}</text>'
+        )
+
+    tma_top = y_for(("tma_issue", 0)) - 4
+    tma_bottom = y_for(("tma_wait", 1)) + bar_h + 6
+    mma_top = y_for(("mma_issue", 1)) - 4
+    mma_bottom = y_for(("mma_wait", 1)) + bar_h + 6
+
+    for idx, row in enumerate(sorted((r for r in rows if r["stage"] == "tma_wait"), key=lambda r: r["iter"])):
+        vertical_marker(
+            row["end"],
+            tma_top,
+            tma_bottom,
+            MARKERS["tma_done"],
+            marker_text("tma_done", row),
+            tma_bottom + 12 + (idx & 1) * 10,
+        )
+
+    for idx, row in enumerate(sorted((r for r in rows if r["stage"] == "mma_wait"), key=lambda r: r["iter"])):
+        vertical_marker(
+            row["end"],
+            mma_top,
+            mma_bottom,
+            MARKERS["mma_done"],
+            marker_text("mma_done", row),
+            mma_bottom + 12 + (idx & 1) * 10,
+        )
+
+    vertical_marker(
+        mainloop_done,
+        top - 14,
+        top + len(lane_order) * row_h - 12,
+        MARKERS["mainloop_done"],
+        f"MAINLOOP DONE / last MMA done ({mainloop_done - base} cyc)",
+        top - 20,
+        dashed=True,
+    )
+    vertical_marker(
+        trace_done,
+        top - 4,
+        top + len(lane_order) * row_h - 4,
+        MARKERS["trace_done"],
+        f"TRACE END / last drain done ({trace_done - base} cyc)",
+        height - 20,
+        dashed=True,
+    )
+
+    legend_y = height - 38
+    legend_x = left
+    legend = [
+        ("TMA issue", COLORS["tma_issue"]),
+        ("TMA done", MARKERS["tma_done"]),
+        ("MMA issue", COLORS["mma_issue"]),
+        ("MMA done", MARKERS["mma_done"]),
+        ("TMEM drain", COLORS["tmem_drain"]),
+    ]
+    for label, color in legend:
         parts.append(f'<rect x="{legend_x}" y="{legend_y}" width="12" height="12" fill="{color}"/>')
-        parts.append(f'<text x="{legend_x + 18}" y="{legend_y + 11}">{label}</text>')
-        legend_x += 116
+        parts.append(f'<text class="small" x="{legend_x + 18}" y="{legend_y + 11}">{label}</text>')
+        legend_x += 112
 
     parts.append("</svg>\n")
     with open(path, "w") as f:
