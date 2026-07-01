@@ -15,10 +15,12 @@ Current kernel shape:
   - total triple buffer: `192 KiB`
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
-- A and B inputs are stored in an atom-packed operand layout matching the
-  tcgen05 shared-memory descriptors. The B tile is packed as two `128 x 64`
-  logical `B^T` operands so the kernel still computes logical GEMM
-  `C = A(M,K) * B(K,N)`.
+- A and B global inputs are row-major packed BF16. TMA uses `SWIZZLE_128B`
+  layouts matching the attention path:
+  - A is loaded as one logical `256 x 64` row-major tile into `major_k`
+    shared-memory layout.
+  - B is loaded as two `64 x 128` row-major halves into `major_mn`
+    shared-memory layout.
 
 The benchmark path consumes TMEM accumulators into a checksum sink. The
 validation path stores the full FP32 C matrix to global memory and compares it

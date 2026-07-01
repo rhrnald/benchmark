@@ -52,11 +52,6 @@ static constexpr int kStageWords = kAStageWords + kBStageWords;
 static constexpr int kStageBytes = kStageWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kDynamicSmemBytes = kStages * kStageBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
-static constexpr int kMmaAtomWords = kMmaM * kMmaK / 2;
-static constexpr int kPackedTileWords = kAStageWords;
-static constexpr int kPackedTmaDim0Words = 32;
-static constexpr int kPackedTmaDim1 = 4;
-static constexpr int kPackedTmaDim2 = 64;
 static constexpr int kTmemTileStride = 128;
 
 struct Args {
@@ -78,22 +73,28 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
   return addr;
 }
 
-__host__ __device__ __forceinline__ uint64_t make_smem_desc(
+__host__ __device__ __forceinline__ uint64_t make_sw128_major_k_smem_desc(
     uint32_t matrix_start_addr,
-    uint32_t leading_dim_byte_offset = 128,
-    uint32_t stride_dim_byte_offset = 32,
-    uint32_t swizzle_mode = 2) {
-  const uint32_t matrix_start_aligned = matrix_start_addr & ~0xFu;
-  const uint32_t lead_enc = (leading_dim_byte_offset & 0x3ffffu) >> 4;
-  const uint32_t stride_enc = (stride_dim_byte_offset & 0x3ffffu) >> 4;
-  uint64_t desc = 0;
-  desc |= static_cast<uint64_t>(matrix_start_aligned >> 4);
-  desc |= static_cast<uint64_t>(lead_enc) << 16;
-  desc |= static_cast<uint64_t>(stride_enc) << 32;
-  desc |= static_cast<uint64_t>(0x1u) << 46;
-  desc |= static_cast<uint64_t>(0xB0u) << 53;
-  desc |= static_cast<uint64_t>(swizzle_mode & 0x7u) << 61;
-  return desc;
+    int mma) {
+  constexpr uint64_t desc_base = (static_cast<uint64_t>(1u) << 16) |
+                                 (static_cast<uint64_t>(64u) << 32) |
+                                 (static_cast<uint64_t>(1u) << 46) |
+                                 (static_cast<uint64_t>(2u) << 61);
+  const uint32_t addr16 = ((matrix_start_addr & ~0xFu) >> 4) +
+                          static_cast<uint32_t>(mma) * (32u >> 4);
+  return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
+}
+
+__host__ __device__ __forceinline__ uint64_t make_sw128_major_mn_smem_desc(
+    uint32_t matrix_start_addr,
+    int mma) {
+  constexpr uint64_t desc_base = (static_cast<uint64_t>(128u) << 16) |
+                                 (static_cast<uint64_t>(64u) << 32) |
+                                 (static_cast<uint64_t>(1u) << 46) |
+                                 (static_cast<uint64_t>(2u) << 61);
+  const uint32_t addr16 = ((matrix_start_addr & ~0xFu) >> 4) +
+                          static_cast<uint32_t>(mma) * (4096u >> 4);
+  return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
 }
 
 __host__ __device__ __forceinline__ uint32_t make_bf16_idesc() {
@@ -144,6 +145,28 @@ __device__ __forceinline__ void mbarrier_expect_tx(uint64_t* barrier, uint32_t b
 #else
   (void)barrier;
   (void)bytes;
+#endif
+}
+
+__device__ __forceinline__ void tma_load_2d(const CUtensorMap* map,
+                                            uint32_t dst_smem,
+                                            uint64_t* barrier,
+                                            int c,
+                                            int r) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t bar = smem_ptr_u32(barrier);
+  asm volatile(
+      "cp.async.bulk.tensor.2d.shared::cta.global.tile.mbarrier::complete_tx::bytes"
+      " [%0], [%1, {%3, %4}], [%2];"
+      :
+      : "r"(dst_smem), "l"(map), "r"(bar), "r"(c), "r"(r)
+      : "memory");
+#else
+  (void)map;
+  (void)dst_smem;
+  (void)barrier;
+  (void)c;
+  (void)r;
 #endif
 }
 
@@ -361,16 +384,18 @@ __device__ __forceinline__ void issue_stage_tma(const CUtensorMap* a_map,
                                                 uint64_t* ready,
                                                 int tile_m,
                                                 int tile_n,
-                                                int ktile,
-                                                int ktiles,
-                                                int ntile) {
+                                                int ktile) {
   uint32_t* a_smem = stage_smem;
   uint32_t* b_smem = stage_smem + kAStageWords;
   mbarrier_expect_tx(ready, kStageBytes);
-  const int a_tile = tile_m * ktiles + ktile;
-  const int b_tile = ktile * ntile + tile_n;
-  tma_load_4d(a_map, smem_ptr_u32(a_smem), ready, 0, 0, 0, a_tile);
-  tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, 0, 0, 0, b_tile);
+  const int a_col_words = ktile * (kStageK / 2);
+  const int a_row = tile_m * kCtaM;
+  const int b_col_words = tile_n * (kCtaN / 2);
+  const int b_k16 = ktile * (kStageK / kMmaK);
+  tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
+  tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
+  tma_load_4d(b_map, smem_ptr_u32(b_smem + kHalfTileWords), ready,
+              b_col_words + (kMmaN / 2), 0, 0, b_k16);
 }
 
 __global__ __launch_bounds__(kThreads, 1)
@@ -429,13 +454,13 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       tmem_base + 2u * kTmemTileStride,
       tmem_base + 3u * kTmemTileStride,
   };
-  const uint32_t idesc = make_bf16_idesc();
+  const uint32_t idesc = make_bf16_idesc() | (1u << 16);
 
   if (threadIdx.x == 0) {
     const int prefetch = min(kStages, ktiles);
     for (int kt = 0; kt < prefetch; ++kt) {
       issue_stage_tma(&a_map, &b_map, smem + kt * kStageWords,
-                      &tma_ready[kt], tile_m, tile_n, kt, ktiles, ntile);
+                      &tma_ready[kt], tile_m, tile_n, kt);
     }
   }
 
@@ -452,16 +477,14 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     if (threadIdx.x == 0) {
 #pragma unroll
       for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-        const uint32_t a0 = smem_ptr_u32(a_smem + kk * kMmaAtomWords);
-        const uint32_t a1 =
-            smem_ptr_u32(a_smem + kHalfTileWords + kk * kMmaAtomWords);
-        const uint32_t b0 = smem_ptr_u32(b_smem + kk * kMmaAtomWords);
-        const uint32_t b1 =
-            smem_ptr_u32(b_smem + kHalfTileWords + kk * kMmaAtomWords);
-        const uint64_t a0_desc = make_smem_desc(a0, 128, 256, 0);
-        const uint64_t a1_desc = make_smem_desc(a1, 128, 256, 0);
-        const uint64_t b0_desc = make_smem_desc(b0, 128, 256, 0);
-        const uint64_t b1_desc = make_smem_desc(b1, 128, 256, 0);
+        const uint32_t a0 = smem_ptr_u32(a_smem);
+        const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
+        const uint32_t b0 = smem_ptr_u32(b_smem);
+        const uint32_t b1 = smem_ptr_u32(b_smem + kHalfTileWords);
+        const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
+        const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
+        const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
+        const uint64_t b1_desc = make_sw128_major_mn_smem_desc(b1, kk);
         const bool input_d = (kt != 0) || (kk != 0);
 
         tcgen05_mma_bf16_ss(c_taddr[0], a0_desc, b0_desc, idesc, input_d);
@@ -477,7 +500,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     const int next = kt + kStages;
     if (threadIdx.x == 0 && next < ktiles) {
       issue_stage_tma(&a_map, &b_map, stage_smem, &tma_ready[stage],
-                      tile_m, tile_n, next, ktiles, ntile);
+                      tile_m, tile_n, next);
     }
   }
 
@@ -519,15 +542,41 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 #endif
 }
 
-void encode_packed_tile_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
-  const cuuint64_t global_dim[4] = {kPackedTmaDim0Words, kPackedTmaDim1,
-                                    kPackedTmaDim2, tiles};
+void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
+                                      void* base,
+                                      uint64_t rows,
+                                      uint64_t cols_bf16) {
+  const cuuint64_t cols_words = cols_bf16 / 2;
+  const cuuint64_t global_dim[2] = {cols_words, rows};
+  const cuuint64_t global_stride[1] = {cols_words * sizeof(uint32_t)};
+  const cuuint32_t box_dim[2] = {kStageK / 2, kCtaM};
+  const cuuint32_t elem_stride[2] = {1, 1};
+  driver_check(cuTensorMapEncodeTiled(map,
+                                      CU_TENSOR_MAP_DATA_TYPE_UINT32,
+                                      2,
+                                      base,
+                                      global_dim,
+                                      global_stride,
+                                      box_dim,
+                                      elem_stride,
+                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_128B,
+                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(a_row_major_sw128)");
+}
+
+void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
+                                          void* base,
+                                          uint64_t rows,
+                                          uint64_t cols_bf16) {
+  const cuuint64_t cols_words = cols_bf16 / 2;
+  const cuuint64_t global_dim[4] = {cols_words, kMmaK, 2, rows / kMmaK};
   const cuuint64_t global_stride[3] = {
-      kPackedTmaDim0Words * sizeof(uint32_t),
-      kPackedTmaDim0Words * kPackedTmaDim1 * sizeof(uint32_t),
-      kPackedTileWords * sizeof(uint32_t)};
-  const cuuint32_t box_dim[4] = {kPackedTmaDim0Words, kPackedTmaDim1,
-                                 kPackedTmaDim2, 1};
+      cols_words * sizeof(uint32_t),
+      static_cast<cuuint64_t>(kMmaN / 4) * sizeof(uint32_t),
+      static_cast<cuuint64_t>(kMmaK) * cols_words * sizeof(uint32_t)};
+  const cuuint32_t box_dim[4] = {kMmaN / 4, kMmaK, 2, kStageK / kMmaK};
   const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
   driver_check(cuTensorMapEncodeTiled(map,
                                       CU_TENSOR_MAP_DATA_TYPE_UINT32,
@@ -538,10 +587,10 @@ void encode_packed_tile_tma_map(CUtensorMap* map, void* base, uint64_t tiles) {
                                       box_dim,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
-                                      CU_TENSOR_MAP_SWIZZLE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_128B,
                                       CU_TENSOR_MAP_L2_PROMOTION_NONE,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
-               "cuTensorMapEncodeTiled(packed_tile)");
+               "cuTensorMapEncodeTiled(b_row_major_sw128_k16)");
 }
 
 std::vector<int> parse_sizes(const char* s) {
@@ -667,10 +716,8 @@ CaseResult run_case(int size, int warmup, int iters) {
   CUDA_CHECK(cudaDeviceSynchronize());
 
   CUtensorMap a_map{}, b_map{};
-  encode_packed_tile_tma_map(&a_map, d_a,
-                             static_cast<uint64_t>(mtile) * ktiles);
-  encode_packed_tile_tma_map(&b_map, d_b,
-                             static_cast<uint64_t>(ktiles) * ntile);
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
 
   CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -754,17 +801,6 @@ uint32_t pack_bf16_pair_host(uint16_t lo, uint16_t hi) {
   return static_cast<uint32_t>(lo) | (static_cast<uint32_t>(hi) << 16);
 }
 
-int atom_word_offset_128x64(int row, int col_pair) {
-  const int k16_atom = col_pair >> 3;
-  const int pair_in_atom = col_pair & 7;
-  const int row_group8 = row >> 3;
-  const int row_in8 = row & 7;
-  const int chunk16 = pair_in_atom >> 2;
-  const int word_in_chunk = pair_in_atom & 3;
-  return k16_atom * kMmaAtomWords + row_group8 * 64 + chunk16 * 32 +
-         row_in8 * 4 + word_in_chunk;
-}
-
 float validation_a_value(bool use_ones, int row, int col) {
   if (use_ones) return 1.0f;
   return (static_cast<float>((row % 17) - 8) * 0.015625f) +
@@ -803,10 +839,6 @@ ValidateResult run_validation(int size, const char* pattern) {
   std::vector<float> b_ref(static_cast<size_t>(k) * n);
   const bool use_ones = std::strcmp(pattern, "ones") == 0;
   for (int row = 0; row < m; ++row) {
-    const int tile_m = row / kCtaM;
-    const int row_in_cta = row - tile_m * kCtaM;
-    const int half = row_in_cta / kMmaM;
-    const int row_in_half = row_in_cta - half * kMmaM;
     for (int col = 0; col < k; col += 2) {
       const float lo_value = validation_a_value(use_ones, row, col);
       const float hi_value = validation_a_value(use_ones, row, col + 1);
@@ -815,36 +847,20 @@ ValidateResult run_validation(int size, const char* pattern) {
       a_ref[static_cast<size_t>(row) * k + col] = bf16_bits_to_float_host(lo_bits);
       a_ref[static_cast<size_t>(row) * k + col + 1] =
           bf16_bits_to_float_host(hi_bits);
-
-      const int ktile = col / kStageK;
-      const int col_pair = (col - ktile * kStageK) / 2;
-      const size_t tile_offset =
-          (static_cast<size_t>(tile_m) * ktiles + ktile) * kPackedTileWords;
-      h_a[tile_offset + half * kHalfTileWords +
-          atom_word_offset_128x64(row_in_half, col_pair)] =
+      h_a[static_cast<size_t>(row) * (k / 2) + col / 2] =
           pack_bf16_pair_host(lo_bits, hi_bits);
     }
   }
-  for (int kk = 0; kk < k; kk += 2) {
-    const int ktile = kk / kStageK;
-    const int k_pair = (kk - ktile * kStageK) / 2;
-    for (int col = 0; col < n; ++col) {
-      const float lo_value = validation_b_value(use_ones, kk, col);
-      const float hi_value = validation_b_value(use_ones, kk + 1, col);
+  for (int row = 0; row < k; ++row) {
+    for (int col = 0; col < n; col += 2) {
+      const float lo_value = validation_b_value(use_ones, row, col);
+      const float hi_value = validation_b_value(use_ones, row, col + 1);
       const uint16_t lo_bits = float_to_bf16_bits_host(lo_value);
       const uint16_t hi_bits = float_to_bf16_bits_host(hi_value);
-      b_ref[static_cast<size_t>(kk) * n + col] = bf16_bits_to_float_host(lo_bits);
-      b_ref[static_cast<size_t>(kk + 1) * n + col] =
+      b_ref[static_cast<size_t>(row) * n + col] = bf16_bits_to_float_host(lo_bits);
+      b_ref[static_cast<size_t>(row) * n + col + 1] =
           bf16_bits_to_float_host(hi_bits);
-
-      const int tile_n = col / kCtaN;
-      const int col_in_cta = col - tile_n * kCtaN;
-      const int half = col_in_cta / kMmaN;
-      const int row_in_half = col_in_cta - half * kMmaN;
-      const size_t tile_offset =
-          (static_cast<size_t>(ktile) * ntile + tile_n) * kPackedTileWords;
-      h_b[tile_offset + half * kHalfTileWords +
-          atom_word_offset_128x64(row_in_half, k_pair)] =
+      h_b[static_cast<size_t>(row) * (n / 2) + col / 2] =
           pack_bf16_pair_host(lo_bits, hi_bits);
     }
   }
@@ -865,10 +881,8 @@ ValidateResult run_validation(int size, const char* pattern) {
   CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
 
   CUtensorMap a_map{}, b_map{};
-  encode_packed_tile_tma_map(&a_map, d_a,
-                             static_cast<uint64_t>(mtile) * ktiles);
-  encode_packed_tile_tma_map(&b_map, d_b,
-                             static_cast<uint64_t>(ktiles) * ntile);
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
   CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
@@ -960,7 +974,7 @@ int main(int argc, char** argv) {
 
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
               args.device, prop.name, prop.major, prop.minor, kDynamicSmemBytes);
-  std::printf("mode=bf16_tcgen05_compute_sink layout=atom_packed "
+  std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d\n",
               kCtaM, kCtaN, kStageK, kStages);
 
