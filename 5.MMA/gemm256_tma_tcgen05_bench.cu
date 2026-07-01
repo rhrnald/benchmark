@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 
+#ifndef GEMM_CLOCK_TRACE
+#define GEMM_CLOCK_TRACE 0
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                          \
     cudaError_t err__ = (stmt);                                                 \
@@ -53,6 +57,16 @@ static constexpr int kStageBytes = kStageWords * static_cast<int>(sizeof(uint32_
 static constexpr int kDynamicSmemBytes = kStages * kStageBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
+[[maybe_unused]] static constexpr int kTraceSlotsPerIter = 4;
+
+enum TraceStage {
+  kTraceNone = 0,
+  kTraceTmaIssue = 1,
+  kTraceTmaWait = 2,
+  kTraceMmaIssue = 3,
+  kTraceMmaWait = 4,
+  kTraceDrain = 5,
+};
 
 struct Args {
   int device = 0;
@@ -63,6 +77,18 @@ struct Args {
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
+  bool clock_trace = false;
+  int clock_trace_start = 56;
+  int clock_trace_iters = 8;
+  const char* trace_csv = "gemm256_tma_tcgen05_trace.csv";
+};
+
+struct ClockTraceRecord {
+  int stage = 0;
+  int iter = 0;
+  int warp = 0;
+  unsigned long long start = 0;
+  unsigned long long end = 0;
 };
 
 __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
@@ -71,6 +97,75 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
                : "=r"(addr)
                : "l"(ptr));
   return addr;
+}
+
+__device__ __forceinline__ void write_trace_record(ClockTraceRecord* records,
+                                                   int trace_start,
+                                                   int trace_iters,
+                                                   unsigned long long trace_base,
+                                                   int stage,
+                                                   int iter,
+                                                   int slot,
+                                                   int warp,
+                                                   unsigned long long start,
+                                                   unsigned long long end) {
+#if GEMM_CLOCK_TRACE
+  if (records == nullptr || end <= start) return;
+  if (blockIdx.x != 0 || blockIdx.y != 0) return;
+  const int idx = iter - trace_start;
+  if (idx < 0 || idx >= trace_iters) return;
+  ClockTraceRecord r;
+  r.stage = stage;
+  r.iter = iter;
+  r.warp = warp;
+  r.start = start - trace_base;
+  r.end = end - trace_base;
+  records[idx * kTraceSlotsPerIter + slot] = r;
+#else
+  (void)records;
+  (void)trace_start;
+  (void)trace_iters;
+  (void)trace_base;
+  (void)stage;
+  (void)iter;
+  (void)slot;
+  (void)warp;
+  (void)start;
+  (void)end;
+#endif
+}
+
+__device__ __forceinline__ void write_trace_extra_record(
+    ClockTraceRecord* records,
+    int trace_iters,
+    unsigned long long trace_base,
+    int stage,
+    int iter,
+    int extra_slot,
+    int warp,
+    unsigned long long start,
+    unsigned long long end) {
+#if GEMM_CLOCK_TRACE
+  if (records == nullptr || end <= start) return;
+  if (blockIdx.x != 0 || blockIdx.y != 0) return;
+  ClockTraceRecord r;
+  r.stage = stage;
+  r.iter = iter;
+  r.warp = warp;
+  r.start = start - trace_base;
+  r.end = end - trace_base;
+  records[trace_iters * kTraceSlotsPerIter + extra_slot] = r;
+#else
+  (void)records;
+  (void)trace_iters;
+  (void)trace_base;
+  (void)stage;
+  (void)iter;
+  (void)extra_slot;
+  (void)warp;
+  (void)start;
+  (void)end;
+#endif
 }
 
 __host__ __device__ __forceinline__ uint64_t make_sw128_major_k_smem_desc(
@@ -384,9 +479,15 @@ __device__ __forceinline__ void issue_stage_tma(const CUtensorMap* a_map,
                                                 uint64_t* ready,
                                                 int tile_m,
                                                 int tile_n,
-                                                int ktile) {
+                                                int ktile,
+                                                ClockTraceRecord* clock_trace,
+                                                int clock_trace_start,
+                                                int clock_trace_iters,
+                                                unsigned long long trace_base) {
   uint32_t* a_smem = stage_smem;
   uint32_t* b_smem = stage_smem + kAStageWords;
+  const unsigned long long trace_start =
+      clock_trace != nullptr ? clock64() : 0ull;
   mbarrier_expect_tx(ready, kStageBytes);
   const int a_col_words = ktile * (kStageK / 2);
   const int a_row = tile_m * kCtaM;
@@ -396,6 +497,11 @@ __device__ __forceinline__ void issue_stage_tma(const CUtensorMap* a_map,
   tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
   tma_load_4d(b_map, smem_ptr_u32(b_smem + kHalfTileWords), ready,
               b_col_words + (kMmaN / 2), 0, 0, b_k16);
+  const unsigned long long trace_end =
+      clock_trace != nullptr ? clock64() : 0ull;
+  write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                     trace_base, kTraceTmaIssue, ktile, 0, 0, trace_start,
+                     trace_end);
 }
 
 __global__ __launch_bounds__(kThreads, 1)
@@ -404,7 +510,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                                 uint32_t* __restrict__ sink,
                                 float* __restrict__ out,
                                 int out_ld,
-                                int ktiles) {
+                                int ktiles,
+                                ClockTraceRecord* __restrict__ clock_trace,
+                                int clock_trace_start,
+                                int clock_trace_iters) {
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)a_map;
   (void)b_map;
@@ -412,6 +521,9 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   (void)out;
   (void)out_ld;
   (void)ktiles;
+  (void)clock_trace;
+  (void)clock_trace_start;
+  (void)clock_trace_iters;
 #else
   extern __shared__ uint32_t smem_raw[];
   const uintptr_t smem_addr =
@@ -423,6 +535,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
+  __shared__ unsigned long long trace_base_shared;
 
   if (threadIdx.x == 0) {
 #pragma unroll
@@ -430,6 +543,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       mbarrier_init(&tma_ready[s], 1);
     }
     mbarrier_init(&mma_done, 1);
+    trace_base_shared = clock64();
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
   __syncthreads();
@@ -460,7 +574,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     const int prefetch = min(kStages, ktiles);
     for (int kt = 0; kt < prefetch; ++kt) {
       issue_stage_tma(&a_map, &b_map, smem + kt * kStageWords,
-                      &tma_ready[kt], tile_m, tile_n, kt);
+                      &tma_ready[kt], tile_m, tile_n, kt, clock_trace,
+                      clock_trace_start, clock_trace_iters, trace_base_shared);
     }
   }
 
@@ -471,10 +586,21 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     uint32_t* a_smem = stage_smem;
     uint32_t* b_smem = stage_smem + kAStageWords;
 
+    const unsigned long long tma_wait_start =
+        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
     mbarrier_wait(&tma_ready[stage], tma_phase);
+    const unsigned long long tma_wait_end =
+        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
+    if (threadIdx.x == 0) {
+      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                         trace_base_shared, kTraceTmaWait, kt, 1, 0,
+                         tma_wait_start, tma_wait_end);
+    }
     __syncthreads();
 
     if (threadIdx.x == 0) {
+      const unsigned long long mma_issue_start =
+          clock_trace != nullptr ? clock64() : 0ull;
 #pragma unroll
       for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
         const uint32_t a0 = smem_ptr_u32(a_smem);
@@ -493,20 +619,44 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         tcgen05_mma_bf16_ss(c_taddr[3], a1_desc, b1_desc, idesc, input_d);
       }
       tcgen05_commit(&mma_done);
+      const unsigned long long mma_issue_end =
+          clock_trace != nullptr ? clock64() : 0ull;
+      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                         trace_base_shared, kTraceMmaIssue, kt, 2, 0,
+                         mma_issue_start, mma_issue_end);
     }
+    const unsigned long long mma_wait_start =
+        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
     mbarrier_wait(&mma_done, static_cast<uint32_t>(kt & 1));
+    const unsigned long long mma_wait_end =
+        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
+    if (threadIdx.x == 0) {
+      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                         trace_base_shared, kTraceMmaWait, kt, 3, 0,
+                         mma_wait_start, mma_wait_end);
+    }
     __syncthreads();
 
     const int next = kt + kStages;
     if (threadIdx.x == 0 && next < ktiles) {
       issue_stage_tma(&a_map, &b_map, stage_smem, &tma_ready[stage],
-                      tile_m, tile_n, next);
+                      tile_m, tile_n, next, clock_trace, clock_trace_start,
+                      clock_trace_iters, trace_base_shared);
     }
   }
 
   uint32_t acc = static_cast<uint32_t>(threadIdx.x + 0x9e3779b9u);
   if (warp_id < kWarps) {
+    const unsigned long long drain_start =
+        lane0 && clock_trace != nullptr ? clock64() : 0ull;
     acc ^= consume_128x128(c_taddr[warp_id]);
+    const unsigned long long drain_end =
+        lane0 && clock_trace != nullptr ? clock64() : 0ull;
+    if (lane0) {
+      write_trace_extra_record(clock_trace, clock_trace_iters, trace_base_shared,
+                               kTraceDrain, ktiles, warp_id, warp_id,
+                               drain_start, drain_end);
+    }
     if (lane0) warp_sinks[warp_id] = acc;
   }
   __syncthreads();
@@ -613,7 +763,9 @@ std::vector<int> parse_sizes(const char* s) {
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
               "[--warmup W] [--iters I] [--csv PATH] "
-              "[--validate] [--validate-size N] [--validate-pattern pattern|ones]\n",
+              "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
+              "[--clock-trace] [--clock-trace-start N] "
+              "[--clock-trace-iters N] [--trace-csv PATH]\n",
               argv0);
 }
 
@@ -644,6 +796,14 @@ Args parse_args(int argc, char** argv) {
       args.validate_size = std::atoi(need_arg("--validate-size"));
     } else if (std::strcmp(argv[i], "--validate-pattern") == 0) {
       args.validate_pattern = need_arg("--validate-pattern");
+    } else if (std::strcmp(argv[i], "--clock-trace") == 0) {
+      args.clock_trace = true;
+    } else if (std::strcmp(argv[i], "--clock-trace-start") == 0) {
+      args.clock_trace_start = std::atoi(need_arg("--clock-trace-start"));
+    } else if (std::strcmp(argv[i], "--clock-trace-iters") == 0) {
+      args.clock_trace_iters = std::atoi(need_arg("--clock-trace-iters"));
+    } else if (std::strcmp(argv[i], "--trace-csv") == 0) {
+      args.trace_csv = need_arg("--trace-csv");
     } else if (std::strcmp(argv[i], "--help") == 0) {
       usage(argv[0]);
       std::exit(EXIT_SUCCESS);
@@ -665,6 +825,10 @@ Args parse_args(int argc, char** argv) {
   if (std::strcmp(args.validate_pattern, "pattern") != 0 &&
       std::strcmp(args.validate_pattern, "ones") != 0) {
     std::fprintf(stderr, "validate pattern must be 'pattern' or 'ones'\n");
+    std::exit(EXIT_FAILURE);
+  }
+  if (args.clock_trace_start < 0 || args.clock_trace_iters <= 0) {
+    std::fprintf(stderr, "clock trace start must be >= 0 and iters > 0\n");
     std::exit(EXIT_FAILURE);
   }
   return args;
@@ -729,7 +893,8 @@ CaseResult run_case(int size, int warmup, int iters) {
   for (int i = 0; i < warmup; ++i) {
     gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
                                                                    d_sink, nullptr,
-                                                                   0, ktiles);
+                                                                   0, ktiles,
+                                                                   nullptr, 0, 0);
     CUDA_CHECK(cudaGetLastError());
   }
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -742,7 +907,8 @@ CaseResult run_case(int size, int warmup, int iters) {
   for (int i = 0; i < iters; ++i) {
     gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
                                                                    d_sink, nullptr,
-                                                                   0, ktiles);
+                                                                   0, ktiles,
+                                                                   nullptr, 0, 0);
     CUDA_CHECK(cudaGetLastError());
   }
   CUDA_CHECK(cudaEventRecord(stop));
@@ -891,7 +1057,8 @@ ValidateResult run_validation(int size, const char* pattern) {
   dim3 block(kThreads, 1, 1);
   gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
                                                                  d_sink, d_c, n,
-                                                                 ktiles);
+                                                                 ktiles, nullptr,
+                                                                 0, 0);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -934,6 +1101,133 @@ ValidateResult run_validation(int size, const char* pattern) {
   return result;
 }
 
+#if GEMM_CLOCK_TRACE
+const char* trace_stage_name(int stage) {
+  switch (stage) {
+    case kTraceTmaIssue:
+      return "tma_issue";
+    case kTraceTmaWait:
+      return "tma_wait";
+    case kTraceMmaIssue:
+      return "mma_issue";
+    case kTraceMmaWait:
+      return "mma_wait";
+    case kTraceDrain:
+      return "tmem_drain";
+    default:
+      return "unknown";
+  }
+}
+
+int trace_record_count(int trace_iters) {
+  return trace_iters * kTraceSlotsPerIter + kWarps;
+}
+
+void write_trace_csv(const char* path,
+                     int size,
+                     int ktiles,
+                     int trace_start,
+                     int trace_iters,
+                     const std::vector<ClockTraceRecord>& records) {
+  FILE* csv = std::fopen(path, "w");
+  if (!csv) {
+    std::perror(path);
+    std::exit(EXIT_FAILURE);
+  }
+  std::fprintf(csv, "size,ktiles,trace_start,trace_iters,stage,iter,warp,start,end,cycles\n");
+  for (const ClockTraceRecord& r : records) {
+    if (r.stage == kTraceNone || r.end <= r.start) continue;
+    std::fprintf(csv, "%d,%d,%d,%d,%s,%d,%d,%llu,%llu,%llu\n", size, ktiles,
+                 trace_start, trace_iters, trace_stage_name(r.stage), r.iter,
+                 r.warp, r.start, r.end, r.end - r.start);
+  }
+  std::fclose(csv);
+}
+
+void run_trace_case(const Args& args) {
+  const int size = args.sizes.front();
+  if (size % kCtaM != 0 || size % kCtaN != 0 || size % kStageK != 0) {
+    std::fprintf(stderr, "trace size must be a multiple of 256 and 64; got %d\n",
+                 size);
+    std::exit(EXIT_FAILURE);
+  }
+
+  const int m = size;
+  const int n = size;
+  const int k = size;
+  const int mtile = m / kCtaM;
+  const int ntile = n / kCtaN;
+  const int ktiles = k / kStageK;
+  if (args.clock_trace_start >= ktiles) {
+    std::fprintf(stderr,
+                 "clock trace start must be < ktiles; start=%d ktiles=%d\n",
+                 args.clock_trace_start, ktiles);
+    std::exit(EXIT_FAILURE);
+  }
+  const int trace_iters =
+      std::min(args.clock_trace_iters, ktiles - args.clock_trace_start);
+  const int ctas = mtile * ntile;
+  const size_t a_words = static_cast<size_t>(m) * k / 2;
+  const size_t b_words = static_cast<size_t>(k) * n / 2;
+  const int records_count = trace_record_count(trace_iters);
+
+  uint32_t* d_a = nullptr;
+  uint32_t* d_b = nullptr;
+  uint32_t* d_sink = nullptr;
+  ClockTraceRecord* d_trace = nullptr;
+  CUDA_CHECK(cudaMalloc(&d_a, a_words * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_b, b_words * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_sink, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_trace,
+                        static_cast<size_t>(records_count) *
+                            sizeof(ClockTraceRecord)));
+  CUDA_CHECK(cudaMemset(d_a, 0x3f, a_words * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_b, 0x11, b_words * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_trace, 0,
+                        static_cast<size_t>(records_count) *
+                            sizeof(ClockTraceRecord)));
+
+  CUtensorMap a_map{}, b_map{};
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel,
+                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                  kDynamicSmemBytes));
+
+  dim3 grid(ntile, mtile, 1);
+  dim3 block(kThreads, 1, 1);
+  for (int i = 0; i < args.warmup; ++i) {
+    gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(
+        a_map, b_map, d_sink, nullptr, 0, ktiles, nullptr, 0, 0);
+    CUDA_CHECK(cudaGetLastError());
+  }
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(
+      a_map, b_map, d_sink, nullptr, 0, ktiles, d_trace,
+      args.clock_trace_start, trace_iters);
+  CUDA_CHECK(cudaGetLastError());
+  CUDA_CHECK(cudaDeviceSynchronize());
+
+  std::vector<ClockTraceRecord> h_trace(records_count);
+  CUDA_CHECK(cudaMemcpy(h_trace.data(), d_trace,
+                        static_cast<size_t>(records_count) *
+                            sizeof(ClockTraceRecord),
+                        cudaMemcpyDeviceToHost));
+  write_trace_csv(args.trace_csv, size, ktiles, args.clock_trace_start,
+                  trace_iters, h_trace);
+  std::printf("trace_csv=%s size=%d ktiles=%d start=%d iters=%d records=%d\n",
+              args.trace_csv, size, ktiles, args.clock_trace_start,
+              trace_iters, records_count);
+
+  CUDA_CHECK(cudaFree(d_a));
+  CUDA_CHECK(cudaFree(d_b));
+  CUDA_CHECK(cudaFree(d_sink));
+  CUDA_CHECK(cudaFree(d_trace));
+}
+#endif
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -948,6 +1242,17 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "This benchmark requires SM100+; got sm_%d%d\n",
                  prop.major, prop.minor);
     return 77;
+  }
+
+  if (args.clock_trace) {
+#if !GEMM_CLOCK_TRACE
+    std::fprintf(stderr,
+                 "--clock-trace requires compiling with -DGEMM_CLOCK_TRACE=1\n");
+    return 77;
+#else
+    run_trace_case(args);
+    return 0;
+#endif
   }
 
   if (args.validate) {

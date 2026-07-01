@@ -52,6 +52,8 @@ venv/
 /build_*/
 /blackwell_pipeline_overlap_bench
 /5.MMA/gemm256_tma_tcgen05_bench
+/5.MMA/gemm256_tma_tcgen05_trace
+/5.MMA/log/
 /mma_four_warpgroups_consume_bench
 /n.mma/cublas_gemm_bench
 /qk_two_producer_consume_pipeline

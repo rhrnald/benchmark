@@ -50,3 +50,19 @@ Or directly:
 ./gemm256_tma_tcgen05_bench --validate --validate-size 256 --validate-pattern pattern
 ./gemm256_tma_tcgen05_bench --validate --validate-size 512 --validate-pattern pattern
 ```
+
+## Trace
+
+`make plot` builds a trace-enabled binary with `-DGEMM_CLOCK_TRACE=1`, captures
+`clock64()` ranges for CTA `(0,0)`, and renders a pipeline timeline SVG:
+
+```bash
+make plot TRACE_SIZE=4096 TRACE_START=56 TRACE_ITERS=8
+```
+
+Default outputs:
+
+```text
+log/gemm256_trace.csv
+log/gemm256_trace.svg
+```
