@@ -5,10 +5,14 @@ import html
 
 
 LANES = [
-    ("tma_issue", 0, "TMA producer w0: A[256x64] + B[64x256]"),
-    ("tma_wait", 1, "TMA ready wait w1"),
-    ("mma_issue", 1, "MMA issue w1: C00/C01/C10/C11"),
-    ("mma_wait", 1, "MMA completion wait w1"),
+    ("tma_issue", 0, "TMA producer w0: A[256x64] + B0[64x128]"),
+    ("tma_issue", 1, "TMA producer w1: B1[64x128]"),
+    ("tma_wait", 2, "pipe0 ready wait w2: A + B0"),
+    ("tma_wait", 3, "pipe1 ready wait w3: A + B1"),
+    ("mma_issue", 2, "MMA pipe0 w2: C00/C10"),
+    ("mma_issue", 3, "MMA pipe1 w3: C01/C11"),
+    ("mma_wait", 2, "MMA pipe0 completion wait w2"),
+    ("mma_wait", 3, "MMA pipe1 completion wait w3"),
     ("tmem_drain", 0, "TMEM drain w0: C00"),
     ("tmem_drain", 1, "TMEM drain w1: C01"),
     ("tmem_drain", 2, "TMEM drain w2: C10"),
@@ -58,6 +62,14 @@ def stage_slot(iteration):
     return iteration % 3
 
 
+def pipe_for(row):
+    if row["stage"] == "tma_issue":
+        return row["warp"]
+    if row["stage"] in ("tma_wait", "mma_issue", "mma_wait"):
+        return row["warp"] - 2
+    return row["warp"]
+
+
 def lane_key(row):
     return (row["stage"], row["warp"])
 
@@ -72,14 +84,15 @@ def lane_name(key):
 def short_label(row):
     kt = row["iter"]
     s = stage_slot(kt)
+    pipe = pipe_for(row)
     if row["stage"] == "tma_issue":
-        return f"TMA kt{kt} s{s} A+B"
+        return f"TMA kt{kt} s{s} A+B0" if pipe == 0 else f"TMA kt{kt} s{s} B1"
     if row["stage"] == "tma_wait":
-        return f"wait TMA kt{kt}"
+        return f"wait p{pipe} kt{kt}"
     if row["stage"] == "mma_issue":
-        return f"MMA kt{kt} s{s} 4xC"
+        return f"MMA p{pipe} kt{kt}"
     if row["stage"] == "mma_wait":
-        return f"wait MMA kt{kt}"
+        return f"wait MMA p{pipe} kt{kt}"
     if row["stage"] == "tmem_drain":
         tile = ("C00", "C01", "C10", "C11")[row["warp"]]
         return f"drain {tile}"
@@ -89,17 +102,21 @@ def short_label(row):
 def long_label(row):
     kt = row["iter"]
     s = stage_slot(kt)
+    pipe = pipe_for(row)
     if row["stage"] == "tma_issue":
-        return f"kt{kt} stage{s}: issue TMA A[256x64] + B[64x256]"
+        if pipe == 0:
+            return f"kt{kt} stage{s}: issue TMA A[256x64] + B0[64x128]"
+        return f"kt{kt} stage{s}: issue TMA B1[64x128]"
     if row["stage"] == "tma_wait":
-        return f"kt{kt} stage{s}: wait until TMA data is visible in shared memory"
+        return f"kt{kt} stage{s}: pipe{pipe} waits until A and B{pipe} are visible in shared memory"
     if row["stage"] == "mma_issue":
         return (
-            f"kt{kt} stage{s}: issue C00/C01/C10/C11, "
-            "each logical 128x128x64 MMA group"
+            f"kt{kt} stage{s}: pipe{pipe} issues "
+            f"{'C00/C10' if pipe == 0 else 'C01/C11'}, "
+            "two logical 128x128x64 MMA groups"
         )
     if row["stage"] == "mma_wait":
-        return f"kt{kt} stage{s}: wait until tcgen05 MMA group completes"
+        return f"kt{kt} stage{s}: wait until pipe{pipe} tcgen05 MMA group completes"
     if row["stage"] == "tmem_drain":
         tile = ("C00", "C01", "C10", "C11")[row["warp"]]
         return f"final TMEM drain for {tile}"
@@ -109,9 +126,9 @@ def long_label(row):
 def marker_text(kind, row):
     kt = row["iter"]
     if kind == "tma_done":
-        return f"TMA done kt{kt}"
+        return f"p{pipe_for(row)} TMA done kt{kt}"
     if kind == "mma_done":
-        return f"MMA done kt{kt}"
+        return f"p{pipe_for(row)} MMA done kt{kt}"
     return f"done kt{kt}"
 
 
@@ -179,7 +196,7 @@ def write_svg(path, rows, title):
         (
             f'<text class="subtitle" x="{label_left}" y="66">'
             'TMA done markers use TMA wait end; MMA done markers use MMA wait end. '
-            'Drain bars are clamped to start no earlier than the last MMA done marker.</text>'
+            'pipe0 covers C00/C10 and pipe1 covers C01/C11.</text>'
         ),
     ]
 
@@ -259,12 +276,10 @@ def write_svg(path, rows, title):
             f'{html.escape(text)}</text>'
         )
 
-    tma_top = y_for(("tma_issue", 0)) - 4
-    tma_bottom = y_for(("tma_wait", 1)) + bar_h + 6
-    mma_top = y_for(("mma_issue", 1)) - 4
-    mma_bottom = y_for(("mma_wait", 1)) + bar_h + 6
-
     for idx, row in enumerate(sorted((r for r in rows if r["stage"] == "tma_wait"), key=lambda r: r["iter"])):
+        pipe = pipe_for(row)
+        tma_top = y_for(("tma_issue", pipe)) - 4
+        tma_bottom = y_for(("tma_wait", row["warp"])) + bar_h + 6
         vertical_marker(
             row["end"],
             tma_top,
@@ -275,6 +290,8 @@ def write_svg(path, rows, title):
         )
 
     for idx, row in enumerate(sorted((r for r in rows if r["stage"] == "mma_wait"), key=lambda r: r["iter"])):
+        mma_top = y_for(("mma_issue", row["warp"])) - 4
+        mma_bottom = y_for(("mma_wait", row["warp"])) + bar_h + 6
         vertical_marker(
             row["end"],
             mma_top,

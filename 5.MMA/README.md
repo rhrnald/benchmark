@@ -8,17 +8,19 @@ Current kernel shape:
 - The tile is split into four `128 x 128` accumulator tiles in TMEM.
 - Each K stage loads:
   - A: `256 x 64` BF16 through TMA.
-  - B: `64 x 256` BF16 through TMA.
+  - B: two independent `64 x 128` BF16 pipe tiles through TMA.
 - Shared memory is partitioned as three `64 KiB` stages:
   - `A_stage`: `256 x 64 x 2B = 32 KiB`
-  - `B_stage`: `64 x 256 x 2B = 32 KiB`
+  - `B_stage`: two `64 x 128 x 2B = 16 KiB` pipe buffers
   - total triple buffer: `192 KiB`
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
-- The mainloop is split into a TMA producer and an MMA consumer:
-  - warp 0 lane 0 issues TMA into the 3-stage shared-memory ring.
-  - warp 1 lane 0 waits for TMA completion and issues the MMA group.
-  - stage reuse is fenced by the `mma_done` barrier from three K stages earlier.
+- The mainloop uses two N-direction MMA pipes:
+  - warp 0 lane 0 issues shared A TMA plus B pipe 0.
+  - warp 1 lane 0 issues B pipe 1.
+  - warp 2 lane 0 issues MMA for C00/C10.
+  - warp 3 lane 0 issues MMA for C01/C11.
+  - stage reuse is fenced by each pipe's `mma_done` barrier from three K stages earlier.
 - A and B global inputs are row-major packed BF16. TMA uses `SWIZZLE_128B`
   layouts matching the attention path:
   - A is loaded as one logical `256 x 64` row-major tile into `major_k`
