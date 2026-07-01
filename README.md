@@ -20,3 +20,4 @@ TCGEN05, TMA, and MMA pipeline behavior.
   pipeline experiment.
 - `3-2.TMA_MMA_LD_PIPELINE/`: TMA, MMA, and load pipeline overlap experiment.
 - `4.TMA_MULTICAST/`: TMA multicast microbenchmark.
+- `5.MMA/`: Prototype 256x256 CTA-tile GEMM with TMA and TCGEN05 MMA.
