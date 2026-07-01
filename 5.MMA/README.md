@@ -15,6 +15,10 @@ Current kernel shape:
   - total triple buffer: `192 KiB`
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
+- The mainloop is split into a TMA producer and an MMA consumer:
+  - warp 0 lane 0 issues TMA into the 3-stage shared-memory ring.
+  - warp 1 lane 0 waits for TMA completion and issues the MMA group.
+  - stage reuse is fenced by the `mma_done` barrier from three K stages earlier.
 - A and B global inputs are row-major packed BF16. TMA uses `SWIZZLE_128B`
   layouts matching the attention path:
   - A is loaded as one logical `256 x 64` row-major tile into `major_k`

@@ -570,35 +570,35 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   };
   const uint32_t idesc = make_bf16_idesc() | (1u << 16);
 
-  if (threadIdx.x == 0) {
-    const int prefetch = min(kStages, ktiles);
-    for (int kt = 0; kt < prefetch; ++kt) {
-      issue_stage_tma(&a_map, &b_map, smem + kt * kStageWords,
-                      &tma_ready[kt], tile_m, tile_n, kt, clock_trace,
+  if (warp_id == 0 && lane0) {
+    for (int kt = 0; kt < ktiles; ++kt) {
+      const int stage = kt % kStages;
+      if (kt >= kStages) {
+        mbarrier_wait(&mma_done, static_cast<uint32_t>((kt - kStages) & 1));
+      }
+      issue_stage_tma(&a_map, &b_map, smem + stage * kStageWords,
+                      &tma_ready[stage], tile_m, tile_n, kt, clock_trace,
                       clock_trace_start, clock_trace_iters, trace_base_shared);
     }
   }
 
-  for (int kt = 0; kt < ktiles; ++kt) {
-    const int stage = kt % kStages;
-    const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
-    uint32_t* stage_smem = smem + stage * kStageWords;
-    uint32_t* a_smem = stage_smem;
-    uint32_t* b_smem = stage_smem + kAStageWords;
+  if (warp_id == 1 && lane0) {
+    for (int kt = 0; kt < ktiles; ++kt) {
+      const int stage = kt % kStages;
+      const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
+      uint32_t* stage_smem = smem + stage * kStageWords;
+      uint32_t* a_smem = stage_smem;
+      uint32_t* b_smem = stage_smem + kAStageWords;
 
-    const unsigned long long tma_wait_start =
-        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
-    mbarrier_wait(&tma_ready[stage], tma_phase);
-    const unsigned long long tma_wait_end =
-        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
-    if (threadIdx.x == 0) {
+      const unsigned long long tma_wait_start =
+          clock_trace != nullptr ? clock64() : 0ull;
+      mbarrier_wait(&tma_ready[stage], tma_phase);
+      const unsigned long long tma_wait_end =
+          clock_trace != nullptr ? clock64() : 0ull;
       write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                         trace_base_shared, kTraceTmaWait, kt, 1, 0,
+                         trace_base_shared, kTraceTmaWait, kt, 1, 1,
                          tma_wait_start, tma_wait_end);
-    }
-    __syncthreads();
 
-    if (threadIdx.x == 0) {
       const unsigned long long mma_issue_start =
           clock_trace != nullptr ? clock64() : 0ull;
 #pragma unroll
@@ -622,28 +622,20 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       const unsigned long long mma_issue_end =
           clock_trace != nullptr ? clock64() : 0ull;
       write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                         trace_base_shared, kTraceMmaIssue, kt, 2, 0,
+                         trace_base_shared, kTraceMmaIssue, kt, 2, 1,
                          mma_issue_start, mma_issue_end);
-    }
-    const unsigned long long mma_wait_start =
-        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
-    mbarrier_wait(&mma_done, static_cast<uint32_t>(kt & 1));
-    const unsigned long long mma_wait_end =
-        threadIdx.x == 0 && clock_trace != nullptr ? clock64() : 0ull;
-    if (threadIdx.x == 0) {
+
+      const unsigned long long mma_wait_start =
+          clock_trace != nullptr ? clock64() : 0ull;
+      mbarrier_wait(&mma_done, static_cast<uint32_t>(kt & 1));
+      const unsigned long long mma_wait_end =
+          clock_trace != nullptr ? clock64() : 0ull;
       write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                         trace_base_shared, kTraceMmaWait, kt, 3, 0,
+                         trace_base_shared, kTraceMmaWait, kt, 3, 1,
                          mma_wait_start, mma_wait_end);
     }
-    __syncthreads();
-
-    const int next = kt + kStages;
-    if (threadIdx.x == 0 && next < ktiles) {
-      issue_stage_tma(&a_map, &b_map, stage_smem, &tma_ready[stage],
-                      tile_m, tile_n, next, clock_trace, clock_trace_start,
-                      clock_trace_iters, trace_base_shared);
-    }
   }
+  __syncthreads();
 
   uint32_t acc = static_cast<uint32_t>(threadIdx.x + 0x9e3779b9u);
   if (warp_id < kWarps) {

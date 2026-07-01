@@ -45,9 +45,8 @@ def read_rows(path):
 
 
 def lane_name(row):
-    if row["stage"] == "tmem_drain":
-        return f"{STAGE_ROWS[row['stage']]} w{row['warp']}"
-    return STAGE_ROWS.get(row["stage"], row["stage"])
+    label = STAGE_ROWS.get(row["stage"], row["stage"])
+    return f"{label} w{row['warp']}"
 
 
 def write_svg(path, rows, title):
@@ -56,8 +55,13 @@ def write_svg(path, rows, title):
 
     lanes = []
     seen = set()
-    for stage in ("tma_issue", "tma_wait", "mma_issue", "mma_wait"):
-        name = STAGE_ROWS[stage]
+    for stage, warp in (
+        ("tma_issue", 0),
+        ("tma_wait", 1),
+        ("mma_issue", 1),
+        ("mma_wait", 1),
+    ):
+        name = f"{STAGE_ROWS[stage]} w{warp}"
         lanes.append(name)
         seen.add(name)
     for warp in range(4):
