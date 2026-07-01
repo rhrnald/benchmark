@@ -1,4 +1,4 @@
-# 5.MMA
+# 5.GEMM
 
 Prototype Blackwell GEMM compute benchmark using TMA loads and `tcgen05.mma`.
 

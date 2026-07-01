@@ -343,7 +343,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--trace", required=True)
     p.add_argument("--svg", required=True)
-    p.add_argument("--title", default="5.MMA GEMM pipeline trace")
+    p.add_argument("--title", default="5.GEMM pipeline trace")
     args = p.parse_args()
     write_svg(args.svg, read_rows(args.trace), args.title)
     print(f"svg={args.svg}")

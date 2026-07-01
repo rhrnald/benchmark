@@ -1,4 +1,4 @@
-# n.mma
+# 6.cuBLAS
 
 cuBLAS GEMM throughput benchmark for NVIDIA tensor core paths.
 

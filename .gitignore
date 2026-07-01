@@ -51,11 +51,11 @@ venv/
 # Local benchmark executables emitted outside build/
 /build_*/
 /blackwell_pipeline_overlap_bench
-/5.MMA/gemm256_tma_tcgen05_bench
-/5.MMA/gemm256_tma_tcgen05_trace
-/5.MMA/log/
+/5.GEMM/gemm256_tma_tcgen05_bench
+/5.GEMM/gemm256_tma_tcgen05_trace
+/5.GEMM/log/
 /mma_four_warpgroups_consume_bench
-/n.mma/cublas_gemm_bench
+/6.cuBLAS/cublas_gemm_bench
 /qk_two_producer_consume_pipeline
 /qk_two_producer_consume_pipeline.default
 /qk_two_producer_consume_pipeline.r128

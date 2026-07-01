@@ -13,11 +13,11 @@ TCGEN05, TMA, and MMA pipeline behavior.
 - `0-3.TMA_SMEM_STORE_OVERLAP_TOY/`: TMA and shared-memory store overlap toy
   benchmark.
 - `1.mma/`: MMA throughput and scheduling microbenchmarks.
-- `n.mma/`: cuBLAS GEMM throughput benchmark.
 - `2.TMEM_LDST/`: TMEM load/store behavior microbenchmark.
 - `3.MMA_LD_PIPELINE/`: MMA and load pipeline overlap experiments.
 - `3-1.MMA_LD_PIPELINE_128KB/`: 128KB working-set variant of the MMA/load
   pipeline experiment.
 - `3-2.TMA_MMA_LD_PIPELINE/`: TMA, MMA, and load pipeline overlap experiment.
 - `4.TMA_MULTICAST/`: TMA multicast microbenchmark.
-- `5.MMA/`: Prototype 256x256 CTA-tile GEMM with TMA and TCGEN05 MMA.
+- `5.GEMM/`: Prototype 256x256 CTA-tile GEMM with TMA and TCGEN05 MMA.
+- `6.cuBLAS/`: cuBLAS GEMM throughput benchmark.

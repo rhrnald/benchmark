@@ -16,7 +16,7 @@ TRACE_START ?= 56
 TRACE_ITERS ?= 8
 TRACE_CSV ?= log/gemm256_trace.csv
 TRACE_SVG ?= log/gemm256_trace.svg
-TRACE_TITLE ?= 5.MMA GEMM pipeline trace size=$(TRACE_SIZE) start=$(TRACE_START) iters=$(TRACE_ITERS)
+TRACE_TITLE ?= 5.GEMM pipeline trace size=$(TRACE_SIZE) start=$(TRACE_START) iters=$(TRACE_ITERS)
 
 .PHONY: all build run plot clean
 
