@@ -56,6 +56,14 @@
 #define GEMM_CSTORE_CHUNK_N 128
 #endif
 
+#ifndef GEMM_CSTORE_VECTORIZE_SMEM
+#define GEMM_CSTORE_VECTORIZE_SMEM 1
+#endif
+
+#ifndef GEMM_CSTORE_SWIZZLE_128B
+#define GEMM_CSTORE_SWIZZLE_128B 0
+#endif
+
 #ifndef GEMM_TMA_A_L2_PROMOTION
 #define GEMM_TMA_A_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_NONE
 #endif
@@ -77,11 +85,11 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES 136
+#define GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES 128
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES 40
+#define GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES 32
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_MMA_PHASE_SHIFT_CYCLES
@@ -98,7 +106,11 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_TMA_C_L2_PROMOTION
-#define GEMM_TUNED_8K_TMA_C_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_L2_256B
+#define GEMM_TUNED_8K_TMA_C_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_NONE
+#endif
+
+#ifndef GEMM_TUNED_8K_CSTORE_SWIZZLE_128B
+#define GEMM_TUNED_8K_CSTORE_SWIZZLE_128B 1
 #endif
 
 #ifndef GEMM_TUNED_16K_GRID_SWIZZLE_M
@@ -123,6 +135,10 @@
   GEMM_TUNED_16K_PIPE1_PHASE_SHIFT_CYCLES
 #endif
 
+#ifndef GEMM_TUNED_16K_CSTORE_SWIZZLE_128B
+#define GEMM_TUNED_16K_CSTORE_SWIZZLE_128B GEMM_CSTORE_SWIZZLE_128B
+#endif
+
 #ifndef GEMM_TUNED_32K_GRID_SWIZZLE_M
 #define GEMM_TUNED_32K_GRID_SWIZZLE_M 12
 #endif
@@ -143,6 +159,10 @@
 #ifndef GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES
 #define GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES \
   GEMM_TUNED_32K_PIPE1_PHASE_SHIFT_CYCLES
+#endif
+
+#ifndef GEMM_TUNED_32K_CSTORE_SWIZZLE_128B
+#define GEMM_TUNED_32K_CSTORE_SWIZZLE_128B GEMM_CSTORE_SWIZZLE_128B
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
@@ -190,6 +210,8 @@ static constexpr int kStageBytes = kStageWords * static_cast<int>(sizeof(uint32_
 static constexpr int kMainloopSmemBytes = kStages * kStageBytes;
 static constexpr int kCStoreChunkM = 128;
 static constexpr int kCStoreChunkN = GEMM_CSTORE_CHUNK_N;
+static_assert(kCStoreChunkN % 32 == 0,
+              "GEMM_CSTORE_CHUNK_N must be a multiple of 32");
 static constexpr int kCStoreWarps = kCStoreChunkM / 32;
 static constexpr int kCStoreStageWords = kCStoreChunkM * kCStoreChunkN;
 static constexpr int kCStoreStageBytes =
@@ -225,6 +247,8 @@ static constexpr int kTuned8KTmaPhaseCycles =
     GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES;
 static constexpr int kTuned8KMmaPhaseCycles =
     GEMM_TUNED_8K_PIPE1_MMA_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned8KCStoreSwizzle128B =
+    GEMM_TUNED_8K_CSTORE_SWIZZLE_128B;
 static constexpr int kTuned16KGroupM = GEMM_TUNED_16K_GRID_SWIZZLE_M;
 static constexpr int kTuned16KGroupN = GEMM_TUNED_16K_GRID_SWIZZLE_N;
 static constexpr int kTuned16KPhaseCycles =
@@ -233,6 +257,8 @@ static constexpr int kTuned16KTmaPhaseCycles =
     GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES;
 static constexpr int kTuned16KMmaPhaseCycles =
     GEMM_TUNED_16K_PIPE1_MMA_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned16KCStoreSwizzle128B =
+    GEMM_TUNED_16K_CSTORE_SWIZZLE_128B;
 static constexpr int kTuned32KGroupM = GEMM_TUNED_32K_GRID_SWIZZLE_M;
 static constexpr int kTuned32KGroupN = GEMM_TUNED_32K_GRID_SWIZZLE_N;
 static constexpr int kTuned32KPhaseCycles =
@@ -241,6 +267,8 @@ static constexpr int kTuned32KTmaPhaseCycles =
     GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES;
 static constexpr int kTuned32KMmaPhaseCycles =
     GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned32KCStoreSwizzle128B =
+    GEMM_TUNED_32K_CSTORE_SWIZZLE_128B;
 static constexpr int kTuningTagGeneric = 0;
 static constexpr int kTuningTag8K = 8;
 static constexpr int kTuningTag16K = 16;
@@ -532,6 +560,29 @@ __device__ __forceinline__ void tma_store_2d(const CUtensorMap* map,
 #endif
 }
 
+__device__ __forceinline__ void tma_store_4d(const CUtensorMap* map,
+                                             uint32_t src_smem,
+                                             int c0,
+                                             int c1,
+                                             int c2,
+                                             int c3) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile(
+      "cp.async.bulk.tensor.4d.global.shared::cta.bulk_group"
+      " [%0, {%2, %3, %4, %5}], [%1];"
+      :
+      : "l"(map), "r"(src_smem), "r"(c0), "r"(c1), "r"(c2), "r"(c3)
+      : "memory");
+#else
+  (void)map;
+  (void)src_smem;
+  (void)c0;
+  (void)c1;
+  (void)c2;
+  (void)c3;
+#endif
+}
+
 __device__ __forceinline__ void tma_store_commit_group() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("cp.async.bulk.commit_group;" ::: "memory");
@@ -693,6 +744,32 @@ __device__ __forceinline__ uint32_t consume_128x128(uint32_t taddr) {
   return acc;
 }
 
+__host__ __device__ __forceinline__ int cstore_sw128_float_word_offset(
+    int row,
+    int col) {
+  const int col_block = col >> 5;
+  const int in_block = col & 31;
+  return col_block * (kCStoreChunkM * 32) + row * 32 +
+         (in_block ^ ((row & 7) << 2));
+}
+
+__device__ __forceinline__ void store_u32x4_smem(uint32_t* smem,
+                                                 int word_offset,
+                                                 uint32_t p0,
+                                                 uint32_t p1,
+                                                 uint32_t p2,
+                                                 uint32_t p3) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  reinterpret_cast<uint4*>(smem + word_offset)[0] =
+      make_uint4(p0, p1, p2, p3);
+#else
+  smem[word_offset + 0] = p0;
+  smem[word_offset + 1] = p1;
+  smem[word_offset + 2] = p2;
+  smem[word_offset + 3] = p3;
+#endif
+}
+
 __device__ __forceinline__ void store_128x128_float_tile(uint32_t src_taddr,
                                                          float* out,
                                                          int out_ld,
@@ -725,6 +802,7 @@ __device__ __forceinline__ void store_128x128_float_tile(uint32_t src_taddr,
 #endif
 }
 
+template <bool CStoreSwizzle128B>
 __device__ __forceinline__ void stage_float_c_chunk(
     const uint32_t (&c_taddr)[4],
     uint32_t* c_smem,
@@ -739,8 +817,7 @@ __device__ __forceinline__ void stage_float_c_chunk(
     uint32_t r[64];
     const int local_warp = warp_id - selected_warp_base;
     const uint32_t row_base = static_cast<uint32_t>(local_warp * 32);
-    float* dst = reinterpret_cast<float*>(c_smem) +
-                 (local_warp * 32 + lane) * kCStoreChunkN;
+    const int local_row = local_warp * 32 + lane;
 #pragma unroll
     for (int tile_n_part = 0; tile_n_part < kCStoreTilesPerChunkN;
          ++tile_n_part) {
@@ -753,11 +830,30 @@ __device__ __forceinline__ void stage_float_c_chunk(
             c_taddr[tile] + (row_base << 16) + col_base;
         tcgen05_ld_32x32b_x64(r, row_taddr);
         tcgen05_wait_ld();
-        float* dst_part =
-            dst + tile_n_part * kMmaN + load * 64;
+        const int col_offset = tile_n_part * kMmaN + load * 64;
+        if constexpr (CStoreSwizzle128B) {
+#pragma unroll
+          for (int i = 0; i < 64; i += 4) {
+            store_u32x4_smem(c_smem,
+                             cstore_sw128_float_word_offset(local_row,
+                                                            col_offset + i),
+                             r[i + 0], r[i + 1], r[i + 2], r[i + 3]);
+          }
+        } else {
+        uint32_t* dst_words = c_smem + local_row * kCStoreChunkN;
+#if GEMM_CSTORE_VECTORIZE_SMEM
+#pragma unroll
+        for (int i = 0; i < 64; i += 4) {
+          store_u32x4_smem(dst_words, col_offset + i, r[i + 0], r[i + 1],
+                           r[i + 2], r[i + 3]);
+        }
+#else
+        float* dst_part = reinterpret_cast<float*>(dst_words + col_offset);
 #pragma unroll
         for (int i = 0; i < 64; ++i) {
           dst_part[i] = __uint_as_float(r[i]);
+        }
+#endif
         }
       }
     }
@@ -770,6 +866,7 @@ __device__ __forceinline__ void stage_float_c_chunk(
 #endif
 }
 
+template <bool CStoreSwizzle128B>
 __device__ __forceinline__ void issue_float_c_chunk_tma(
     const uint32_t (&c_taddr)[4],
     const CUtensorMap* c_map,
@@ -779,12 +876,17 @@ __device__ __forceinline__ void issue_float_c_chunk_tma(
     int row_offset,
     int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  stage_float_c_chunk(c_taddr, c_smem, chunk_m, chunk_n);
+  stage_float_c_chunk<CStoreSwizzle128B>(c_taddr, c_smem, chunk_m, chunk_n);
   __syncthreads();
   tma_store_fence_shared();
   __syncthreads();
   if (threadIdx.x == 0) {
-    tma_store_2d(c_map, smem_ptr_u32(c_smem), col_offset, row_offset);
+    if constexpr (CStoreSwizzle128B) {
+      tma_store_4d(c_map, smem_ptr_u32(c_smem), 0, row_offset,
+                   col_offset / 32, 0);
+    } else {
+      tma_store_2d(c_map, smem_ptr_u32(c_smem), col_offset, row_offset);
+    }
   }
 #else
   (void)c_taddr;
@@ -797,6 +899,7 @@ __device__ __forceinline__ void issue_float_c_chunk_tma(
 #endif
 }
 
+template <bool CStoreSwizzle128B>
 __device__ __forceinline__ void store_256x256_float_tile_tma(
     const uint32_t (&c_taddr)[4],
     const CUtensorMap* c_map,
@@ -814,8 +917,8 @@ __device__ __forceinline__ void store_256x256_float_tile_tma(
       const int chunk_n = chunk - chunk_m * kCStoreChunksN;
       const int tile_row = row_offset + chunk_m * kCStoreChunkM;
       const int tile_col = col_offset + chunk_n * kCStoreChunkN;
-      issue_float_c_chunk_tma(c_taddr, c_map, tile_smem, chunk_m, chunk_n,
-                              tile_row, tile_col);
+      issue_float_c_chunk_tma<CStoreSwizzle128B>(
+          c_taddr, c_map, tile_smem, chunk_m, chunk_n, tile_row, tile_col);
     }
     if (threadIdx.x == 0) {
       tma_store_commit_group();
@@ -874,6 +977,7 @@ template <int GridSwizzle,
           int GroupN,
           int Pipe1TmaPhaseCycles,
           int Pipe1MmaPhaseCycles,
+          int CStoreSwizzle128B,
           int TuningTag>
 __global__ __launch_bounds__(kThreads, 1)
 void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
@@ -1115,8 +1219,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   } else if (out != nullptr && store_mode == kStoreTma) {
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
-    store_256x256_float_tile_tma(c_taddr, &c_map, c_store_smem,
-                                 global_row_base, global_col_base);
+    store_256x256_float_tile_tma<CStoreSwizzle128B != 0>(
+        c_taddr, &c_map, c_store_smem, global_row_base, global_col_base);
   }
   __syncthreads();
 
@@ -1194,7 +1298,32 @@ void encode_c_row_major_float_tma_map(CUtensorMap* map,
                                       void* base,
                                       uint64_t rows,
                                       uint64_t cols,
-                                      CUtensorMapL2promotion l2_promotion) {
+                                      CUtensorMapL2promotion l2_promotion,
+                                      bool swizzle_128b) {
+  if (swizzle_128b) {
+    const cuuint64_t global_dim[4] = {32, rows, cols / 32, 1};
+    const cuuint64_t global_stride[3] = {
+        cols * sizeof(float),
+        static_cast<cuuint64_t>(32) * sizeof(float),
+        rows * cols * sizeof(float)};
+    const cuuint32_t box_dim[4] = {32, kCStoreChunkM, kCStoreChunkN / 32, 1};
+    const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
+    driver_check(cuTensorMapEncodeTiled(map,
+                                        CU_TENSOR_MAP_DATA_TYPE_FLOAT32,
+                                        4,
+                                        base,
+                                        global_dim,
+                                        global_stride,
+                                        box_dim,
+                                        elem_stride,
+                                        CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                        CU_TENSOR_MAP_SWIZZLE_128B,
+                                        l2_promotion,
+                                        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+                 "cuTensorMapEncodeTiled(c_row_major_float_sw128)");
+    return;
+  }
+
   const cuuint64_t global_dim[2] = {cols, rows};
   const cuuint64_t global_stride[1] = {cols * sizeof(float)};
   const cuuint32_t box_dim[2] = {kCStoreChunkN, kCStoreChunkM};
@@ -1350,6 +1479,7 @@ struct GemmTuning {
   int pipe1_phase_cycles = GEMM_PIPE1_PHASE_SHIFT_CYCLES;
   int pipe1_tma_phase_cycles = GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES;
   int pipe1_mma_phase_cycles = GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES;
+  int cstore_swizzle_128b = GEMM_CSTORE_SWIZZLE_128B;
   int tag = kTuningTagGeneric;
 };
 
@@ -1371,6 +1501,7 @@ GemmTuning select_gemm_tuning(int mtile, int ntile, int ktiles) {
   tuning.pipe1_phase_cycles = GEMM_PIPE1_PHASE_SHIFT_CYCLES;
   tuning.pipe1_tma_phase_cycles = GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES;
   tuning.pipe1_mma_phase_cycles = GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES;
+  tuning.cstore_swizzle_128b = GEMM_CSTORE_SWIZZLE_128B;
   if (tuning.grid_swizzle > 0) {
     if (mtile == 8192 / kCtaM && ntile == 8192 / kCtaN &&
         ktiles == 8192 / kStageK) {
@@ -1379,6 +1510,7 @@ GemmTuning select_gemm_tuning(int mtile, int ntile, int ktiles) {
       tuning.pipe1_phase_cycles = kTuned8KPhaseCycles;
       tuning.pipe1_tma_phase_cycles = kTuned8KTmaPhaseCycles;
       tuning.pipe1_mma_phase_cycles = kTuned8KMmaPhaseCycles;
+      tuning.cstore_swizzle_128b = kTuned8KCStoreSwizzle128B;
       tuning.tag = kTuningTag8K;
     } else if (mtile == 16384 / kCtaM && ntile == 16384 / kCtaN &&
                ktiles == 16384 / kStageK) {
@@ -1387,6 +1519,7 @@ GemmTuning select_gemm_tuning(int mtile, int ntile, int ktiles) {
       tuning.pipe1_phase_cycles = kTuned16KPhaseCycles;
       tuning.pipe1_tma_phase_cycles = kTuned16KTmaPhaseCycles;
       tuning.pipe1_mma_phase_cycles = kTuned16KMmaPhaseCycles;
+      tuning.cstore_swizzle_128b = kTuned16KCStoreSwizzle128B;
       tuning.tag = kTuningTag16K;
     } else if (mtile == 32768 / kCtaM && ntile == 32768 / kCtaN &&
                ktiles == 32768 / kStageK) {
@@ -1395,6 +1528,7 @@ GemmTuning select_gemm_tuning(int mtile, int ntile, int ktiles) {
       tuning.pipe1_phase_cycles = kTuned32KPhaseCycles;
       tuning.pipe1_tma_phase_cycles = kTuned32KTmaPhaseCycles;
       tuning.pipe1_mma_phase_cycles = kTuned32KMmaPhaseCycles;
+      tuning.cstore_swizzle_128b = kTuned32KCStoreSwizzle128B;
       tuning.tag = kTuningTag32K;
     }
   }
@@ -1419,6 +1553,7 @@ template <int GridSwizzle,
           int GroupN,
           int Pipe1TmaPhaseCycles,
           int Pipe1MmaPhaseCycles,
+          int CStoreSwizzle128B,
           int TuningTag>
 void set_one_gemm_kernel_attribute() {
   CUDA_CHECK(cudaFuncSetAttribute(
@@ -1427,6 +1562,7 @@ void set_one_gemm_kernel_attribute() {
                                  GroupN,
                                  Pipe1TmaPhaseCycles,
                                  Pipe1MmaPhaseCycles,
+                                 CStoreSwizzle128B,
                                  TuningTag>,
       cudaFuncAttributeMaxDynamicSharedMemorySize,
       kDynamicSmemBytes));
@@ -1438,6 +1574,7 @@ void set_gemm_kernel_attributes() {
                                 1,
                                 GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                                 GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
+                                GEMM_CSTORE_SWIZZLE_128B,
                                 kTuningTagGeneric>();
 #if GEMM_GRID_SWIZZLE > 0
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
@@ -1445,24 +1582,28 @@ void set_gemm_kernel_attributes() {
                                 GEMM_GRID_SWIZZLE_N,
                                 GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                                 GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
+                                GEMM_CSTORE_SWIZZLE_128B,
                                 kTuningTagGeneric>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned8KGroupM,
                                 kTuned8KGroupN,
                                 kTuned8KTmaPhaseCycles,
                                 kTuned8KMmaPhaseCycles,
+                                kTuned8KCStoreSwizzle128B,
                                 kTuningTag8K>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned16KGroupM,
                                 kTuned16KGroupN,
                                 kTuned16KTmaPhaseCycles,
                                 kTuned16KMmaPhaseCycles,
+                                kTuned16KCStoreSwizzle128B,
                                 kTuningTag16K>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned32KGroupM,
                                 kTuned32KGroupN,
                                 kTuned32KTmaPhaseCycles,
                                 kTuned32KMmaPhaseCycles,
+                                kTuned32KCStoreSwizzle128B,
                                 kTuningTag32K>();
 #endif
 }
@@ -1491,6 +1632,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                  kTuned8KGroupN,
                                  kTuned8KTmaPhaseCycles,
                                  kTuned8KMmaPhaseCycles,
+                                 kTuned8KCStoreSwizzle128B,
                                  kTuningTag8K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1503,6 +1645,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                  kTuned16KGroupN,
                                  kTuned16KTmaPhaseCycles,
                                  kTuned16KMmaPhaseCycles,
+                                 kTuned16KCStoreSwizzle128B,
                                  kTuningTag16K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1515,6 +1658,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                  kTuned32KGroupN,
                                  kTuned32KTmaPhaseCycles,
                                  kTuned32KMmaPhaseCycles,
+                                 kTuned32KCStoreSwizzle128B,
                                  kTuningTag32K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1526,6 +1670,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                GEMM_GRID_SWIZZLE_N,
                                GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                                GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
+                               GEMM_CSTORE_SWIZZLE_128B,
                                kTuningTagGeneric>
         <<<grid, block, kDynamicSmemBytes>>>(
             a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1538,6 +1683,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                              1,
                              GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                              GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
+                             GEMM_CSTORE_SWIZZLE_128B,
                              kTuningTagGeneric>
       <<<grid, block, kDynamicSmemBytes>>>(
           a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1556,6 +1702,7 @@ struct CaseResult {
   int pipe1_phase_cycles = 0;
   int pipe1_tma_phase_cycles = 0;
   int pipe1_mma_phase_cycles = 0;
+  int cstore_swizzle_128b = 0;
   int tma_a_l2_promotion = 0;
   int tma_b_l2_promotion = 0;
   int tma_c_l2_promotion = 0;
@@ -1599,6 +1746,7 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
   CUDA_CHECK(cudaDeviceSynchronize());
 
+  const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
   CUtensorMap a_map{}, b_map{}, c_map{};
   const CUtensorMapL2promotion a_l2_promotion =
       tma_a_l2_promotion_for_size(size);
@@ -1609,12 +1757,12 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k, a_l2_promotion);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n, b_l2_promotion);
   if (store_mode == kStoreTma) {
-    encode_c_row_major_float_tma_map(&c_map, d_c, m, n, c_l2_promotion);
+    encode_c_row_major_float_tma_map(&c_map, d_c, m, n, c_l2_promotion,
+                                     tuning.cstore_swizzle_128b != 0);
   }
 
   set_gemm_kernel_attributes();
 
-  const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
   dim3 grid = launch_grid(mtile, ntile, tuning);
   dim3 block(kThreads, 1, 1);
   auto launch_gemm = [&]() {
@@ -1667,6 +1815,7 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   result.pipe1_phase_cycles = tuning.pipe1_phase_cycles;
   result.pipe1_tma_phase_cycles = tuning.pipe1_tma_phase_cycles;
   result.pipe1_mma_phase_cycles = tuning.pipe1_mma_phase_cycles;
+  result.cstore_swizzle_128b = tuning.cstore_swizzle_128b;
   result.tma_a_l2_promotion = static_cast<int>(a_l2_promotion);
   result.tma_b_l2_promotion = static_cast<int>(b_l2_promotion);
   result.tma_c_l2_promotion = static_cast<int>(c_l2_promotion);
@@ -1789,6 +1938,7 @@ ValidateResult run_validation(int size, const char* pattern, int store_mode) {
   CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
 
+  const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
   CUtensorMap a_map{}, b_map{}, c_map{};
   const CUtensorMapL2promotion a_l2_promotion =
       tma_a_l2_promotion_for_size(size);
@@ -1799,11 +1949,11 @@ ValidateResult run_validation(int size, const char* pattern, int store_mode) {
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k, a_l2_promotion);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n, b_l2_promotion);
   if (store_mode == kStoreTma) {
-    encode_c_row_major_float_tma_map(&c_map, d_c, m, n, c_l2_promotion);
+    encode_c_row_major_float_tma_map(&c_map, d_c, m, n, c_l2_promotion,
+                                     tuning.cstore_swizzle_128b != 0);
   }
   set_gemm_kernel_attributes();
 
-  const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
   dim3 grid = launch_grid(mtile, ntile, tuning);
   dim3 block(kThreads, 1, 1);
   launch_gemm_kernel(tuning, grid, block, a_map, b_map, c_map, d_sink, d_c,
@@ -2037,6 +2187,7 @@ int main(int argc, char** argv) {
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
                "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
                "pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,"
+               "cstore_swizzle_128b,"
                "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
                "store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
@@ -2053,8 +2204,10 @@ int main(int argc, char** argv) {
               "grid_swizzle_min_tiles=%d "
               "tuned8k=%dx%d:%d/%d tuned16k=%dx%d:%d/%d "
               "tuned32k=%dx%d:%d/%d "
+              "tuned_cstore_swizzle_128b=%d/%d/%d "
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
               "tma_l2_promotion_c=%d tuned8k_tma_l2=%d/%d/%d "
+              "cstore_swizzle_128b=%d cstore_vectorize_smem=%d "
               "store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
@@ -2068,12 +2221,15 @@ int main(int argc, char** argv) {
               kTuned16KMmaPhaseCycles,
               kTuned32KGroupM, kTuned32KGroupN, kTuned32KTmaPhaseCycles,
               kTuned32KMmaPhaseCycles,
+              kTuned8KCStoreSwizzle128B, kTuned16KCStoreSwizzle128B,
+              kTuned32KCStoreSwizzle128B,
               static_cast<int>(GEMM_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_C_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_C_L2_PROMOTION),
+              GEMM_CSTORE_SWIZZLE_128B, GEMM_CSTORE_VECTORIZE_SMEM,
               store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
 
@@ -2082,23 +2238,26 @@ int main(int argc, char** argv) {
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
                 "pipe1_tma_phase=%d pipe1_mma_phase=%d "
+                "cstore_swizzle_128b=%d "
                 "tma_l2=%d/%d/%d "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
                 r.group_m, r.group_n, r.pipe1_phase_cycles,
                 r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
+                r.cstore_swizzle_128b,
                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                 r.tma_c_l2_promotion,
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
                  r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
+                 r.cstore_swizzle_128b,
                  r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                  r.tma_c_l2_promotion,
                  store_mode_name(r.store_mode),

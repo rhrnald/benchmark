@@ -15,9 +15,11 @@ Current kernel shape:
   - `B_stage`: two `64 x 128 x 2B = 16 KiB` pipe buffers
   - total triple buffer: `192 KiB`
   - C TMA store staging: two `128 x 128` FP32 chunks (`2 x 64 KiB`),
-    overlaid on the triple-buffer storage. `GEMM_CSTORE_CHUNK_N=256` is also
-    supported for paired `128 x 256` TMA stores, but it is not the balanced
-    default across the benchmark sizes.
+    overlaid on the triple-buffer storage. The 8K-tuned C-store path uses a
+    4D `SWIZZLE_128B` TMA store descriptor and swizzled shared-memory staging
+    to reduce bank conflicts. `GEMM_CSTORE_CHUNK_N=256` is also supported for
+    paired `128 x 256` TMA stores, but it is not the balanced default across
+    the benchmark sizes.
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
 - The mainloop uses two N-direction MMA pipes:
@@ -28,8 +30,9 @@ Current kernel shape:
   - stage reuse is fenced by each pipe's `mma_done` barrier from three K stages earlier.
 - C-store benchmark runs use per-size template instantiations for the target
   square sizes:
-  - 8K: `16 x 1` CTA groups, pipe 1 B-TMA phase shift `40` cycles,
-    pipe 1 MMA phase shift `136` cycles, and A/B/C TMA L2 promotion `256B`.
+  - 8K: `16 x 1` CTA groups, pipe 1 B-TMA phase shift `32` cycles,
+    pipe 1 MMA phase shift `128` cycles, A/B TMA L2 promotion `256B`, and
+    `SWIZZLE_128B` C-store staging.
   - 16K: `16 x 1` CTA groups, pipe 1 phase shift `96` cycles.
   - 32K: `12 x 1` CTA groups, pipe 1 phase shift `512` cycles.
   The generic fallback keeps the M-major `12 x 1` swizzle for sizes with at
