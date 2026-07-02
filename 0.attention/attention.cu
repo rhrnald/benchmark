@@ -36,6 +36,113 @@
 #define ATTENTION_PERSISTENT_OVERLAP_PREFETCH ATTENTION_PERSISTENT_OVERLAP
 #endif
 
+// Continuous flatten pipeline (15_FLATTEN_IMPL.md): all roles own their own
+// cross-tile loop; no outer per-tile loop, no CTA boundary __syncthreads, so
+// QK(t+1) overlaps drain(t). Only the live benchmark config is supported (see
+// 15 §0). Off => D1 (2ce1d8a) path is byte-for-byte intact.
+#ifndef ATTENTION_CONTINUOUS_FLAT
+#define ATTENTION_CONTINUOUS_FLAT 0
+#endif
+// Deadlock locator: when on, every mbarrier_wait in the flat block becomes a
+// timed spin that printf's (line, warp, phase) if it stalls > ~0.5s, then breaks
+// (false-success) so the kernel limps to exit and flushes the printf buffer.
+#ifndef ATTENTION_FLAT_DEBUG
+#define ATTENTION_FLAT_DEBUG 0
+#endif
+// NOTE: the producer waits v_ready/v_h1_ready on EVERY PV in the flat path.
+// Under TMA_PUSH the V arrives early enough that these waits are ~free (push ==
+// base perf), and skipping them (D1-style timing / sparse GUARD) caused
+// nondeterministic GPU faults — dead experiments removed 2026-07-02 (see
+// markdown/20 §2). Build with -DATTENTION_SKIP_V_TMA_EXPECT_TX=0 so the V
+// barriers are actually armed.
+// F1 (19_DIAGNOSIS_SCHEDULE_NOT_CONTENTION.md §3): rewrite the flat TMA loop in
+// the master PUSH-style choreography. Body gl issues K(gl+1) + EARLY Vh0(gl) as
+// soon as qk_done(gl) fires (master steady order, attention_pv_pipe_role
+// 796->882->936); only Vh1(gl) (+ the final iter's Vh0) waits pv_done(gl-1)
+// (master 977->1033->1051). The default pull loop instead reaches its K(gl)/V(gl)
+// issues only after pv_done(gl-1) in TMA program order, so K/Vh0 land ~7 PV-MMAs
+// (~1,300cyc) later every iter (k_ready 800->1765, v_ready ~1000 newly exposed)
+// = the flat -12%. Compute barriers' arrive/commit are untouched (16 §9.0
+// doctrine); qk_done is consumed once per body in order (bodies 0..G-2), so
+// running parity holds (15 §6b). The early Vh0 runs master's exact timing race
+// (TMA flight > PV h0 tail MMAs) — D1-proven, ck bit-identical.
+#ifndef ATTENTION_FLAT_TMA_PUSH
+#define ATTENTION_FLAT_TMA_PUSH 0
+#endif
+#if ATTENTION_FLAT_TMA_PUSH && !ATTENTION_CONTINUOUS_FLAT
+#error "ATTENTION_FLAT_TMA_PUSH requires ATTENTION_CONTINUOUS_FLAT"
+#endif
+// G4 seam de-convoy (19 §5-G4). At each tile seam (producer body L==0) the flat
+// loop issues QK(t+1,i0) BEFORE PV(t,last), so tile t's last PV — and the
+// pv_done confirm + pv_tile_done arrive the drain waits on — sit behind
+// q_ready/k_ready/p_done of tile t+1: the drain starts ~3.4k cyc late
+// (pvtile_wait). With this ON, the seam body finishes tile t FIRST (PV(t,last)
+// -> confirm -> pv_tile_done) and only then starts QK(t+1,i0). qk_done(gl)'s
+// commit moves after the QK MMAs (the PV is already confirmed complete, so it
+// tracks QK alone — slightly EARLIER fire than the fused EARLY_COMMIT); commit
+// counts and per-barrier order are unchanged, so all phase algebra holds.
+// Output note (markdown/21): the seam's timing occasionally realizes the
+// codebase's pre-existing benign +-1ULP rounding wobble at kt64 (base realizes
+// the same wobble at kt8), so the gate for this path is numerical equality
+// (make validation + masked-ck / autopsy diff <=1ULP), not raw bit-identity.
+#ifndef ATTENTION_FLAT_SEAM_PV_FIRST
+#define ATTENTION_FLAT_SEAM_PV_FIRST 0
+#endif
+#if ATTENTION_FLAT_SEAM_PV_FIRST && !ATTENTION_CONTINUOUS_FLAT
+#error "ATTENTION_FLAT_SEAM_PV_FIRST requires ATTENTION_CONTINUOUS_FLAT"
+#endif
+// SEAM_CONSUMER_REPLAY (markdown/21, adopted at 1071 TFLOPS): the seam QK
+// commits to an isolated 128B-strided qk_seam_done[pipe] (init-once, nobody
+// waits it while the drain runs); after the drain's closing bar.sync, ONE
+// designated consumer warp per pipe waits it (in the common case QK completed
+// mid-drain, so the wait returns instantly) and plain-arrives qk_done[pipe].
+// qk_done's per-gl transition order and total count (G+1) are preserved: the
+// seam gl's transition #gl+1 comes from the replay, and body gl+1's fused
+// commit still follows it (its QK needs K(gl+1), whose TMA gate is transition
+// #gl+1). At seams the K(gl+1)/Vh0(gl) TMA issue slides to post-drain and
+// aligns with the O-store tail — measured faster than the direct-commit seam
+// (1071 vs 1042).
+#ifndef ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+#define ATTENTION_FLAT_SEAM_CONSUMER_REPLAY 0
+#endif
+#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY && !ATTENTION_FLAT_SEAM_PV_FIRST
+#error "ATTENTION_FLAT_SEAM_CONSUMER_REPLAY requires ATTENTION_FLAT_SEAM_PV_FIRST"
+#endif
+// (b) o_taddr early-free (markdown/21 §4-3): split the drain's completion
+// signal so the producer's accumulate=false PV(t+1,i0) — which only needs the
+// drain's tcgen05.lds of o_taddr to have RETIRED — no longer waits for the FP
+// pack as well. The drain's last chunk is split into [ld+wait::ld -> arrive
+// o_ld_done] then [scale/pack]; warp2's O store keeps waiting o_drained
+// (pack+fence done). Expected ~neutral under SEAM_CONSUMER_REPLAY (there the
+// binding chain for PV(t+1,i0) is [replay -> softmax(t+1,i0) -> p_done], and
+// o_drained already fires before the replay) — kept as the correct signal
+// split for any schedule where the o_taddr WAR is binding.
+#ifndef ATTENTION_FLAT_O_LD_DONE
+#define ATTENTION_FLAT_O_LD_DONE 0
+#endif
+#if ATTENTION_FLAT_O_LD_DONE && !ATTENTION_CONTINUOUS_FLAT
+#error "ATTENTION_FLAT_O_LD_DONE requires ATTENTION_CONTINUOUS_FLAT"
+#endif
+// Manual per-tile timing probe for the flat path (CLOCK_TRACE is #error'd for FLAT).
+// Records CTA0 pipe0's per-tile QK-start + drain start/end clocks -> printf the
+// cadence and drain time at exit, to locate the flat's structural overhead vs base.
+#ifndef ATTENTION_FLAT_PROBE
+#define ATTENTION_FLAT_PROBE 0
+#endif
+#ifndef ATTENTION_FLAT_PROBE_GL
+#define ATTENTION_FLAT_PROBE_GL 18   // target steady L2 iter (18%4==2) for within-iter probe
+#endif
+#if ATTENTION_CONTINUOUS_FLAT
+#if !(ATTENTION_PERSISTENT && ATTENTION_PERSISTENT_OVERLAP &&                   \
+      ATTENTION_PERSISTENT_OVERLAP_EARLY && ATTENTION_PERSISTENT_OVERLAP_O_IN_V)
+#error "ATTENTION_CONTINUOUS_FLAT requires the live config: PERSISTENT + OVERLAP + EARLY + O_IN_V"
+#endif
+#if ATTENTION_CLOCK_TRACE || ATTENTION_PERSISTENT_OVERLAP_QK_PEEL ||            \
+    ATTENTION_PEEL_SOFTMAX || (ATTENTION_CROSS_PIPE_PHASE != 0)
+#error "ATTENTION_CONTINUOUS_FLAT does not support TRACE / PEEL / CROSS_PIPE_PHASE"
+#endif
+#endif
+
 // Inter-Q-tile clock trace: capture TWO consecutive tiles of the SAME persistent
 // CTA (blockIdx.x==0, tile_local_idx == ATTENTION_TRACE_TILE0 and +1) into two
 // pages of the clock-trace buffer, sharing ONE clock base so the two tiles land
@@ -88,6 +195,34 @@
 
 #ifndef ATTENTION_PEEL_HB
 #define ATTENTION_PEEL_HB 0
+#endif
+#if ATTENTION_CONTINUOUS_FLAT && ATTENTION_FLAT_DEBUG
+__device__ int g_dbg_gl[16];
+#endif
+#if ATTENTION_FLAT_PROBE
+__device__ unsigned long long g_probe_qk[64];      // CTA0 pipe0: per-tile QK start
+__device__ unsigned long long g_probe_dr0[64];     // CTA0: per-tile drain start
+__device__ unsigned long long g_probe_dr1[64];     // CTA0: per-tile drain end
+__device__ unsigned long long g_probe_gl[80];      // CTA0 pipe0: per-gl (iter) start
+__device__ unsigned long long g_probe_seg[8];      // within-iter wait segments @gl==PROBE_GL
+__device__ unsigned long long g_probe_sm0[64];     // CTA0: per-tile consumer softmax start
+__device__ unsigned long long g_probe_dra[64];     // drain: after bar.sync1
+__device__ unsigned long long g_probe_drb[64];     // drain: after pv_tile_done wait
+__device__ unsigned long long g_probe_drc[64];     // drain: after pack (before fence/bar2)
+__device__ unsigned long long g_probe_smqk;        // CTA0 consumer pipe0: accumulated qk_done wait
+__device__ unsigned long long g_probe_smqk_n;      // ...count of waits (for average)
+__device__ unsigned long long g_probe_tmaqk;       // CTA0 TMA pipe0: accumulated qk_done(K-buf) wait
+__device__ unsigned long long g_probe_tmaqk_n;
+__device__ unsigned long long g_probe_kready;      // CTA0 producer pipe0: accumulated k_ready wait
+__device__ unsigned long long g_probe_kready_n;
+// Barriered clock read: plain clock64() has no memory side-effect so the compiler
+// reorders it freely (the per-gl vs seg deltas came out mathematically inconsistent
+// => reordering). The "memory" clobber + volatile pin it to its source position.
+__device__ __forceinline__ unsigned long long probe_clk() {
+  unsigned long long t;
+  asm volatile("mov.u64 %0, %%clock64;" : "=l"(t) :: "memory");
+  return t;
+}
 #endif
 #if ATTENTION_PEEL_HB
 __device__ unsigned int g_peel_hb[16];
@@ -1164,7 +1299,14 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
     const int done_iter = iter - kActivePipeStride;
     const int done_trace_idx = done_iter - clock_trace_start;
 #endif
+#if ATTENTION_FLAT_PROBE
+    const bool _pk = blockIdx.x == 0 && pipe == 0 && lane == 0;
+    const unsigned long long _kt0 = _pk ? probe_clk() : 0ull;
+#endif
     mbarrier_wait(&k_ready[pipe], phase);
+#if ATTENTION_FLAT_PROBE
+    if (_pk) { g_probe_kready += probe_clk() - _kt0; g_probe_kready_n += 1; }
+#endif
 #if ATTENTION_CLOCK_TRACE
     if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
         done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
@@ -1652,7 +1794,14 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #endif
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
+#if ATTENTION_FLAT_PROBE
+    const bool _pk = blockIdx.x == 0 && pipe == 0 && consumer_warp == 0 && lane == 0;
+    const unsigned long long _t0 = _pk ? probe_clk() : 0ull;
+#endif
     mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
+#if ATTENTION_FLAT_PROBE
+    if (_pk) { g_probe_smqk += probe_clk() - _t0; g_probe_smqk_n += 1; }
+#endif
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
@@ -1890,6 +2039,35 @@ __device__ __forceinline__ void attention_peel_commit_only(
 }
 #endif
 
+#if ATTENTION_CONTINUOUS_FLAT && ATTENTION_FLAT_DEBUG
+__device__ __forceinline__ void flat_wait_dbg(uint64_t* bar, uint32_t phase,
+                                              int line) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t addr = smem_ptr_u32(bar);
+  const unsigned long long start = clock64();
+  for (;;) {
+    unsigned done;
+    asm volatile(
+        "{ .reg .pred p; mbarrier.try_wait.parity.shared::cta.b64 p, [%1], %2; "
+        "selp.u32 %0, 1, 0, p; }"
+        : "=r"(done)
+        : "r"(addr), "r"(phase)
+        : "memory");
+    if (done) break;
+    if (clock64() - start > 1000000000ull) {
+      if ((threadIdx.x & 31) == 0)
+        printf("STUCK line=%d warp=%d gl=%d phase=%u\n", line,
+               static_cast<int>(threadIdx.x >> 5),
+               g_dbg_gl[threadIdx.x >> 5], phase);
+      break;
+    }
+  }
+#else
+  (void)bar; (void)phase; (void)line;
+#endif
+}
+#endif
+
 template <int kFixedRepeats = 0, int kFixedKTiles = 0>
 __global__ __launch_bounds__(kMainThreads, 1)
 void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
@@ -1962,6 +2140,32 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_PERSISTENT_OVERLAP_EARLY
   __shared__ uint64_t qk_all_done;
 #endif
+#if ATTENTION_CONTINUOUS_FLAT
+  // dep4 (o_taddr WAR): each consumer drain reads BOTH pipes' o_taddr, so all 8
+  // consumer warps arrive this one barrier after the drain; tile (t+1)'s first PV
+  // (accumulate=false, both pipes) and warp2's O store wait it. count = all
+  // consumer warps. Advances once per tile.
+  __shared__ uint64_t o_drained;
+  // Per-tile PV-complete signal for the drain. pv_done cycles once per PV, so a
+  // late drain (producer raced ahead) cannot track it with a level-triggered
+  // wait. Instead each producer pipe, after confirming its tile's last PV
+  // COMPLETED, arrives this once per tile; the drain waits it @(tile&1). count =
+  // 2 (both producer pipes). Advances exactly once per tile.
+  __shared__ uint64_t pv_tile_done;
+#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+  // Dedicated seam-QK commit target: 128B stride so the two pipes' barriers do
+  // not share an adjacency window; nobody waits it until after the drain (the
+  // post-drain consumer replay consumes it). See macro note.
+  __shared__ __align__(128) uint64_t qk_seam_done[kPipeCount * 16];
+#endif
+#if ATTENTION_FLAT_O_LD_DONE
+  // Drain-signal split: all 8 consumer warps' o_taddr tcgen05.lds RETIRED
+  // (o_taddr free for PV(t+1,i0)'s accumulate=false overwrite); the pack may
+  // still be running. warp2's O store keeps waiting o_drained (pack done).
+  // count = all consumer warps; advances once per tile.
+  __shared__ uint64_t o_ld_done;
+#endif
+#endif
   __shared__ uint32_t k_issue_gen[kPipeCount];
   __shared__ uint32_t v_issue_gen[kPipeCount];
   __shared__ uint32_t qk_issue_gen[kPipeCount];
@@ -2007,6 +2211,596 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     if (lane == 0) tmem_base_shared = taddr;
   }
   __syncthreads();
+#if ATTENTION_CONTINUOUS_FLAT
+  {
+#if ATTENTION_FLAT_DEBUG
+#define mbarrier_wait(b, p) flat_wait_dbg((b), (p), __LINE__)
+#endif
+    // ================= Continuous flatten pipeline (15_FLATTEN_IMPL.md) =======
+    // Each role owns its own cross-tile loop; no outer per-tile loop, no CTA
+    // boundary __syncthreads. QK(t+1) overlaps drain(t). Live config only.
+    uintptr_t smem_addr =
+        (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
+    asm volatile("" : "+l"(smem_addr));
+    uint32_t* q_smem = reinterpret_cast<uint32_t*>(smem_addr);
+    uint32_t* k_smem[kPipeCount];
+    uint32_t* v_smem[kPipeCount];
+    uint32_t* s_smem[kPipeCount];
+#pragma unroll
+    for (int p = 0; p < kPipeCount; ++p) {
+      k_smem[p] = q_smem + (1 + p) * kTileWords;
+      v_smem[p] = q_smem + (1 + kKBufferTileCount + p) * kTileWords;
+      s_smem[p] = q_smem + (1 + kKBufferTileCount + kVBufferCount + p) * kTileWords;
+    }
+    const uint32_t tmem_base = tmem_base_shared;
+    const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
+    const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
+
+    if (threadIdx.x == 0) {
+      mbarrier_init(&q_ready, 1);
+      mbarrier_init(&qk_all_done, 2);
+      mbarrier_init(&o_drained, kPipeCount * kConsumerWarpsPerPipe);
+#if ATTENTION_FLAT_O_LD_DONE
+      mbarrier_init(&o_ld_done, kPipeCount * kConsumerWarpsPerPipe);
+#endif
+      mbarrier_init(&pv_tile_done, kPipeCount);
+#pragma unroll
+      for (int p = 0; p < kPipeCount; ++p) {
+        mbarrier_init(&k_ready[p], 1);
+        mbarrier_init(&qk_done[p], 1);
+        mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
+        mbarrier_init(&s_h1_done[p], kConsumerWarpsPerPipe);
+        mbarrier_init(&v_ready[p], 1);
+        mbarrier_init(&v_h1_ready[p], 1);
+        mbarrier_init(&pv_done[p], 1);
+#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+        mbarrier_init(&qk_seam_done[p * 16], 1);
+#endif
+      }
+      asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+    }
+    __syncthreads();
+
+    const int R = loop_repeats;
+    const int bx = static_cast<int>(blockIdx.x);
+    const int gx = static_cast<int>(gridDim.x);
+    const int J = total_tiles > bx ? (total_tiles - bx + gx - 1) / gx : 0;
+    const bool has_output = output != nullptr;
+    float* const out_f32 =
+        has_output ? reinterpret_cast<float*>(output) : nullptr;
+
+    if (J > 0 && (warp_id == 0 || warp_id == 1)) {
+      // =================== PRODUCER (fused flat, pipe = warp_id) =============
+      const int pipe = warp_id;
+      const uint32_t idesc = make_qk_idesc();
+      const uint32_t pv_idesc = make_qk_idesc() | (1u << 16);
+      const QkDescGen q_desc{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
+      const QkDescGen k_desc{static_cast<uint32_t>(smem_ptr_u32(k_smem[pipe]) >> 4)};
+      const PvSDescGen pv_s_desc{static_cast<uint32_t>(smem_ptr_u32(s_smem[pipe]) >> 4)};
+      const PvVDescGen pv_v_desc{static_cast<uint32_t>(smem_ptr_u32(v_smem[pipe]) >> 4)};
+      const int n_p = (R - pipe + kActivePipeStride - 1) / kActivePipeStride;
+      const int G = J * n_p;
+      unsigned int o_wait = 0u;  // running tile counter for o_drained waits
+      // prologue gl=0: QK only (p_taddr fresh; q_ready / k_ready phase 0)
+      mbarrier_wait(&q_ready, 0u);
+      mbarrier_wait(&k_ready[pipe], 0u);
+      if (lane0) {
+#pragma unroll
+        for (int mma = 0; mma < kMmasPerTile; ++mma)
+          tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
+        tcgen05_commit(&qk_done[pipe]);
+      }
+      // steady gl=1..G-1: QK(gl) + lagged PV(gl-1); tail PV after loop.
+      for (int gl = 1; gl < G; ++gl) {
+#if ATTENTION_FLAT_DEBUG
+        g_dbg_gl[warp_id] = gl;
+#endif
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && pipe == 0 && lane0 && gl < 80) g_probe_gl[gl] = probe_clk();
+#endif
+        const int L = gl % n_p;
+        const uint32_t ph = static_cast<uint32_t>(gl & 1);
+        const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
+#if ATTENTION_FLAT_SEAM_PV_FIRST
+        if (L == 0) {
+          // Seam body (see ATTENTION_FLAT_SEAM_PV_FIRST note): tile j-1 first.
+          const int j = gl / n_p;
+          mbarrier_wait(&qk_done[pipe], pph);  // QK(gl-1) done -> q_smem free
+          if (lane0) mbarrier_arrive(&qk_all_done);
+          mbarrier_wait(&v_ready[pipe], pph);  // V(gl-1) h0
+          if (lane0) {
+#pragma unroll
+            for (int mma = 0; mma < kMmasPerTile / 2; ++mma)
+              tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                  pv_idesc, true);  // tile-last PV: accumulate
+          }
+          mbarrier_wait(&s_h1_done[pipe], pph);
+          mbarrier_wait(&v_h1_ready[pipe], pph);  // V(gl-1) h1
+          if (lane0) {
+#pragma unroll
+            for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
+              tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                  pv_idesc, true);
+            tcgen05_commit(&pv_done[pipe]);
+          }
+          mbarrier_wait(&pv_done[pipe], pph);       // PV(gl-1) COMPLETED
+          if (lane0) mbarrier_arrive(&pv_tile_done);  // drain(j-1) unblocked NOW
+          // ...then tile j's first QK.
+          mbarrier_wait(&q_ready, static_cast<uint32_t>(j & 1));
+          mbarrier_wait(&k_ready[pipe], ph);
+          mbarrier_wait(&p_done[pipe], pph);        // dep2: p_taddr WAR
+          if (lane0) {
+#if ATTENTION_FLAT_PROBE
+            if (bx == 0 && pipe == 0 && (gl / n_p) < 64)
+              g_probe_qk[gl / n_p] = probe_clk();   // per-tile QK start (cadence)
+#endif
+#pragma unroll
+            for (int mma = 0; mma < kMmasPerTile; ++mma)
+              tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
+                                  mma != 0);
+#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+            // Isolated commit target; the post-drain consumer replay provides
+            // the qk_done arrive. Without a drain (no output) there is no
+            // replayer, so commit qk_done directly (uniform across the CTA).
+            if (has_output) tcgen05_commit(&qk_seam_done[pipe * 16]);
+            else tcgen05_commit(&qk_done[pipe]);
+#else
+            tcgen05_commit(&qk_done[pipe]);  // moved: covers QK(gl) alone
+#endif
+          }
+          continue;
+        }
+#endif
+        if (L == 0) {
+          const int j = gl / n_p;
+          // confirm prev tile's last QK completed (q_smem free), then signal it.
+          mbarrier_wait(&qk_done[pipe], pph);
+          if (lane0) mbarrier_arrive(&qk_all_done);
+          mbarrier_wait(&q_ready, static_cast<uint32_t>(j & 1));
+        }
+        mbarrier_wait(&k_ready[pipe], ph);
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[0] = probe_clk();
+#endif
+        mbarrier_wait(&p_done[pipe], pph);       // dep2: p_taddr WAR
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[1] = probe_clk();
+#endif
+        if (lane0) {
+#if ATTENTION_FLAT_PROBE
+          if (L == 0 && bx == 0 && pipe == 0 && (gl / n_p) < 64)
+            g_probe_qk[gl / n_p] = probe_clk();    // per-tile QK start (cadence)
+#endif
+#pragma unroll
+          for (int mma = 0; mma < kMmasPerTile; ++mma)
+            tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
+        }
+        // PV for gl-1 (lag); accumulate=false iff it is its tile's first iter.
+        const int prevL = (gl - 1) % n_p;
+        const int prevj = (gl - 1) / n_p;
+        const bool pv_accum = (prevL != 0);
+        mbarrier_wait(&v_ready[pipe], pph);       // V h0 ready (~free under PUSH)
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[2] = probe_clk();
+#endif
+        if (lane0) {
+          if (!pv_accum && prevj > 0 && has_output) {
+            // dep4: o_taddr WAR vs the previous drain's reads. With O_LD_DONE
+            // the gate is "drain lds retired" (pack may still run).
+#if ATTENTION_FLAT_O_LD_DONE
+            mbarrier_wait(&o_ld_done, o_wait & 1u);
+#else
+            mbarrier_wait(&o_drained, o_wait & 1u);
+#endif
+            ++o_wait;
+          }
+#pragma unroll
+          for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);
+          tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+          for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+        }
+        mbarrier_wait(&s_h1_done[pipe], pph);
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[3] = probe_clk();
+#endif
+        mbarrier_wait(&v_h1_ready[pipe], pph);
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[4] = probe_clk();
+#endif
+        if (lane0) {
+#pragma unroll
+          for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+          tcgen05_commit(&pv_done[pipe]);
+        }
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[5] = probe_clk();
+#endif
+        // PV(gl-1) was tile (j-1)'s last iter when L==0: confirm it COMPLETED
+        // (pv_done@pph flips after the MMAs finish) then signal the drain.
+        if (L == 0) {
+          mbarrier_wait(&pv_done[pipe], pph);
+          if (lane0) mbarrier_arrive(&pv_tile_done);
+        }
+#if ATTENTION_FLAT_PROBE
+        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[6] = probe_clk();
+#endif
+      }
+      // tail: PV for gl=G-1
+      {
+        const int prevL = (G - 1) % n_p;
+        const int prevj = (G - 1) / n_p;
+        const uint32_t pph = static_cast<uint32_t>((G - 1) & 1);
+        const bool pv_accum = (prevL != 0);
+        // last tile's qk_all_done (never waited, but keeps count symmetric)
+        if (lane0) mbarrier_arrive(&qk_all_done);
+        mbarrier_wait(&v_ready[pipe], pph);
+        if (lane0) {
+          if (!pv_accum && prevj > 0 && has_output) {
+#if ATTENTION_FLAT_O_LD_DONE
+            mbarrier_wait(&o_ld_done, o_wait & 1u);
+#else
+            mbarrier_wait(&o_drained, o_wait & 1u);
+#endif
+            ++o_wait;
+          }
+#pragma unroll
+          for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);
+          tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+          for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+        }
+        mbarrier_wait(&s_h1_done[pipe], pph);
+        mbarrier_wait(&v_h1_ready[pipe], pph);
+        if (lane0) {
+#pragma unroll
+          for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+          tcgen05_commit(&pv_done[pipe]);
+        }
+        // last tile's last PV: confirm completion, signal the drain.
+        mbarrier_wait(&pv_done[pipe], pph);
+        if (lane0) mbarrier_arrive(&pv_tile_done);
+      }
+    } else if (J > 0 && (warp_id == 2 || warp_id == 3)) {
+      // =================== TMA (K/V load; warp2 also Q-prefetch + O store) ====
+      const int pipe = warp_id - 2;
+      const int n_p = (R - pipe + kActivePipeStride - 1) / kActivePipeStride;
+      const int G = J * n_p;
+      unsigned int store_wait = 0u;   // running tile counter for o_drained (store)
+      unsigned int qa_wait = 0u;      // running tile counter for qk_all_done (Q prefetch)
+      // warp2 issues Q for tile 0 up front. NOTE: mbarrier_expect_tx uses
+      // elect.sync with a full-warp mask, so ALL lanes must call it (only the
+      // tma_load_2d is lane0-gated).
+      if (warp_id == 2) {
+        mbarrier_expect_tx(&q_ready, kTileBytes);
+        if (lane0) {
+          const uint32_t q_addr = smem_ptr_u32(q_smem);
+          tma_load_2d(&q_map, q_addr, &q_ready, 0, bx * kTileM);
+          tma_load_2d(&q_map, q_addr + kTileBytes / 2, &q_ready, 32, bx * kTileM);
+        }
+      }
+      // prologue gl=0: K(0) + V(0) h0/h1.
+      {
+        const int iter0 = pipe;
+        const int gkt = kv_tile_base_for_block<kFixedKTiles>(bx, loop_k_tiles) +
+                        local_k_tile_for_iter<kFixedKTiles>(iter0, loop_k_tiles);
+        issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], gkt, lane0);
+        issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0, lane0);
+        issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
+      }
+#if ATTENTION_FLAT_TMA_PUSH
+      // F1 push-style body (see macro note): K(gl+1)+Vh0(gl) at qk_done(gl),
+      // Vh1(gl) at pv_done(gl-1). Continuous: has_next is global (gl+1<G), never
+      // per-tile, so there is no boundary ramp; the only seam specials are Q
+      // prefetch + O store (warp2, L==0), same slots as the pull loop.
+      for (int gl = 0; gl < G; ++gl) {
+#if ATTENTION_FLAT_DEBUG
+        g_dbg_gl[warp_id] = gl;
+#endif
+        const int L = gl % n_p;
+        const int j = gl / n_p;
+        const uint32_t ph = static_cast<uint32_t>(gl & 1);
+        const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
+        const bool has_next = gl + 1 < G;
+        // tile boundary: warp2 prefetches THIS tile's Q (after prev tile's last
+        // QK). Q(0) already went out before the prologue.
+        if (L == 0 && j > 0 && warp_id == 2) {
+          mbarrier_wait(&qk_all_done, qa_wait & 1u);
+          ++qa_wait;
+          mbarrier_expect_tx(&q_ready, kTileBytes);  // all lanes (elect.sync)
+          if (lane0) {
+            const uint32_t q_addr = smem_ptr_u32(q_smem);
+            const int q_row = (bx + j * gx) * kTileM;
+            tma_load_2d(&q_map, q_addr, &q_ready, 0, q_row);
+            tma_load_2d(&q_map, q_addr + kTileBytes / 2, &q_ready, 32, q_row);
+          }
+        }
+        if (has_next) {
+          // K(gl+1) (the next tile's iter0 when L==n_p-1) as soon as QK(gl)
+          // completed: k_smem free (qk_done EARLY-commits mid PV(gl-1) h0).
+          const int ntile = bx + ((gl + 1) / n_p) * gx;
+          const int niter = ((gl + 1) % n_p) * kActivePipeStride + pipe;
+          const int ngkt =
+              kv_tile_base_for_block<kFixedKTiles>(ntile, loop_k_tiles) +
+              local_k_tile_for_iter<kFixedKTiles>(niter, loop_k_tiles);
+#if ATTENTION_FLAT_PROBE
+          const bool _tk = bx == 0 && pipe == 0 && lane0;
+          const unsigned long long _tt0 = _tk ? probe_clk() : 0ull;
+#endif
+          mbarrier_wait(&qk_done[pipe], ph);
+#if ATTENTION_FLAT_PROBE
+          if (_tk) { g_probe_tmaqk += probe_clk() - _tt0; g_probe_tmaqk_n += 1; }
+#endif
+          issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], ngkt, lane0);
+        }
+        // warp2 stores prev tile's O AFTER the K flow is unblocked (drain chain
+        // needs the producer to reach PV(t,last): M1 bug#5) and BEFORE this
+        // tile's pipe0 V overwrites v_smem[0] (store-WAR).
+        if (L == 0 && j > 0 && warp_id == 2 && has_output && lane0) {
+          mbarrier_wait(&o_drained, store_wait & 1u);  // tile (j-1) drain done
+          ++store_wait;
+          tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, bx + (j - 1) * gx, 0);
+          tma_store_commit_group();
+          tma_store_wait_group_read();  // store-WAR: done before tile j V(pipe0)
+        }
+        if (gl > 0) {  // V(0) went out in the prologue
+          const int gkt =
+              kv_tile_base_for_block<kFixedKTiles>(bx + j * gx, loop_k_tiles) +
+              local_k_tile_for_iter<kFixedKTiles>(L * kActivePipeStride + pipe,
+                                                  loop_k_tiles);
+          if (has_next) {
+            // EARLY Vh0(gl) (master 936): pre-pv_done. Overwrites v_smem h0
+            // while PV(gl-1)'s tail h0 MMAs may still read it -- the exact race
+            // master runs every steady iter (TMA flight > MMA tail, D1-proven).
+            // The flat-new exposure is only the seam iter (L==0; pipe0's is
+            // pushed past the race window by the store gate above anyway).
+            issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0,
+                                  lane0);
+          }
+          mbarrier_wait(&pv_done[pipe], pph);  // PV(gl-1) fully done
+          if (!has_next)  // final iter's Vh0: post-pv_done (master 1033)
+            issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0,
+                                  lane0);
+          issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1,
+                                lane0);
+        }
+      }
+#else  // !ATTENTION_FLAT_TMA_PUSH: pull-style (Jun-30 M1 verified; K/V late)
+      for (int gl = 1; gl < G; ++gl) {
+#if ATTENTION_FLAT_DEBUG
+        g_dbg_gl[warp_id] = gl;
+#endif
+        const int L = gl % n_p;
+        const int j = gl / n_p;
+        const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
+        // tile boundary: warp2 prefetches THIS tile's Q (after prev tile's last QK).
+        if (L == 0 && warp_id == 2) {
+          mbarrier_wait(&qk_all_done, qa_wait & 1u);
+          ++qa_wait;
+          mbarrier_expect_tx(&q_ready, kTileBytes);  // all lanes (elect.sync)
+          if (lane0) {
+            const uint32_t q_addr = smem_ptr_u32(q_smem);
+            const int q_row = (bx + j * gx) * kTileM;
+            tma_load_2d(&q_map, q_addr, &q_ready, 0, q_row);
+            tma_load_2d(&q_map, q_addr + kTileBytes / 2, &q_ready, 32, q_row);
+          }
+        }
+        const int tile = bx + j * gx;
+        const int iter = L * kActivePipeStride + pipe;
+        const int gkt = kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles) +
+                        local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
+#if ATTENTION_FLAT_PROBE
+        const bool _tk = bx == 0 && pipe == 0 && lane0;
+        const unsigned long long _tt0 = _tk ? probe_clk() : 0ull;
+#endif
+        mbarrier_wait(&qk_done[pipe], pph);      // K buffer free; also frees V h0
+                                                 // region (producer EARLY-commits
+                                                 // qk_done inside PV h0).
+#if ATTENTION_FLAT_PROBE
+        if (_tk) { g_probe_tmaqk += probe_clk() - _tt0; g_probe_tmaqk_n += 1; }
+#endif
+        issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], gkt, lane0);
+        // warp2 stores prev tile's O AFTER issuing K (so the producer is unblocked
+        // and can reach the PV/pv_tile_done the drain needs -> o_drained -> this
+        // store), but BEFORE this tile's pipe0 V overwrites v_smem[0] (store-WAR).
+        if (L == 0 && warp_id == 2 && has_output && lane0) {
+          mbarrier_wait(&o_drained, store_wait & 1u);  // tile (j-1) drain done
+          ++store_wait;
+          tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, bx + (j - 1) * gx, 0);
+          tma_store_commit_group();
+          tma_store_wait_group_read();  // store-WAR: done before tile j V(pipe0)
+        }
+        // SAFE (Jun-30 M1 = 094ac4da): V h0 AND h1 issued AFTER pv_done, i.e. after
+        // PV(gl-1) fully finished reading v_smem -> no WAR. V is late (the pull
+        // -12%); TMA_PUSH is the perf path.
+        mbarrier_wait(&pv_done[pipe], pph);      // PV(gl-1) done -> v_smem free
+        issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0, lane0);
+        issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
+      }
+#endif  // ATTENTION_FLAT_TMA_PUSH
+      // final tile (J-1) store (warp2): after its drain.
+      if (warp_id == 2 && has_output) {
+        mbarrier_wait(&o_drained, store_wait & 1u);
+        if (lane0) {
+          tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, bx + (J - 1) * gx, 0);
+          tma_store_commit_group();
+          tma_store_wait_group_read();
+        }
+      }
+    } else if (J > 0 && warp_id >= kConsumerBaseWarp &&
+               warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe) {
+      // =================== CONSUMER (reuse softmax role + drain) =============
+      const int pipe = (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
+      const int consumer_warp = (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
+      const int n_p0 = (R + 1) / 2;
+      const int n_p1 = R / 2;
+      unsigned int pvph0 = 0u, pvph1 = 0u;  // running pv_done parity (drain)
+      for (int j = 0; j < J; ++j) {
+#if ATTENTION_FLAT_DEBUG
+        g_dbg_gl[warp_id] = j;
+#endif
+        const int tile = bx + j * gx;
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64)
+          g_probe_sm0[j] = probe_clk();   // consumer softmax start (per tile)
+#endif
+        float* row_max_scratch =
+            out_f32 != nullptr ? out_f32 + static_cast<size_t>(tile) * kTileWords : nullptr;
+        attention_consumer_pipe_role(
+            s_smem, qk_done, p_done, s_h1_done, row_sum_partial, row_max_scratch,
+            p_taddr, o_taddr, pipe, consumer_warp, R, score_to_exp2_scale,
+            has_output, nullptr, 0, 0, 0ull, 0u, lane);
+        if (!has_output) continue;
+        // ---- drain tile j (both pipes; all 8 consumer warps) ----
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64)
+          g_probe_dr0[j] = probe_clk();   // drain start
+#endif
+        asm volatile("bar.sync 1, 256;" ::: "memory");  // softmax partials visible
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64) g_probe_dra[j] = probe_clk();
+#endif
+        // tile j's PVs (both pipes) completed -> producers arrived pv_tile_done
+        // once for this tile (advances once/tile, so @(j&1) is unambiguous even if
+        // a producer raced ahead).
+        mbarrier_wait(&pv_tile_done, static_cast<uint32_t>(j & 1));
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64) g_probe_drb[j] = probe_clk();
+#endif
+        uint32_t* output_bf16_smem = v_smem[0];
+        const int epilogue_slot = warp_id - kConsumerBaseWarp;
+        const int drain_warp = epilogue_slot & (kConsumerWarpsPerPipe - 1);
+        const int drain_half = epilogue_slot / kConsumerWarpsPerPipe;
+        const int row = drain_warp * 32 + lane;
+        const float row_max0 = row_max_scratch[row];
+        const float row_max1 = row_max_scratch[kTileM + row];
+        const float common_row_max = fmaxf(row_max0, row_max1);
+        const float pipe0_scale = exp2_approx_float_cpp(row_max0 - common_row_max);
+        const float pipe1_scale = exp2_approx_float_cpp(row_max1 - common_row_max);
+        const float denom = row_sum_partial[0][row] * pipe0_scale +
+                            row_sum_partial[1][row] * pipe1_scale;
+        const float inv_sum = denom != 0.0f ? 1.0f / denom : 0.0f;
+        const uint32_t row_taddr0 = o_taddr[0] +
+            (static_cast<uint32_t>(drain_warp * 32) << 16) +
+            static_cast<uint32_t>(drain_half * 64);
+        const uint32_t row_taddr1 = o_taddr[1] +
+            (static_cast<uint32_t>(drain_warp * 32) << 16) +
+            static_cast<uint32_t>(drain_half * 64);
+        uint32_t* row_dst = output_bf16_smem +
+            static_cast<size_t>(row) * (kTileN / 2) + drain_half * (kTileN / 4);
+#if ATTENTION_FLAT_O_LD_DONE
+#pragma unroll
+        for (int chunk = 0; chunk < 3; ++chunk) {
+          const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 16);
+          store_tmem_x16_pair_scale_norm_bf16_smem(
+              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+              row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
+        }
+        {
+          // Last chunk split: retire the final o_taddr lds, signal o_ld_done
+          // (o_taddr free for PV(t+1,i0)'s accumulate=false reset), then finish
+          // the FP pack. Same math as the fused wrapper.
+          uint32_t r0[16];
+          uint32_t r1[16];
+          TCGEN05_LD_X16(row_taddr0 + 48u, r0);
+          TCGEN05_LD_X16(row_taddr1 + 48u, r1);
+          tcgen05_wait_ld();
+          if (lane0) mbarrier_arrive(&o_ld_done);
+          uint32_t* dst = row_dst + 3 * 8;
+#pragma unroll
+          for (int i = 0; i < 16; i += 2) {
+            const float lo = (__uint_as_float(r0[i]) * pipe0_scale +
+                              __uint_as_float(r1[i]) * pipe1_scale) *
+                             inv_sum;
+            const float hi = (__uint_as_float(r0[i + 1]) * pipe0_scale +
+                              __uint_as_float(r1[i + 1]) * pipe1_scale) *
+                             inv_sum;
+            dst[i >> 1] = pack_bf16_pair_device(lo, hi);
+          }
+        }
+#else
+#pragma unroll
+        for (int chunk = 0; chunk < 4; ++chunk) {
+          const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 16);
+          store_tmem_x16_pair_scale_norm_bf16_smem(
+              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+              row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
+        }
+#endif
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64) g_probe_drc[j] = probe_clk();
+#endif
+        tma_store_fence();
+        if (lane0) mbarrier_arrive(&o_drained);
+        // ensure all drains done before next tile's softmax reuses o_taddr / partials
+        asm volatile("bar.sync 1, 256;" ::: "memory");
+#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+        // Post-drain relay of the NEXT tile's seam-QK completion onto qk_done
+        // (PPAS conditions: the commit landed mid-drain with no waiter; in the
+        // common case QK finished during the drain so this returns instantly).
+        // One designated warp per pipe; the other warps enter softmax(j+1) and
+        // block on qk_done until this arrive. Seam commit #(j+1) -> parity j&1.
+        if (j + 1 < J && consumer_warp == 0) {
+          mbarrier_wait(&qk_seam_done[pipe * 16], static_cast<uint32_t>(j & 1));
+          if (lane0) mbarrier_arrive(&qk_done[pipe]);
+        }
+#endif
+#if ATTENTION_FLAT_PROBE
+        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64)
+          g_probe_dr1[j] = probe_clk();   // drain end
+#endif
+      }
+    }
+#if ATTENTION_FLAT_DEBUG
+#undef mbarrier_wait
+#endif
+    // Free tmem (D1 does this after the per-tile loop; the flat path returns
+    // before reaching it, which would leave tmem allocated -> "tensor memory not
+    // completely freed"). All 384 threads converge here first.
+    if (threadIdx.x == 0) tcgen05_fence_after_thread_sync();
+    __syncthreads();
+#if ATTENTION_FLAT_PROBE
+    if (bx == 0 && threadIdx.x == 0) {
+      // producer(warp0) & consumer(warp4) share CTA0's clock -> aligned timeline.
+      for (int t = 2; t < J && t < 8; ++t)
+        printf("PROBE t%d cad=%llu sm=%llu | drain bar1=%llu pvtile=%llu pack=%llu "
+               "fence+bar2=%llu tot=%llu\n",
+               t, g_probe_qk[t] - g_probe_qk[t - 1],
+               g_probe_dr0[t] - g_probe_sm0[t], g_probe_dra[t] - g_probe_dr0[t],
+               g_probe_drb[t] - g_probe_dra[t], g_probe_drc[t] - g_probe_drb[t],
+               g_probe_dr1[t] - g_probe_drc[t], g_probe_dr1[t] - g_probe_dr0[t]);
+      printf("PROBE softmax qk_wait avg=%llu (n=%llu) | TMA Kbuf_wait avg=%llu (n=%llu)\n",
+             g_probe_smqk_n ? g_probe_smqk / g_probe_smqk_n : 0ull, g_probe_smqk_n,
+             g_probe_tmaqk_n ? g_probe_tmaqk / g_probe_tmaqk_n : 0ull, g_probe_tmaqk_n);
+      const int n_pp = (R + 1) / 2;  // pipe0 n_p
+      for (int g = 14; g < 26; ++g)
+        printf("PROBE gl%d(L%d) dur=%llu\n", g, g % n_pp,
+               g_probe_gl[g] - g_probe_gl[g - 1]);
+      printf("PROBE seg@gl%d k_ready=%llu p_done=%llu QK+vready=%llu PVh0+sh1=%llu "
+             "vh1ready=%llu PVh1=%llu body=%llu\n",
+             ATTENTION_FLAT_PROBE_GL,
+             g_probe_seg[0] - g_probe_gl[ATTENTION_FLAT_PROBE_GL],
+             g_probe_seg[1] - g_probe_seg[0], g_probe_seg[2] - g_probe_seg[1],
+             g_probe_seg[3] - g_probe_seg[2], g_probe_seg[4] - g_probe_seg[3],
+             g_probe_seg[5] - g_probe_seg[4],
+             g_probe_seg[6] - g_probe_gl[ATTENTION_FLAT_PROBE_GL]);
+    }
+    __syncthreads();
+#endif
+    if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
+    __syncthreads();
+    if (warp_id == 0) tcgen05_relinquish_alloc_permit();
+    return;
+  }
+#endif
   for (int tile = blockIdx.x; tile < total_tiles;
        tile += static_cast<int>(gridDim.x)) {
   uintptr_t smem_addr =
@@ -2871,6 +3665,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     tcgen05_fence_after_thread_sync();
   }
   __syncthreads();
+#if ATTENTION_FLAT_PROBE
+  if (blockIdx.x == 0 && threadIdx.x == 0)
+    printf("PROBEBASE k_ready avg=%llu (n=%llu) | softmax qk_wait avg=%llu (n=%llu)\n",
+           g_probe_kready_n ? g_probe_kready / g_probe_kready_n : 0ull, g_probe_kready_n,
+           g_probe_smqk_n ? g_probe_smqk / g_probe_smqk_n : 0ull, g_probe_smqk_n);
+#endif
 
 #if !ATTENTION_PERSISTENT
   if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);

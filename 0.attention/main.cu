@@ -103,6 +103,9 @@ static constexpr int kFixedBenchmarkKTiles = 256;
 #ifndef ATTENTION_O_CHECKSUM
 #define ATTENTION_O_CHECKSUM 0
 #endif
+#ifndef ATTENTION_O_DUMP
+#define ATTENTION_O_DUMP 0
+#endif
 #ifndef ATTENTION_EX2_EMU_FREQ
 #define ATTENTION_EX2_EMU_FREQ 10
 #endif
@@ -2261,7 +2264,25 @@ int run_benchmark(const Args& args_in) {
     }
     std::printf("O_CHECKSUM,blocks=%d,k_tiles=%d,%016llx\n", args.blocks,
                 args.k_tiles, static_cast<unsigned long long>(o_hash));
+    // Masked hash: drop each bf16's low 4 mantissa bits. Distinguishes benign
+    // low-mantissa rounding wobble (masked hash stable while the raw one flips)
+    // from real memory corruption (both flip). See 20/21 (kt8 base ck flips).
+    uint64_t o_hash_m = 1469598103934665603ull;
+    for (size_t i = 0; i < o_words; ++i) {
+      o_hash_m = (o_hash_m ^ (h_o_all[i] & 0xFFF0FFF0u)) * 1099511628211ull;
+    }
+    std::printf("O_CHECKSUM_MASKED,blocks=%d,k_tiles=%d,%016llx\n", args.blocks,
+                args.k_tiles, static_cast<unsigned long long>(o_hash_m));
     std::fflush(stdout);
+#if ATTENTION_O_DUMP
+    // Corruption autopsy: dump the raw output buffer for offline diff against
+    // a known-good run (fixed name; the driving script renames per run).
+    if (FILE* f = std::fopen("o_dump.bin", "wb")) {
+      std::fwrite(h_o_all.data(), sizeof(uint32_t), o_words, f);
+      std::fclose(f);
+      std::printf("O_DUMP,words=%zu\n", o_words);
+    }
+#endif
   }
 #endif
   CUDA_CHECK(cudaFree(d_q));
