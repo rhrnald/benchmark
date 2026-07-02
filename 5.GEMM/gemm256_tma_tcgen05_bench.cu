@@ -86,6 +86,7 @@ struct Args {
   int iters = 5;
   std::vector<int> sizes = {4096, 8192, 16384, 32768};
   const char* csv = "gemm256_tma_tcgen05_bench.csv";
+  bool cold = false;
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
@@ -823,7 +824,7 @@ std::vector<int> parse_sizes(const char* s) {
 
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
-              "[--warmup W] [--iters I] [--csv PATH] "
+              "[--warmup W] [--iters I] [--csv PATH] [--cold] "
               "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
               "[--clock-trace] [--clock-trace-start N] "
               "[--clock-trace-iters N] [--trace-csv PATH]\n",
@@ -851,6 +852,8 @@ Args parse_args(int argc, char** argv) {
       args.iters = std::atoi(need_arg("--iters"));
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
+    } else if (std::strcmp(argv[i], "--cold") == 0) {
+      args.cold = true;
     } else if (std::strcmp(argv[i], "--validate") == 0) {
       args.validate = true;
     } else if (std::strcmp(argv[i], "--validate-size") == 0) {
@@ -900,6 +903,12 @@ double elapsed_ms(std::chrono::steady_clock::time_point start,
   return std::chrono::duration<double, std::milli>(stop - start).count();
 }
 
+void flush_l2_cache(void* buffer, size_t bytes) {
+  if (buffer == nullptr || bytes == 0) return;
+  CUDA_CHECK(cudaMemsetAsync(buffer, 0, bytes));
+  CUDA_CHECK(cudaDeviceSynchronize());
+}
+
 struct CaseResult {
   int size = 0;
   int mtile = 0;
@@ -913,7 +922,8 @@ struct CaseResult {
   uint32_t checksum = 0;
 };
 
-CaseResult run_case(int size, int warmup, int iters) {
+CaseResult run_case(int size, int warmup, int iters, void* l2_flush_buffer,
+                    size_t l2_flush_bytes) {
   if (size % kCtaM != 0 || size % kCtaN != 0 || size % kStageK != 0) {
     std::fprintf(stderr, "size must be a multiple of 256 and 64; got %d\n", size);
     std::exit(EXIT_FAILURE);
@@ -963,21 +973,39 @@ CaseResult run_case(int size, int warmup, int iters) {
   cudaEvent_t start{}, stop{};
   CUDA_CHECK(cudaEventCreate(&start));
   CUDA_CHECK(cudaEventCreate(&stop));
-  const auto wall_start = std::chrono::steady_clock::now();
-  CUDA_CHECK(cudaEventRecord(start));
-  for (int i = 0; i < iters; ++i) {
-    gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
-                                                                   d_sink, nullptr,
-                                                                   0, ktiles,
-                                                                   nullptr, 0, 0);
-    CUDA_CHECK(cudaGetLastError());
-  }
-  CUDA_CHECK(cudaEventRecord(stop));
-  CUDA_CHECK(cudaEventSynchronize(stop));
-  const auto wall_stop = std::chrono::steady_clock::now();
 
   float total_event_ms = 0.0f;
-  CUDA_CHECK(cudaEventElapsedTime(&total_event_ms, start, stop));
+  double total_wall_ms = 0.0;
+  if (l2_flush_buffer != nullptr && l2_flush_bytes != 0) {
+    for (int i = 0; i < iters; ++i) {
+      flush_l2_cache(l2_flush_buffer, l2_flush_bytes);
+      const auto wall_start = std::chrono::steady_clock::now();
+      CUDA_CHECK(cudaEventRecord(start));
+      gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(
+          a_map, b_map, d_sink, nullptr, 0, ktiles, nullptr, 0, 0);
+      CUDA_CHECK(cudaGetLastError());
+      CUDA_CHECK(cudaEventRecord(stop));
+      CUDA_CHECK(cudaEventSynchronize(stop));
+      const auto wall_stop = std::chrono::steady_clock::now();
+      float event_ms = 0.0f;
+      CUDA_CHECK(cudaEventElapsedTime(&event_ms, start, stop));
+      total_event_ms += event_ms;
+      total_wall_ms += elapsed_ms(wall_start, wall_stop);
+    }
+  } else {
+    const auto wall_start = std::chrono::steady_clock::now();
+    CUDA_CHECK(cudaEventRecord(start));
+    for (int i = 0; i < iters; ++i) {
+      gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(
+          a_map, b_map, d_sink, nullptr, 0, ktiles, nullptr, 0, 0);
+      CUDA_CHECK(cudaGetLastError());
+    }
+    CUDA_CHECK(cudaEventRecord(stop));
+    CUDA_CHECK(cudaEventSynchronize(stop));
+    const auto wall_stop = std::chrono::steady_clock::now();
+    CUDA_CHECK(cudaEventElapsedTime(&total_event_ms, start, stop));
+    total_wall_ms = elapsed_ms(wall_start, wall_stop);
+  }
 
   std::vector<uint32_t> h_sink(std::min(ctas, 1024));
   CUDA_CHECK(cudaMemcpy(h_sink.data(), d_sink, h_sink.size() * sizeof(uint32_t),
@@ -986,7 +1014,7 @@ CaseResult run_case(int size, int warmup, int iters) {
   for (uint32_t v : h_sink) checksum ^= v;
 
   const double avg_event_ms = static_cast<double>(total_event_ms) / iters;
-  const double avg_wall_ms = elapsed_ms(wall_start, wall_stop) / iters;
+  const double avg_wall_ms = total_wall_ms / iters;
   const double flops = 2.0 * static_cast<double>(m) * n * k;
 
   CaseResult result;
@@ -1299,6 +1327,9 @@ int main(int argc, char** argv) {
 
   cudaDeviceProp prop{};
   CUDA_CHECK(cudaGetDeviceProperties(&prop, args.device));
+  int l2_cache_size = 0;
+  CUDA_CHECK(
+      cudaDeviceGetAttribute(&l2_cache_size, cudaDevAttrL2CacheSize, args.device));
   if (prop.major < 10) {
     std::fprintf(stderr, "This benchmark requires SM100+; got sm_%d%d\n",
                  prop.major, prop.minor);
@@ -1335,34 +1366,49 @@ int main(int argc, char** argv) {
   }
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
-               "warmup,iters,dynamic_smem_bytes,event_ms,wall_ms,"
+               "warmup,iters,cold_l2_flush,l2_flush_bytes,dynamic_smem_bytes,"
+               "event_ms,wall_ms,"
                "event_TFLOPS,wall_TFLOPS,checksum,device\n");
+
+  void* l2_flush_buffer = nullptr;
+  const size_t l2_flush_bytes =
+      args.cold && l2_cache_size > 0 ? static_cast<size_t>(l2_cache_size) : 0;
+  if (l2_flush_bytes != 0) {
+    CUDA_CHECK(cudaMalloc(&l2_flush_buffer, l2_flush_bytes));
+  }
 
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
               args.device, prop.name, prop.major, prop.minor, kDynamicSmemBytes);
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
-              "pipe1_phase_shift_cycles=%d\n",
+              "pipe1_phase_shift_cycles=%d cold_l2_flush=%d "
+              "l2_flush_bytes=%zu\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
-              kPipe1PhaseShiftCycles);
+              kPipe1PhaseShiftCycles, args.cold ? 1 : 0, l2_flush_bytes);
 
   for (int size : args.sizes) {
-    CaseResult r = run_case(size, args.warmup, args.iters);
+    CaseResult r =
+        run_case(size, args.warmup, args.iters, l2_flush_buffer, l2_flush_bytes);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
                 "event_ms=%.6f wall_ms=%.6f event_TFLOPS=%.3f "
                 "wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.event_ms,
                 r.wall_ms, r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%zu,%d,"
+                 "%.6f,%.6f,"
                  "%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
-                 kDynamicSmemBytes, r.event_ms, r.wall_ms, r.event_tflops,
-                 r.wall_tflops, r.checksum, prop.name);
+                 args.cold ? 1 : 0, l2_flush_bytes, kDynamicSmemBytes,
+                 r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
+                 r.checksum, prop.name);
     std::fflush(csv);
   }
 
+  if (l2_flush_buffer != nullptr) {
+    CUDA_CHECK(cudaFree(l2_flush_buffer));
+  }
   std::fclose(csv);
   return 0;
 }

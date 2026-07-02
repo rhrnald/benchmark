@@ -73,12 +73,13 @@ struct Options {
   int repeat = 50;
   int warmup = 10;
   std::string mode = "bf16";
+  bool cold = false;
 };
 
 void usage(const char *argv0) {
   std::printf(
       "Usage: %s [--device N] [--m M] [--n N] [--k K] [--repeat R] "
-      "[--warmup W] [--mode fp16|bf16|tf32|fp32]\n",
+      "[--warmup W] [--mode fp16|bf16|tf32|fp32] [--cold]\n",
       argv0);
 }
 
@@ -108,6 +109,8 @@ Options parse_options(int argc, char **argv) {
       opt.warmup = std::atoi(need_arg("--warmup"));
     } else if (std::strcmp(argv[i], "--mode") == 0) {
       opt.mode = need_arg("--mode");
+    } else if (std::strcmp(argv[i], "--cold") == 0) {
+      opt.cold = true;
     } else if (std::strcmp(argv[i], "--help") == 0) {
       usage(argv[0]);
       std::exit(EXIT_SUCCESS);
@@ -183,6 +186,12 @@ double ms_since(std::chrono::steady_clock::time_point start,
   return std::chrono::duration<double, std::milli>(end - start).count();
 }
 
+void flush_l2_cache(void *buffer, size_t bytes) {
+  if (buffer == nullptr || bytes == 0) return;
+  CHECK_CUDA(cudaMemsetAsync(buffer, 0, bytes));
+  CHECK_CUDA(cudaDeviceSynchronize());
+}
+
 int main(int argc, char **argv) {
   Options opt = parse_options(argc, argv);
 
@@ -191,6 +200,9 @@ int main(int argc, char **argv) {
 
   cudaDeviceProp prop{};
   CHECK_CUDA(cudaGetDeviceProperties(&prop, opt.device));
+  int l2_cache_size = 0;
+  CHECK_CUDA(
+      cudaDeviceGetAttribute(&l2_cache_size, cudaDevAttrL2CacheSize, opt.device));
 
   cublasHandle_t handle = nullptr;
   CHECK_CUBLAS(cublasCreate(&handle));
@@ -235,23 +247,46 @@ int main(int argc, char **argv) {
   }
   CHECK_CUDA(cudaDeviceSynchronize());
 
+  void *l2_flush_buffer = nullptr;
+  const size_t l2_flush_bytes =
+      opt.cold && l2_cache_size > 0 ? static_cast<size_t>(l2_cache_size) : 0;
+  if (l2_flush_bytes != 0) {
+    CHECK_CUDA(cudaMalloc(&l2_flush_buffer, l2_flush_bytes));
+  }
+
   cudaEvent_t start{}, stop{};
   CHECK_CUDA(cudaEventCreate(&start));
   CHECK_CUDA(cudaEventCreate(&stop));
 
-  const auto wall_start = std::chrono::steady_clock::now();
-  CHECK_CUDA(cudaEventRecord(start));
-  for (int i = 0; i < opt.repeat; ++i) {
-    run_gemm();
-  }
-  CHECK_CUDA(cudaEventRecord(stop));
-  CHECK_CUDA(cudaEventSynchronize(stop));
-  const auto wall_stop = std::chrono::steady_clock::now();
-
   float event_total_ms = 0.0f;
-  CHECK_CUDA(cudaEventElapsedTime(&event_total_ms, start, stop));
+  double wall_total_ms = 0.0;
+  if (opt.cold) {
+    for (int i = 0; i < opt.repeat; ++i) {
+      flush_l2_cache(l2_flush_buffer, l2_flush_bytes);
+      const auto wall_start = std::chrono::steady_clock::now();
+      CHECK_CUDA(cudaEventRecord(start));
+      run_gemm();
+      CHECK_CUDA(cudaEventRecord(stop));
+      CHECK_CUDA(cudaEventSynchronize(stop));
+      const auto wall_stop = std::chrono::steady_clock::now();
+      float event_ms = 0.0f;
+      CHECK_CUDA(cudaEventElapsedTime(&event_ms, start, stop));
+      event_total_ms += event_ms;
+      wall_total_ms += ms_since(wall_start, wall_stop);
+    }
+  } else {
+    const auto wall_start = std::chrono::steady_clock::now();
+    CHECK_CUDA(cudaEventRecord(start));
+    for (int i = 0; i < opt.repeat; ++i) {
+      run_gemm();
+    }
+    CHECK_CUDA(cudaEventRecord(stop));
+    CHECK_CUDA(cudaEventSynchronize(stop));
+    const auto wall_stop = std::chrono::steady_clock::now();
+    CHECK_CUDA(cudaEventElapsedTime(&event_total_ms, start, stop));
+    wall_total_ms = ms_since(wall_start, wall_stop);
+  }
 
-  const double wall_total_ms = ms_since(wall_start, wall_stop);
   const double flops_per_gemm =
       2.0 * static_cast<double>(opt.m) * opt.n * opt.k;
   const double event_avg_ms = static_cast<double>(event_total_ms) / opt.repeat;
@@ -265,8 +300,10 @@ int main(int argc, char **argv) {
   std::printf("device=%d name=\"%s\" cc=%d.%d\n", opt.device, prop.name,
               prop.major, prop.minor);
   std::printf("mode=%s (%s)\n", opt.mode.c_str(), cfg.label);
-  std::printf("m=%d n=%d k=%d repeat=%d warmup=%d\n", opt.m, opt.n, opt.k,
-              opt.repeat, opt.warmup);
+  std::printf("m=%d n=%d k=%d repeat=%d warmup=%d cold_l2_flush=%d "
+              "l2_flush_bytes=%zu\n",
+              opt.m, opt.n, opt.k, opt.repeat, opt.warmup,
+              opt.cold ? 1 : 0, l2_flush_bytes);
   std::printf("data_type=%s compute_type=%d memory=%.2f GiB\n",
               type_name(cfg.data_type), static_cast<int>(cfg.compute_type),
               gib);
@@ -276,12 +313,16 @@ int main(int argc, char **argv) {
   std::printf("wall_total_ms=%.3f wall_avg_ms=%.6f wall_TFLOPS=%.3f\n",
               wall_total_ms, wall_avg_ms, wall_tflops);
   std::printf(
-      "csv,%s,%d,%d,%d,%d,%d,%.6f,%.3f,%.6f,%.3f,%s\n",
+      "csv,%s,%d,%d,%d,%d,%d,%d,%zu,%.6f,%.3f,%.6f,%.3f,%s\n",
       opt.mode.c_str(), opt.m, opt.n, opt.k, opt.repeat, opt.warmup,
-      event_avg_ms, event_tflops, wall_avg_ms, wall_tflops, prop.name);
+      opt.cold ? 1 : 0, l2_flush_bytes, event_avg_ms, event_tflops,
+      wall_avg_ms, wall_tflops, prop.name);
 
   CHECK_CUDA(cudaEventDestroy(start));
   CHECK_CUDA(cudaEventDestroy(stop));
+  if (l2_flush_buffer != nullptr) {
+    CHECK_CUDA(cudaFree(l2_flush_buffer));
+  }
   CHECK_CUDA(cudaFree(A));
   CHECK_CUDA(cudaFree(B));
   CHECK_CUDA(cudaFree(C));
