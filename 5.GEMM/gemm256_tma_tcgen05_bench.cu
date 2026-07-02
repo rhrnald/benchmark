@@ -17,7 +17,19 @@
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 24
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 8
+#endif
+
+#ifndef GEMM_GRID_B_REUSE
+#define GEMM_GRID_B_REUSE 0
+#endif
+
+#ifndef GEMM_GRID_SWIZZLE
+#define GEMM_GRID_SWIZZLE 5
+#endif
+
+#ifndef GEMM_GRID_SWIZZLE_MIN_TILES
+#define GEMM_GRID_SWIZZLE_MIN_TILES 64
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
@@ -532,6 +544,7 @@ __device__ __forceinline__ void issue_b_pipe_stage_tma(
                      trace_start, trace_end);
 }
 
+template <int GridSwizzle>
 __global__ __launch_bounds__(kThreads, 1)
 void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                                 const __grid_constant__ CUtensorMap b_map,
@@ -539,6 +552,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                                 float* __restrict__ out,
                                 int out_ld,
                                 int ktiles,
+                                int mtile_count,
+                                int ntile_count,
                                 ClockTraceRecord* __restrict__ clock_trace,
                                 int clock_trace_start,
                                 int clock_trace_iters) {
@@ -549,6 +564,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   (void)out;
   (void)out_ld;
   (void)ktiles;
+  (void)mtile_count;
+  (void)ntile_count;
   (void)clock_trace;
   (void)clock_trace_start;
   (void)clock_trace_iters;
@@ -587,9 +604,33 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const int lane = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
   const bool lane0 = lane == 0;
-  const int tile_n = static_cast<int>(blockIdx.x);
-  const int tile_m = static_cast<int>(blockIdx.y);
-  const int ntile = static_cast<int>(gridDim.x);
+  int tile_m = 0;
+  int tile_n = 0;
+  int ntile = ntile_count;
+  if constexpr (GridSwizzle > 0) {
+    const int group_m = GridSwizzle;
+    const int group_n = GridSwizzle;
+    const int groups_n = (ntile_count + group_n - 1) / group_n;
+    const int group_tiles = group_m * group_n;
+    const int linear_cta = static_cast<int>(blockIdx.x);
+    const int group_id = linear_cta / group_tiles;
+    const int local = linear_cta - group_id * group_tiles;
+    const int group_tile_n = group_id % groups_n;
+    const int group_tile_m = group_id / groups_n;
+    tile_n = group_tile_n * group_n + local % group_n;
+    tile_m = group_tile_m * group_m + local / group_n;
+    if (tile_m >= mtile_count || tile_n >= ntile_count) return;
+  } else {
+#if GEMM_GRID_B_REUSE
+    tile_m = static_cast<int>(blockIdx.x);
+    tile_n = static_cast<int>(blockIdx.y);
+    ntile = static_cast<int>(gridDim.y);
+#else
+    tile_n = static_cast<int>(blockIdx.x);
+    tile_m = static_cast<int>(blockIdx.y);
+    ntile = static_cast<int>(gridDim.x);
+#endif
+  }
 
   if (warp_id == 0) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
@@ -900,12 +941,48 @@ double elapsed_ms(std::chrono::steady_clock::time_point start,
   return std::chrono::duration<double, std::milli>(stop - start).count();
 }
 
+int select_grid_swizzle(int mtile, int ntile) {
+#if GEMM_GRID_SWIZZLE > 0
+  if (mtile >= GEMM_GRID_SWIZZLE_MIN_TILES &&
+      ntile >= GEMM_GRID_SWIZZLE_MIN_TILES) {
+    return GEMM_GRID_SWIZZLE;
+  }
+#endif
+  return 0;
+}
+
+dim3 launch_grid(int mtile, int ntile, int grid_swizzle) {
+  if (grid_swizzle > 0) {
+    const int group = grid_swizzle;
+    const int groups_m = (mtile + group - 1) / group;
+    const int groups_n = (ntile + group - 1) / group;
+    return dim3(groups_m * groups_n * group * group, 1, 1);
+  }
+#if GEMM_GRID_B_REUSE
+  return dim3(mtile, ntile, 1);
+#else
+  return dim3(ntile, mtile, 1);
+#endif
+}
+
+void set_gemm_kernel_attributes() {
+  CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel<0>,
+                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                  kDynamicSmemBytes));
+#if GEMM_GRID_SWIZZLE > 0
+  CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>,
+                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                  kDynamicSmemBytes));
+#endif
+}
+
 struct CaseResult {
   int size = 0;
   int mtile = 0;
   int ntile = 0;
   int ktiles = 0;
   int ctas = 0;
+  int grid_swizzle = 0;
   float event_ms = 0.0f;
   double wall_ms = 0.0;
   double event_tflops = 0.0;
@@ -944,18 +1021,27 @@ CaseResult run_case(int size, int warmup, int iters) {
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
 
-  CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel,
-                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  kDynamicSmemBytes));
+  set_gemm_kernel_attributes();
 
-  dim3 grid(ntile, mtile, 1);
+  const int grid_swizzle = select_grid_swizzle(mtile, ntile);
+  dim3 grid = launch_grid(mtile, ntile, grid_swizzle);
   dim3 block(kThreads, 1, 1);
+  auto launch_gemm = [&]() {
+#if GEMM_GRID_SWIZZLE > 0
+    if (grid_swizzle > 0) {
+      gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
+          <<<grid, block, kDynamicSmemBytes>>>(a_map, b_map, d_sink, nullptr,
+                                               0, ktiles, mtile, ntile, nullptr,
+                                               0, 0);
+      return;
+    }
+#endif
+    gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
+        a_map, b_map, d_sink, nullptr, 0, ktiles, mtile, ntile, nullptr, 0, 0);
+  };
 
   for (int i = 0; i < warmup; ++i) {
-    gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
-                                                                   d_sink, nullptr,
-                                                                   0, ktiles,
-                                                                   nullptr, 0, 0);
+    launch_gemm();
     CUDA_CHECK(cudaGetLastError());
   }
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -966,10 +1052,7 @@ CaseResult run_case(int size, int warmup, int iters) {
   const auto wall_start = std::chrono::steady_clock::now();
   CUDA_CHECK(cudaEventRecord(start));
   for (int i = 0; i < iters; ++i) {
-    gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
-                                                                   d_sink, nullptr,
-                                                                   0, ktiles,
-                                                                   nullptr, 0, 0);
+    launch_gemm();
     CUDA_CHECK(cudaGetLastError());
   }
   CUDA_CHECK(cudaEventRecord(stop));
@@ -995,6 +1078,7 @@ CaseResult run_case(int size, int warmup, int iters) {
   result.ntile = ntile;
   result.ktiles = ktiles;
   result.ctas = ctas;
+  result.grid_swizzle = grid_swizzle;
   result.event_ms = static_cast<float>(avg_event_ms);
   result.wall_ms = avg_wall_ms;
   result.event_tflops = flops / (avg_event_ms * 1.0e-3) / 1.0e12;
@@ -1110,16 +1194,22 @@ ValidateResult run_validation(int size, const char* pattern) {
   CUtensorMap a_map{}, b_map{};
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
-  CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel,
-                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  kDynamicSmemBytes));
+  set_gemm_kernel_attributes();
 
-  dim3 grid(ntile, mtile, 1);
+  const int grid_swizzle = select_grid_swizzle(mtile, ntile);
+  dim3 grid = launch_grid(mtile, ntile, grid_swizzle);
   dim3 block(kThreads, 1, 1);
-  gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(a_map, b_map,
-                                                                 d_sink, d_c, n,
-                                                                 ktiles, nullptr,
-                                                                 0, 0);
+#if GEMM_GRID_SWIZZLE > 0
+  if (grid_swizzle > 0) {
+    gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
+        <<<grid, block, kDynamicSmemBytes>>>(a_map, b_map, d_sink, d_c, n,
+                                             ktiles, mtile, ntile, nullptr, 0, 0);
+  } else
+#endif
+  {
+    gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
+        a_map, b_map, d_sink, d_c, n, ktiles, mtile, ntile, nullptr, 0, 0);
+  }
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -1252,22 +1342,33 @@ void run_trace_case(const Args& args) {
   CUtensorMap a_map{}, b_map{};
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
-  CUDA_CHECK(cudaFuncSetAttribute(gemm256_tma_tcgen05_kernel,
-                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  kDynamicSmemBytes));
+  set_gemm_kernel_attributes();
 
-  dim3 grid(ntile, mtile, 1);
+  const int grid_swizzle = select_grid_swizzle(mtile, ntile);
+  dim3 grid = launch_grid(mtile, ntile, grid_swizzle);
   dim3 block(kThreads, 1, 1);
+  auto launch_trace_gemm = [&](ClockTraceRecord* trace, int trace_start,
+                               int trace_iters_arg) {
+#if GEMM_GRID_SWIZZLE > 0
+    if (grid_swizzle > 0) {
+      gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
+          <<<grid, block, kDynamicSmemBytes>>>(
+              a_map, b_map, d_sink, nullptr, 0, ktiles, mtile, ntile, trace,
+              trace_start, trace_iters_arg);
+      return;
+    }
+#endif
+    gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
+        a_map, b_map, d_sink, nullptr, 0, ktiles, mtile, ntile, trace,
+        trace_start, trace_iters_arg);
+  };
   for (int i = 0; i < args.warmup; ++i) {
-    gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(
-        a_map, b_map, d_sink, nullptr, 0, ktiles, nullptr, 0, 0);
+    launch_trace_gemm(nullptr, 0, 0);
     CUDA_CHECK(cudaGetLastError());
   }
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  gemm256_tma_tcgen05_kernel<<<grid, block, kDynamicSmemBytes>>>(
-      a_map, b_map, d_sink, nullptr, 0, ktiles, d_trace,
-      args.clock_trace_start, trace_iters);
+  launch_trace_gemm(d_trace, args.clock_trace_start, trace_iters);
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -1335,31 +1436,34 @@ int main(int argc, char** argv) {
   }
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
-               "warmup,iters,dynamic_smem_bytes,event_ms,wall_ms,"
+               "warmup,iters,grid_swizzle,dynamic_smem_bytes,event_ms,wall_ms,"
                "event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
               args.device, prop.name, prop.major, prop.minor, kDynamicSmemBytes);
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
-              "pipe1_phase_shift_cycles=%d\n",
+              "pipe1_phase_shift_cycles=%d grid_swizzle=%d "
+              "grid_swizzle_min_tiles=%d\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
-              kPipe1PhaseShiftCycles);
+              kPipe1PhaseShiftCycles, GEMM_GRID_SWIZZLE,
+              GEMM_GRID_SWIZZLE_MIN_TILES);
 
   for (int size : args.sizes) {
     CaseResult r = run_case(size, args.warmup, args.iters);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
-                "event_ms=%.6f wall_ms=%.6f event_TFLOPS=%.3f "
+                "grid_swizzle=%d event_ms=%.6f wall_ms=%.6f event_TFLOPS=%.3f "
                 "wall_TFLOPS=%.3f checksum=%08x\n",
-                r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.event_ms,
-                r.wall_ms, r.event_tflops, r.wall_tflops, r.checksum);
+                r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
+                r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
+                r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f,"
                  "%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
-                 kDynamicSmemBytes, r.event_ms, r.wall_ms, r.event_tflops,
-                 r.wall_tflops, r.checksum, prop.name);
+                 r.grid_swizzle, kDynamicSmemBytes, r.event_ms, r.wall_ms,
+                 r.event_tflops, r.wall_tflops, r.checksum, prop.name);
     std::fflush(csv);
   }
 
