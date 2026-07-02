@@ -266,8 +266,6 @@ enum ClockTraceStage {
   kClockTracePvMmaIssue = 20,
   kClockTraceKTmaIssue = 21,
   kClockTraceVTmaIssue = 22,
-  // 2TILE-only: peel sub-phases so the SVG can split the during-drain QK peel
-  // into wait(Q) / wait(K) / MMA-issue, plus the EARLY first-K (K1/K2) prefetch.
   kClockTracePeelQWait = 23,
   kClockTracePeelKWait = 24,
   kClockTracePeelIssue = 25,
@@ -287,9 +285,6 @@ static constexpr int kClockTracePvMmaIssueSlot = 45;
 static constexpr int kClockTraceKTmaIssueSlot = 46;
 static constexpr int kClockTraceVTmaIssueSlot = 47;
 static constexpr int kClockTracePackDetailBase = 52;
-// Extra (non-per-iter) region. Slots 0..31 hold the tail/drain/store/peel-QK
-// marks; slots 32..63 hold the B3 store-tail softmax per-half detail
-// (8 consumer warps x {ld h0, sm h0, ld h1, sm h1} = 32 records).
 static constexpr int kClockTraceExtraSlots = 64;
 static constexpr int kClockTracePeelSoftmaxDetailBase = 32;
 
@@ -856,9 +851,6 @@ std::string epilogue_trace_path(const char* csv_path) {
 }
 
 #if ATTENTION_CLOCK_TRACE_2TILE
-// Inter-Q-tile raw dump: every nonzero ClockTraceRecord from both tile pages,
-// with a `tile` column (0 / 1). Both pages share one clock base (set on tile 0),
-// so `start`/`end` are directly comparable across the two tiles -> real overlap.
 void write_clock_trace_raw_csv(const Args& args,
                                const std::vector<ClockTraceRecord>& records,
                                int page_records) {
@@ -1977,7 +1969,8 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
 #endif
   encode_bf16_output_tma_map(&o_map, d_o, 1);
 
-  auto kernel = select_attention_kernel(args.k_tiles, args.k_tiles);
+  // validate on the literal <0,0> kernel
+  auto kernel = qk_tma_mma_ld_kernel<0, 0>;
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
@@ -2224,9 +2217,6 @@ int run_benchmark(const Args& args_in) {
     }
     std::printf("O_CHECKSUM,blocks=%d,k_tiles=%d,%016llx\n", args.blocks,
                 args.k_tiles, static_cast<unsigned long long>(o_hash));
-    // Masked hash: drop each bf16's low 4 mantissa bits. Distinguishes benign
-    // low-mantissa rounding wobble (masked hash stable while the raw one flips)
-    // from real memory corruption (both flip). See 20/21 (kt8 base ck flips).
     uint64_t o_hash_m = 1469598103934665603ull;
     for (size_t i = 0; i < o_words; ++i) {
       o_hash_m = (o_hash_m ^ (h_o_all[i] & 0xFFF0FFF0u)) * 1099511628211ull;
@@ -2235,8 +2225,6 @@ int run_benchmark(const Args& args_in) {
                 args.k_tiles, static_cast<unsigned long long>(o_hash_m));
     std::fflush(stdout);
 #if ATTENTION_O_DUMP
-    // Corruption autopsy: dump the raw output buffer for offline diff against
-    // a known-good run (fixed name; the driving script renames per run).
     if (FILE* f = std::fopen("o_dump.bin", "wb")) {
       std::fwrite(h_o_all.data(), sizeof(uint32_t), o_words, f);
       std::fclose(f);

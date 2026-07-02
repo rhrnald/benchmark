@@ -5,11 +5,9 @@ This directory contains the current fused Blackwell attention benchmark.
 - `main.cu`: host-side driver, CLI, benchmark, and validation harness
 - `attention.cu`: core fused attention and validation CUDA kernels
 - `ptx_wrappers.cuh`: low-level PTX/TMA/TCGEN05 helper wrappers
-- `Makefile`: local build, run, validation, and trace plot entrypoint (base/PERSIST/BEST/FAST)
+- `Makefile`: local build, run, validation, and trace plot entrypoint (base/PERSIST/BEST/STABLE)
 - `run.py`: small wrapper for benchmark and trace commands
 - `plot_attention_trace.py`: base per-iteration cycle timeline SVG renderer
-- `plot_inter_qtile.py`: persistent inter-Q-tile overlap SVG renderer (two-tile trace)
-- `sweep_seqlen.sh`: one-shot GPU batch (seqlen sweep + cleanup regression + persistent SVG)
 - `old_cu/main_full.cu`: pre-cleanup full source with compile-time experiment options
 - `old_cu/`: older exploratory CUDA kernels kept for reference
 - `log/`: ignored local benchmark logs, CSV files, and SVG plots
@@ -31,38 +29,31 @@ timeline SVG. `make validation` runs the fused correctness path.
 
 ## Sequence length and build profiles
 
-`SEQLEN` selects the shape (`1k 2k 4k 8k 16k 32k` <-> k_tiles `8 16 32 64 128 256`). The default
-build and `make run`/`make validation` use the 32k base schedule (~1800 TFLOPS at 32k, ~818 at 1k).
-Three opt-in profiles pick the schedule at build time:
+`SEQLEN` selects the shape (`1k 2k 4k 8k 16k 32k` <-> k_tiles `8 16 32 64 128 256`).
 
 ```bash
-make run SEQLEN=1k              # base schedule (~818 at 1k, ~1800 at 32k)
-make run SEQLEN=1k PERSIST=1    # persistent CONTINUOUS_FLAT "scr" schedule, the 1k max (~1071)
-make run SEQLEN=8k BEST=1       # static per-seqlen best of {base, scr} (crossover from the sweep)
+make run SEQLEN=8k                 # base schedule, unordered V (default; fast, ck wobbles)
+make run SEQLEN=8k STABLE=1        # order the V waits -> one deterministic checksum per shape
+make run SEQLEN=1k PERSIST=1       # persistent scr schedule, fastest at low seqlen
+make run SEQLEN=8k BEST=1          # per-seqlen best of {base, scr}: scr <=4k, base >=8k
+make run SEQLEN=8k CHECKSUM=1      # also print raw+masked O_CHECKSUM (works with any profile)
 ```
 
-- `PERSIST=1` builds the persistent occupancy-1 CONTINUOUS_FLAT kernel; it wins at low seqlen
-  (~1071 vs 818 at 1k) but loses to base at high seqlen, so it is opt-in. Its acceptance gate is
-  numerical equality (`make validation` + masked-ck / autopsy diff <=1ULP), not raw bit-identity,
-  because timing occasionally realizes the codebase's pre-existing benign +-1ULP rounding wobble.
-- `BEST=1` compiles, for the given `SEQLEN`, whichever of base/scr the sweep measured faster.
-  Measured 2026-07-02 (B200 @1965MHz, TFLOP/s) — **scr wins <=4k, base wins >=8k**:
+Per-seqlen TFLOP/s (B200 @1965MHz):
 
-  | seqlen | 1k | 2k | 4k | 8k | 16k | 32k |
-  |---|---|---|---|---|---|---|
-  | base | 818 | 1135 | 1404 | **1613** | **1734** | **1799** |
-  | scr | **1072** | **1286** | **1448** | 1569 | 1640 | 1676 |
+| SEQLEN | 1k | 2k | 4k | 8k | 16k | 32k |
+|---|---|---|---|---|---|---|
+| base (default) | 818 | 1135 | 1404 | 1613 | 1734 | 1799 |
+| base `STABLE=1` | 789 | 1110 | 1381 | 1586 | 1714 | 1780 |
+| scr (`PERSIST=1`) | 1012 | 1240 | 1418 | 1552 | 1631 | 1673 |
 
-  The per-seqlen picks live in the `Makefile` (`BEST_1k`..`BEST_32k`); re-run `sweep_seqlen.sh` to refresh.
-- `FAST=1` builds the persistent QK-peel kernel (~963 at 1k). It is the only trace-able persistent
-  kernel (see Plot), so it is kept for `make plot PERSIST=1`.
+The default matches unordered V handling (fast; the raw checksum wobbles run-to-run). `STABLE=1` orders the V waits so every shape gives one deterministic checksum, bit-identical. `BEST=1` picks scr `<=4k` / base `>=8k`.
 
-`make validation` accepts the same `PERSIST=1`/`BEST=1`/`FAST=1` profiles. (1k..4k use extra warmup
+- `PERSIST=1` (scr) targets bit-stable checksums (~1012 at 1k); if you only require `make validation`
+  to pass and give up run-to-run checksum stability entirely, the same schedule reaches **~1071 at 1k**.
+
+`make validation` accepts the same `PERSIST=1`/`BEST=1`/`STABLE=1` profiles. (1k..4k use extra warmup
 so the short iters reach the GPU boost clock; otherwise they under-report.)
-
-`sweep_seqlen.sh` is a one-shot GPU batch: it sweeps base vs scr over 1k..32k, runs the cleanup
-regression gate (base kt64 O_CHECKSUM `094ac4da579d0383`, scr `make validation`), and renders the
-persistent SVG.
 
 ## Benchmark
 
@@ -91,17 +82,19 @@ log/best.csv
 ## Plot
 
 `make plot` builds a trace-enabled binary with `-DATTENTION_CLOCK_TRACE=1`, runs
-one timed trace pass, then renders `log/best.svg`. The default window is iterations
-`56..63`; override with `make plot TRACE_START=24 TRACE_ITERS=8`.
+one timed trace pass, then renders:
 
-`make plot PERSIST=1` renders the persistent inter-Q-tile overlap SVG
-(`log/persist_inter_qtile.svg`) via `plot_inter_qtile.py` from a two-tile clock trace
-(`-DATTENTION_CLOCK_TRACE_2TILE=1`). It builds the **FAST(963)** kernel, not scr: the
-`scr` (CONTINUOUS_FLAT) schedule is `#error`-incompatible with `CLOCK_TRACE` because the
-clock-trace records into per-iteration slots keyed off the base kernel's outer per-tile
-loop, which CONTINUOUS_FLAT deletes (each role runs its own flat cross-tile loop). Porting
-the two-tile captures into the flat seam would let scr reuse this same CSV format and
-renderer — that is the intended path to an scr SVG.
+```text
+log/best.svg
+```
+
+The default plot window is iterations `56..63`. Override it like this:
+
+```bash
+make plot TRACE_START=24 TRACE_ITERS=8
+```
+
+The persistent (scr) schedule is not supported by `make plot`.
 
 ## Validation
 

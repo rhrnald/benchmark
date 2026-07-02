@@ -39,18 +39,17 @@ ITERS ?= 50
 endif
 RUN_CSV ?= log/best.csv
 
-# --- build profiles (opt-in; default = base 32k schedule ~1801 TFLOPS) ---
-# PERSIST=1: persistent CONTINUOUS_FLAT "scr" schedule, the seqlen-1k max (~1071).
-# One flag implies the whole persistent overlap core (see attention.cu header).
-PERSIST_FLAGS := -DATTENTION_CONTINUOUS_FLAT=1 -DATTENTION_SKIP_V_TMA_EXPECT_TX=0 -diag-suppress 177
-# FAST=1: persistent QK-peel schedule (~963); the only trace-able persistent kernel
-# (CONTINUOUS_FLAT #errors with CLOCK_TRACE), so `make plot PERSIST=1` builds this.
-FAST_FLAGS := -DATTENTION_PERSISTENT_OVERLAP_QK_PEEL=1 -diag-suppress 177
-# BEST=1: static per-seqlen pick, measured 2026-07-02 on B200 @1965MHz (TFLOP/s):
-#   seqlen  1k    2k     4k     8k     16k    32k
-#   base    818   1135   1404   1613   1734   1799
-#   scr    1072   1286   1448   1569   1640   1676
-# scr wins <=4k, base wins >=8k (crossover between 4k and 8k).
+# STABLE=1
+STABLE_FLAGS := -DATTENTION_SKIP_V_TMA_EXPECT_TX=0 -DATTENTION_SKIP_V_H0_READY_WAIT=0 -DATTENTION_SKIP_V_H1_READY_WAIT=0
+# PERSIST=1 - persistent CONTINUOUS_FLAT scr schedule
+PERSIST_FLAGS := -DATTENTION_CONTINUOUS_FLAT=1 $(STABLE_FLAGS) -diag-suppress 177
+
+#   seqlen         1k    2k     4k     8k     16k    32k
+#   base (default) 818   1135   1404   1613   1734   1799   (raw ck wobbles)
+#   base STABLE=1  789   1110   1381   1586   1714   1780   (all bit-stable)
+#   scr            1012  1240   1418   1552   1631   1673   (bit-stable; 1k ~1/12 1ULP)
+
+# Policy: scr <=4k, base >=8k.
 BEST_1k  := scr
 BEST_2k  := scr
 BEST_4k  := scr
@@ -64,16 +63,22 @@ ifeq ($(PERSIST),1)
 PROFILE_FLAGS := $(PERSIST_FLAGS)
 PROFILE_SUFFIX := _scr
 endif
-ifeq ($(FAST),1)
-PROFILE_FLAGS := $(FAST_FLAGS)
-PROFILE_SUFFIX := _fast
-endif
 ifeq ($(BEST),1)
 BEST_PICK := $(BEST_$(SEQLEN))
 ifeq ($(BEST_PICK),scr)
 PROFILE_FLAGS := $(PERSIST_FLAGS)
 endif
 PROFILE_SUFFIX := _best_$(SEQLEN)
+endif
+ifeq ($(STABLE),1)
+PROFILE_FLAGS += $(STABLE_FLAGS)
+PROFILE_SUFFIX := $(PROFILE_SUFFIX)_stable
+endif
+# CHECKSUM=1: print raw+masked O_CHECKSUM of the benchmark output after the
+# timed run.
+ifeq ($(CHECKSUM),1)
+PROFILE_FLAGS += -DATTENTION_O_CHECKSUM=1
+PROFILE_SUFFIX := $(PROFILE_SUFFIX)_ck
 endif
 
 FASTEST_BIN := $(BUILD_DIR)/attention_custom_kernel$(PROFILE_SUFFIX)
@@ -87,12 +92,6 @@ TRACE_WARMUP ?= 0
 TRACE_CSV ?= log/best_trace.csv
 TRACE_SUMMARY_CSV ?= log/best_trace_summary.csv
 TRACE_SVG ?= log/best.svg
-
-# persistent inter-Q-tile trace (FAST/963; scr is trace-incompatible, see README)
-PERSIST_TRACE_BIN := $(BUILD_DIR)/attention_custom_kernel_2tile
-TRACE_TILE0 ?= 6
-PERSIST_TRACE_CSV ?= log/persist_2tile.csv
-PERSIST_SVG ?= log/persist_inter_qtile.svg
 
 VALIDATE_PATTERN ?= rank1
 VALIDATE_K_TILES ?= 4
@@ -118,14 +117,8 @@ run: $(FASTEST_BIN)
 	$(PYTHON) run.py benchmark --binary $(FASTEST_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(WARMUP) --iters $(ITERS) --csv $(RUN_CSV)
 
 plot: | $(BUILD_DIR)
-ifeq ($(PERSIST),1)
-	$(NVCC) $(NVCCFLAGS) $(FAST_FLAGS) -DATTENTION_CLOCK_TRACE=1 -DATTENTION_CLOCK_TRACE_2TILE=1 -DATTENTION_TRACE_TILE0=$(TRACE_TILE0) $(SRC) -o $(PERSIST_TRACE_BIN) -lcuda
-	$(PERSIST_TRACE_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup 5 --iters 1 --clock-trace --clock-trace-start 0 --clock-trace-iters 8 --csv $(PERSIST_TRACE_CSV)
-	$(PYTHON) plot_inter_qtile.py --csv $(PERSIST_TRACE_CSV) --svg $(PERSIST_SVG) --tile0 $(TRACE_TILE0)
-else
 	$(NVCC) $(NVCCFLAGS) -DATTENTION_CLOCK_TRACE=1 $(SRC) -o $(TRACE_BIN) -lcuda
 	$(PYTHON) run.py plot --binary $(TRACE_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(TRACE_WARMUP) --iters $(TRACE_RUN_ITERS) --clock-trace-start $(TRACE_START) --clock-trace-iters $(TRACE_ITERS) --trace-csv $(TRACE_CSV) --summary-csv $(TRACE_SUMMARY_CSV) --svg $(TRACE_SVG)
-endif
 
 validation: $(VALIDATION_BIN)
 	$(VALIDATION_BIN) --validate --pattern $(VALIDATE_PATTERN) --k-tiles $(VALIDATE_K_TILES) --checksum-repeats $(VALIDATE_CHECKSUM_REPEATS) --csv $(VALIDATE_CSV)

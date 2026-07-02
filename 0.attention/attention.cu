@@ -6,37 +6,14 @@
 #endif
 
 #ifndef ATTENTION_EPILOGUE_O_IN_S_SMEM
-#define ATTENTION_EPILOGUE_O_IN_S_SMEM 1
+#define ATTENTION_EPILOGUE_O_IN_S_SMEM 0
 #endif
 
 #define ATTENTION_PIPE_ROLE_INLINE __forceinline__
 
-// ---- persistent-kernel build profiles (default off = base 32k schedule) ----
-// Pick ONE profile flag; each implies the persistent occupancy-1 overlap core
-// (ATTENTION_PERSISTENT: persistent loop, tmem alloc once, prefetch + early
-// prefetch overlap, O stored in V smem). The historical sub-flags that always
-// moved with a profile were merged into these three representatives:
-//   scr  = CONTINUOUS_FLAT (+ former FLAT_TMA_PUSH / FLAT_SEAM_PV_FIRST / _CONSUMER_REPLAY)
-//   fast = ..._QK_PEEL     (+ former ..._DEFER_STORE / PEEL_PREARM / _DURING_DRAIN / _AFTER_SYNC)
-//   core = PERSISTENT      (+ former ..._OVERLAP / _PREFETCH / _EARLY / _O_IN_V / _DESC_GEN)
-
-// Continuous flatten pipeline (15_FLATTEN_IMPL.md): all roles own their own
-// cross-tile loop; no outer per-tile loop, no CTA boundary __syncthreads, so
-// QK(t+1) overlaps drain(t). This "scr" schedule (markdown/21, 1071 TFLOPS) also
-// runs the master push-style flat TMA (F1, 19 §3), the seam PV-first de-convoy
-// (G4, 19 §5) and SEAM_CONSUMER_REPLAY (the seam QK commits to an isolated
-// qk_seam_done[pipe]; one consumer warp replays it into qk_done after the drain's
-// bar.sync). The producer waits v_ready/v_h1_ready on every PV (push makes V
-// arrive early enough that this is ~free; skipping caused GPU faults, 20 §2). Gate
-// = numerical equality (make validation + masked-ck / autopsy diff <=1ULP), not
-// raw bit-identity (benign +-1ULP tie wobble). Build with
-// -DATTENTION_SKIP_V_TMA_EXPECT_TX=0 so the V barriers are armed. Off => D1
-// (2ce1d8a) path byte-for-byte intact.
 #ifndef ATTENTION_CONTINUOUS_FLAT
 #define ATTENTION_CONTINUOUS_FLAT 0
 #endif
-// QK-peel schedule (~963): drain(t) overlaps QK(t+1) via qk_peel_done; the only
-// trace-able persistent kernel (make plot), CONTINUOUS_FLAT #errors with trace.
 #ifndef ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
 #define ATTENTION_PERSISTENT_OVERLAP_QK_PEEL 0
 #endif
@@ -45,9 +22,6 @@
 #endif
 #define ATTENTION_PERSISTENT (ATTENTION_CONTINUOUS_FLAT || ATTENTION_PERSISTENT_OVERLAP_QK_PEEL)
 
-// Deadlock locator: when on, every mbarrier_wait in the flat block becomes a timed
-// spin that printf's (line, warp, phase) if it stalls > ~0.5s, then breaks
-// (false-success) so the kernel limps to exit and flushes the printf buffer.
 #ifndef ATTENTION_FLAT_DEBUG
 #define ATTENTION_FLAT_DEBUG 0
 #endif
@@ -58,21 +32,12 @@
 __device__ int g_dbg_gl[16];
 #endif
 
-// (b) o_taddr early-free (markdown/21 §4-3): split the drain's completion signal so
-// the producer's accumulate=false PV(t+1,i0) — which only needs the drain's
-// tcgen05.lds of o_taddr to have RETIRED — no longer waits for the FP pack too.
-// Neutral under scr (o_drained already fires before the seam replay); kept for
-// schedules where the o_taddr WAR is binding (32K +45, HIGH_SEQLEN_NOTES).
 #ifndef ATTENTION_FLAT_O_LD_DONE
 #define ATTENTION_FLAT_O_LD_DONE 0
 #endif
 #if ATTENTION_FLAT_O_LD_DONE && !ATTENTION_CONTINUOUS_FLAT
 #error "ATTENTION_FLAT_O_LD_DONE requires ATTENTION_CONTINUOUS_FLAT"
 #endif
-// (P_LD_EARLY, deleted 2026-07-02: the p_taddr twin of O_LD_DONE — numerically
-// exact but r0[64]+r1[64] blow the 168-reg cap -> 402 TFLOPS. Design in markdown/22.)
-// Flat drain in 2x32-col chunks (D1 EPILOGUE_CHUNK_COLS=32 ported): halves the
-// tcgen05.ld/wait::ld round trips of the O drain pack. Bit-identical (32K +25).
 #ifndef ATTENTION_FLAT_DRAIN_CHUNK32
 #define ATTENTION_FLAT_DRAIN_CHUNK32 0
 #endif
@@ -82,11 +47,13 @@ __device__ int g_dbg_gl[16];
 #if ATTENTION_FLAT_DRAIN_CHUNK32 && ATTENTION_FLAT_O_LD_DONE
 #error "ATTENTION_FLAT_DRAIN_CHUNK32 conflicts with ATTENTION_FLAT_O_LD_DONE"
 #endif
+#ifndef ATTENTION_FLAT_SEAM_PVH0_AFTER_SH1
+#define ATTENTION_FLAT_SEAM_PVH0_AFTER_SH1 1
+#endif
+#ifndef ATTENTION_BASE_DET_COLD
+#define ATTENTION_BASE_DET_COLD 0
+#endif
 
-// Inter-Q-tile clock trace: capture TWO consecutive tiles of the SAME persistent
-// CTA (blockIdx.x==0, tile_local_idx == ATTENTION_TRACE_TILE0 and +1) into two
-// pages of the clock-trace buffer, sharing ONE clock base so the two tiles land on
-// a common timeline (records store start-base) -> real cross-tile overlap.
 #ifndef ATTENTION_CLOCK_TRACE_2TILE
 #define ATTENTION_CLOCK_TRACE_2TILE 0
 #endif
@@ -192,9 +159,6 @@ __device__ int g_dbg_gl[16];
 #define ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER 9
 #endif
 
-// 8 = commit right after the QK MMAs (qk_done tracks QK alone; all PV h0 MMAs
-// trail it). The accumulate flag of the post-commit loop respects the
-// tile-first reset (pv_accum / local!=1), so 8 is valid everywhere.
 #if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER != 0 && \
     (ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER <= 7 || \
      ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER >= 12)
@@ -410,9 +374,6 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
   int local = 0;
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
 #if ATTENTION_CLOCK_TRACE
-  // Deferred-store completion: how long tile t blocks on tile (t-1)'s O store.
-  // This is the residual (un-hidden) store tail; it lands at tile t's start, so on
-  // the shared 2-tile timeline it shows the previous tile's store overlapping this one.
   const unsigned long long sw_start =
       (clock_trace != nullptr && pipe == 0 && lane0 && wait_prev_store)
           ? clock64()
@@ -1169,7 +1130,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
       for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
            mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                            pv_idesc, local != 1 || mma != 0);  // EC=8: mma0 here
+                            pv_idesc, local != 1 || mma != 0);
       }
 #else
 #pragma unroll
@@ -1282,7 +1243,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
       for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
            mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                            pv_idesc, local != 1 || mma != 0);  // EC=8: mma0 here
+                            pv_idesc, local != 1 || mma != 0);
       }
 #else
 #pragma unroll
@@ -1430,6 +1391,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     uint64_t (&qk_done)[kPipeCount],
     uint64_t (&p_done)[kPipeCount],
     uint64_t (&s_h1_done)[kPipeCount],
+    uint64_t (&pv_done)[kPipeCount],
     float (&row_sum_partial)[kPipeCount][kTileM],
     float* row_max_scratch,
     const uint32_t (&p_taddr)[kPipeCount],
@@ -1439,6 +1401,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     int loop_repeats,
     float score_to_exp2_scale,
     bool do_row_sum,
+    bool det_cold,
     ClockTraceRecord* clock_trace,
     int clock_trace_iters,
     int clock_trace_start,
@@ -1517,6 +1480,10 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
           clock_trace_start, clock_trace_base, iter, pipe);
       const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h0_update)) {
+        if (det_cold) {
+          mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+          tcgen05_fence_after_thread_sync();
+        }
         RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
             row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
             consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
@@ -1527,11 +1494,15 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
         row_max_reg = update_result.row_max;
       }
       float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
-          row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
-          score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
-          clock_trace_start, clock_trace_base, iter, pipe);
+          row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe],
+          !det_cold, score_to_exp2_scale, row_max_reg, clock_trace,
+          clock_trace_iters, clock_trace_start, clock_trace_base, iter, pipe);
       const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h1_update)) {
+        if (det_cold) {
+          mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+          tcgen05_fence_after_thread_sync();
+        }
         RowSumUpdateH1Result update_result = attention_row_sum_update_h1_cold(
             row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
             consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
@@ -1543,6 +1514,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
         row_sum_reg = update_result.row_sum_reg;
         row_max_reg = update_result.row_max;
       }
+      if (det_cold && lane == 0) mbarrier_arrive(&p_done[pipe]);
       if (lane == 0) mbarrier_arrive(&s_h1_done[pipe]);
       if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
       iter += kActivePipeStride;
@@ -1565,6 +1537,10 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
     const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h0_update)) {
+      if (det_cold) {
+        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+        tcgen05_fence_after_thread_sync();
+      }
       RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
           row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
           consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
@@ -1589,6 +1565,10 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
     const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h1_update)) {
+      if (det_cold) {
+        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+        tcgen05_fence_after_thread_sync();
+      }
       RowSumUpdateH1Result update_result = attention_row_sum_update_h1_cold(
           row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
           consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
@@ -1673,9 +1653,6 @@ __device__ __forceinline__ void attention_issue_qk_peel(
 #endif
     ) {
 #if ATTENTION_CLOCK_TRACE_2TILE
-  // Split the during-drain peel into its real sub-phases: wait(Q TMA) / wait(K
-  // TMA) / QK MMA issue. clock64 on lane0 brackets each (the waits are warp-wide
-  // so lane0's stamp after a wait ~= when that operand became ready).
   const unsigned long long peel_t0 =
       (peel_page != nullptr && lane0) ? clock64() : 0ull;
 #endif
@@ -1884,28 +1861,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ uint64_t qk_all_done;
 #endif
 #if ATTENTION_CONTINUOUS_FLAT
-  // dep4 (o_taddr WAR): each consumer drain reads BOTH pipes' o_taddr, so all 8
-  // consumer warps arrive this one barrier after the drain; tile (t+1)'s first PV
-  // (accumulate=false, both pipes) and warp2's O store wait it. count = all
-  // consumer warps. Advances once per tile.
   __shared__ uint64_t o_drained;
-  // Per-tile PV-complete signal for the drain. pv_done cycles once per PV, so a
-  // late drain (producer raced ahead) cannot track it with a level-triggered
-  // wait. Instead each producer pipe, after confirming its tile's last PV
-  // COMPLETED, arrives this once per tile; the drain waits it @(tile&1). count =
-  // 2 (both producer pipes). Advances exactly once per tile.
   __shared__ uint64_t pv_tile_done;
 #if ATTENTION_CONTINUOUS_FLAT
-  // Dedicated seam-QK commit target: 128B stride so the two pipes' barriers do
-  // not share an adjacency window; nobody waits it until after the drain (the
-  // post-drain consumer replay consumes it). See macro note.
   __shared__ __align__(128) uint64_t qk_seam_done[kPipeCount * 16];
 #endif
 #if ATTENTION_FLAT_O_LD_DONE
-  // Drain-signal split: all 8 consumer warps' o_taddr tcgen05.lds RETIRED
-  // (o_taddr free for PV(t+1,i0)'s accumulate=false overwrite); the pack may
-  // still be running. warp2's O store keeps waiting o_drained (pack done).
-  // count = all consumer warps; advances once per tile.
   __shared__ uint64_t o_ld_done;
 #endif
 #endif
@@ -1922,10 +1883,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ unsigned long long k_tma_start_shared[kPipeCount * 2];
   __shared__ unsigned long long tail_total_start_shared;
   __shared__ unsigned long long tma_store_start_shared;
-  // Timestamp right after the async O store is ISSUED (commit_group returns).
-  // Used as the O-store box end so it reflects the fire-and-forget issue and is
-  // independent of the store-tail softmax peel that follows it on the consumer
-  // warps (the real DMA is async / DEFER-waited in the next tile).
   __shared__ unsigned long long tma_store_issued_shared;
 #else
   ClockTraceRecord* clock_trace = nullptr;
@@ -1959,9 +1916,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_FLAT_DEBUG
 #define mbarrier_wait(b, p) flat_wait_dbg((b), (p), __LINE__)
 #endif
-    // ================= Continuous flatten pipeline (15_FLATTEN_IMPL.md) =======
-    // Each role owns its own cross-tile loop; no outer per-tile loop, no CTA
-    // boundary __syncthreads. QK(t+1) overlaps drain(t). Live config only.
     uintptr_t smem_addr =
         (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
     asm volatile("" : "+l"(smem_addr));
@@ -2013,7 +1967,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         has_output ? reinterpret_cast<float*>(output) : nullptr;
 
     if (J > 0 && (warp_id == 0 || warp_id == 1)) {
-      // =================== PRODUCER (fused flat, pipe = warp_id) =============
       const int pipe = warp_id;
       const uint32_t idesc = make_qk_idesc();
       const uint32_t pv_idesc = make_qk_idesc() | (1u << 16);
@@ -2023,8 +1976,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const PvVDescGen pv_v_desc{static_cast<uint32_t>(smem_ptr_u32(v_smem[pipe]) >> 4)};
       const int n_p = (R - pipe + kActivePipeStride - 1) / kActivePipeStride;
       const int G = J * n_p;
-      unsigned int o_wait = 0u;  // running tile counter for o_drained waits
-      // prologue gl=0: QK only (p_taddr fresh; q_ready / k_ready phase 0)
+      unsigned int o_wait = 0u;
       mbarrier_wait(&q_ready, 0u);
       mbarrier_wait(&k_ready[pipe], 0u);
       if (lane0) {
@@ -2033,7 +1985,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
         tcgen05_commit(&qk_done[pipe]);
       }
-      // steady gl=1..G-1: QK(gl) + lagged PV(gl-1); tail PV after loop.
       for (int gl = 1; gl < G; ++gl) {
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = gl;
@@ -2043,19 +1994,21 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
 #if ATTENTION_CONTINUOUS_FLAT
         if (L == 0) {
-          // Seam body (see ATTENTION_CONTINUOUS_FLAT note): tile j-1 first.
           const int j = gl / n_p;
-          mbarrier_wait(&qk_done[pipe], pph);  // QK(gl-1) done -> q_smem free
+          mbarrier_wait(&qk_done[pipe], pph);
           if (lane0) mbarrier_arrive(&qk_all_done);
-          mbarrier_wait(&v_ready[pipe], pph);  // V(gl-1) h0
+          mbarrier_wait(&v_ready[pipe], pph);
+#if ATTENTION_FLAT_SEAM_PVH0_AFTER_SH1
+          mbarrier_wait(&s_h1_done[pipe], pph);
+#endif
           if (lane0) {
 #pragma unroll
             for (int mma = 0; mma < kMmasPerTile / 2; ++mma)
               tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                                  pv_idesc, true);  // tile-last PV: accumulate
+                                  pv_idesc, true);
           }
           mbarrier_wait(&s_h1_done[pipe], pph);
-          mbarrier_wait(&v_h1_ready[pipe], pph);  // V(gl-1) h1
+          mbarrier_wait(&v_h1_ready[pipe], pph);
           if (lane0) {
 #pragma unroll
             for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
@@ -2063,25 +2016,21 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                   pv_idesc, true);
             tcgen05_commit(&pv_done[pipe]);
           }
-          mbarrier_wait(&pv_done[pipe], pph);       // PV(gl-1) COMPLETED
-          if (lane0) mbarrier_arrive(&pv_tile_done);  // drain(j-1) unblocked NOW
-          // ...then tile j's first QK.
+          mbarrier_wait(&pv_done[pipe], pph);
+          if (lane0) mbarrier_arrive(&pv_tile_done);
           mbarrier_wait(&q_ready, static_cast<uint32_t>(j & 1));
           mbarrier_wait(&k_ready[pipe], ph);
-          mbarrier_wait(&p_done[pipe], pph);        // dep2: p_taddr WAR
+          mbarrier_wait(&p_done[pipe], pph);
           if (lane0) {
 #pragma unroll
             for (int mma = 0; mma < kMmasPerTile; ++mma)
               tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
                                   mma != 0);
 #if ATTENTION_CONTINUOUS_FLAT
-            // Isolated commit target; the post-drain consumer replay provides
-            // the qk_done arrive. Without a drain (no output) there is no
-            // replayer, so commit qk_done directly (uniform across the CTA).
             if (has_output) tcgen05_commit(&qk_seam_done[pipe * 16]);
             else tcgen05_commit(&qk_done[pipe]);
 #else
-            tcgen05_commit(&qk_done[pipe]);  // moved: covers QK(gl) alone
+            tcgen05_commit(&qk_done[pipe]);
 #endif
           }
           continue;
@@ -2089,27 +2038,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
         if (L == 0) {
           const int j = gl / n_p;
-          // confirm prev tile's last QK completed (q_smem free), then signal it.
           mbarrier_wait(&qk_done[pipe], pph);
           if (lane0) mbarrier_arrive(&qk_all_done);
           mbarrier_wait(&q_ready, static_cast<uint32_t>(j & 1));
         }
         mbarrier_wait(&k_ready[pipe], ph);
-        mbarrier_wait(&p_done[pipe], pph);       // dep2: p_taddr WAR
+        mbarrier_wait(&p_done[pipe], pph);
         if (lane0) {
 #pragma unroll
           for (int mma = 0; mma < kMmasPerTile; ++mma)
             tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
         }
-        // PV for gl-1 (lag); accumulate=false iff it is its tile's first iter.
         const int prevL = (gl - 1) % n_p;
         const int prevj = (gl - 1) / n_p;
         const bool pv_accum = (prevL != 0);
-        mbarrier_wait(&v_ready[pipe], pph);       // V h0 ready (~free under PUSH)
+        mbarrier_wait(&v_ready[pipe], pph);
         if (lane0) {
           if (!pv_accum && prevj > 0 && has_output) {
-            // dep4: o_taddr WAR vs the previous drain's reads. With O_LD_DONE
-            // the gate is "drain lds retired" (pack may still run).
 #if ATTENTION_FLAT_O_LD_DONE
             mbarrier_wait(&o_ld_done, o_wait & 1u);
 #else
@@ -2125,7 +2070,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #pragma unroll
           for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
             tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                                pv_idesc, pv_accum || mma != 0);  // EC=8: mma0 lands here
+                                pv_idesc, pv_accum || mma != 0);
         }
         mbarrier_wait(&s_h1_done[pipe], pph);
         mbarrier_wait(&v_h1_ready[pipe], pph);
@@ -2135,20 +2080,16 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
           tcgen05_commit(&pv_done[pipe]);
         }
-        // PV(gl-1) was tile (j-1)'s last iter when L==0: confirm it COMPLETED
-        // (pv_done@pph flips after the MMAs finish) then signal the drain.
         if (L == 0) {
           mbarrier_wait(&pv_done[pipe], pph);
           if (lane0) mbarrier_arrive(&pv_tile_done);
         }
       }
-      // tail: PV for gl=G-1
       {
         const int prevL = (G - 1) % n_p;
         const int prevj = (G - 1) / n_p;
         const uint32_t pph = static_cast<uint32_t>((G - 1) & 1);
         const bool pv_accum = (prevL != 0);
-        // last tile's qk_all_done (never waited, but keeps count symmetric)
         if (lane0) mbarrier_arrive(&qk_all_done);
         mbarrier_wait(&v_ready[pipe], pph);
         if (lane0) {
@@ -2168,7 +2109,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #pragma unroll
           for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
             tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                                pv_idesc, pv_accum || mma != 0);  // EC=8: mma0 lands here
+                                pv_idesc, pv_accum || mma != 0);
         }
         mbarrier_wait(&s_h1_done[pipe], pph);
         mbarrier_wait(&v_h1_ready[pipe], pph);
@@ -2178,20 +2119,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
           tcgen05_commit(&pv_done[pipe]);
         }
-        // last tile's last PV: confirm completion, signal the drain.
         mbarrier_wait(&pv_done[pipe], pph);
         if (lane0) mbarrier_arrive(&pv_tile_done);
       }
     } else if (J > 0 && (warp_id == 2 || warp_id == 3)) {
-      // =================== TMA (K/V load; warp2 also Q-prefetch + O store) ====
       const int pipe = warp_id - 2;
       const int n_p = (R - pipe + kActivePipeStride - 1) / kActivePipeStride;
       const int G = J * n_p;
-      unsigned int store_wait = 0u;   // running tile counter for o_drained (store)
-      unsigned int qa_wait = 0u;      // running tile counter for qk_all_done (Q prefetch)
-      // warp2 issues Q for tile 0 up front. NOTE: mbarrier_expect_tx uses
-      // elect.sync with a full-warp mask, so ALL lanes must call it (only the
-      // tma_load_2d is lane0-gated).
+      unsigned int store_wait = 0u;
+      unsigned int qa_wait = 0u;
       if (warp_id == 2) {
         mbarrier_expect_tx(&q_ready, kTileBytes);
         if (lane0) {
@@ -2200,7 +2136,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           tma_load_2d(&q_map, q_addr + kTileBytes / 2, &q_ready, 32, bx * kTileM);
         }
       }
-      // prologue gl=0: K(0) + V(0) h0/h1.
       {
         const int iter0 = pipe;
         const int gkt = kv_tile_base_for_block<kFixedKTiles>(bx, loop_k_tiles) +
@@ -2210,10 +2145,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
       }
 #if ATTENTION_CONTINUOUS_FLAT
-      // F1 push-style body (see macro note): K(gl+1)+Vh0(gl) at qk_done(gl),
-      // Vh1(gl) at pv_done(gl-1). Continuous: has_next is global (gl+1<G), never
-      // per-tile, so there is no boundary ramp; the only seam specials are Q
-      // prefetch + O store (warp2, L==0), same slots as the pull loop.
       for (int gl = 0; gl < G; ++gl) {
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = gl;
@@ -2223,12 +2154,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const uint32_t ph = static_cast<uint32_t>(gl & 1);
         const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
         const bool has_next = gl + 1 < G;
-        // tile boundary: warp2 prefetches THIS tile's Q (after prev tile's last
-        // QK). Q(0) already went out before the prologue.
         if (L == 0 && j > 0 && warp_id == 2) {
           mbarrier_wait(&qk_all_done, qa_wait & 1u);
           ++qa_wait;
-          mbarrier_expect_tx(&q_ready, kTileBytes);  // all lanes (elect.sync)
+          mbarrier_expect_tx(&q_ready, kTileBytes);
           if (lane0) {
             const uint32_t q_addr = smem_ptr_u32(q_smem);
             const int q_row = (bx + j * gx) * kTileM;
@@ -2237,8 +2166,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           }
         }
         if (has_next) {
-          // K(gl+1) (the next tile's iter0 when L==n_p-1) as soon as QK(gl)
-          // completed: k_smem free (qk_done EARLY-commits mid PV(gl-1) h0).
           const int ntile = bx + ((gl + 1) / n_p) * gx;
           const int niter = ((gl + 1) % n_p) * kActivePipeStride + pipe;
           const int ngkt =
@@ -2247,32 +2174,24 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           mbarrier_wait(&qk_done[pipe], ph);
           issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], ngkt, lane0);
         }
-        // warp2 stores prev tile's O AFTER the K flow is unblocked (drain chain
-        // needs the producer to reach PV(t,last): M1 bug#5) and BEFORE this
-        // tile's pipe0 V overwrites v_smem[0] (store-WAR).
         if (L == 0 && j > 0 && warp_id == 2 && has_output && lane0) {
-          mbarrier_wait(&o_drained, store_wait & 1u);  // tile (j-1) drain done
+          mbarrier_wait(&o_drained, store_wait & 1u);
           ++store_wait;
           tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, bx + (j - 1) * gx, 0);
           tma_store_commit_group();
-          tma_store_wait_group_read();  // store-WAR: done before tile j V(pipe0)
+          tma_store_wait_group_read();
         }
-        if (gl > 0) {  // V(0) went out in the prologue
+        if (gl > 0) {
           const int gkt =
               kv_tile_base_for_block<kFixedKTiles>(bx + j * gx, loop_k_tiles) +
               local_k_tile_for_iter<kFixedKTiles>(L * kActivePipeStride + pipe,
                                                   loop_k_tiles);
           if (has_next) {
-            // EARLY Vh0(gl) (master 936): pre-pv_done. Overwrites v_smem h0
-            // while PV(gl-1)'s tail h0 MMAs may still read it -- the exact race
-            // master runs every steady iter (TMA flight > MMA tail, D1-proven).
-            // The flat-new exposure is only the seam iter (L==0; pipe0's is
-            // pushed past the race window by the store gate above anyway).
             issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0,
                                   lane0);
           }
-          mbarrier_wait(&pv_done[pipe], pph);  // PV(gl-1) fully done
-          if (!has_next)  // final iter's Vh0: post-pv_done (master 1033)
+          mbarrier_wait(&pv_done[pipe], pph);
+          if (!has_next)
             issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0,
                                   lane0);
           issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1,
@@ -2287,11 +2206,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const int L = gl % n_p;
         const int j = gl / n_p;
         const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
-        // tile boundary: warp2 prefetches THIS tile's Q (after prev tile's last QK).
         if (L == 0 && warp_id == 2) {
           mbarrier_wait(&qk_all_done, qa_wait & 1u);
           ++qa_wait;
-          mbarrier_expect_tx(&q_ready, kTileBytes);  // all lanes (elect.sync)
+          mbarrier_expect_tx(&q_ready, kTileBytes);
           if (lane0) {
             const uint32_t q_addr = smem_ptr_u32(q_smem);
             const int q_row = (bx + j * gx) * kTileM;
@@ -2303,29 +2221,20 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const int iter = L * kActivePipeStride + pipe;
         const int gkt = kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles) +
                         local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
-        mbarrier_wait(&qk_done[pipe], pph);      // K buffer free; also frees V h0
-                                                 // region (producer EARLY-commits
-                                                 // qk_done inside PV h0).
+        mbarrier_wait(&qk_done[pipe], pph);
         issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], gkt, lane0);
-        // warp2 stores prev tile's O AFTER issuing K (so the producer is unblocked
-        // and can reach the PV/pv_tile_done the drain needs -> o_drained -> this
-        // store), but BEFORE this tile's pipe0 V overwrites v_smem[0] (store-WAR).
         if (L == 0 && warp_id == 2 && has_output && lane0) {
-          mbarrier_wait(&o_drained, store_wait & 1u);  // tile (j-1) drain done
+          mbarrier_wait(&o_drained, store_wait & 1u);
           ++store_wait;
           tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, bx + (j - 1) * gx, 0);
           tma_store_commit_group();
-          tma_store_wait_group_read();  // store-WAR: done before tile j V(pipe0)
+          tma_store_wait_group_read();
         }
-        // SAFE (Jun-30 M1 = 094ac4da): V h0 AND h1 issued AFTER pv_done, i.e. after
-        // PV(gl-1) fully finished reading v_smem -> no WAR. V is late (the pull
-        // -12%); TMA_PUSH is the perf path.
-        mbarrier_wait(&pv_done[pipe], pph);      // PV(gl-1) done -> v_smem free
+        mbarrier_wait(&pv_done[pipe], pph);
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0, lane0);
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
       }
 #endif
-      // final tile (J-1) store (warp2): after its drain.
       if (warp_id == 2 && has_output) {
         mbarrier_wait(&o_drained, store_wait & 1u);
         if (lane0) {
@@ -2336,12 +2245,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
     } else if (J > 0 && warp_id >= kConsumerBaseWarp &&
                warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe) {
-      // =================== CONSUMER (reuse softmax role + drain) =============
       const int pipe = (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
       const int consumer_warp = (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
       const int n_p0 = (R + 1) / 2;
       const int n_p1 = R / 2;
-      unsigned int pvph0 = 0u, pvph1 = 0u;  // running pv_done parity (drain)
+      unsigned int pvph0 = 0u, pvph1 = 0u;
       for (int j = 0; j < J; ++j) {
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = j;
@@ -2350,15 +2258,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         float* row_max_scratch =
             out_f32 != nullptr ? out_f32 + static_cast<size_t>(tile) * kTileWords : nullptr;
         attention_consumer_pipe_role(
-            s_smem, qk_done, p_done, s_h1_done, row_sum_partial, row_max_scratch,
-            p_taddr, o_taddr, pipe, consumer_warp, R, score_to_exp2_scale,
-            has_output, nullptr, 0, 0, 0ull, 0u, lane);
+            s_smem, qk_done, p_done, s_h1_done, pv_done, row_sum_partial,
+            row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, R,
+            score_to_exp2_scale, has_output, true, nullptr, 0, 0,
+            0ull, 0u, lane);
         if (!has_output) continue;
-        // ---- drain tile j (both pipes; all 8 consumer warps) ----
-        asm volatile("bar.sync 1, 256;" ::: "memory");  // softmax partials visible
-        // tile j's PVs (both pipes) completed -> producers arrived pv_tile_done
-        // once for this tile (advances once/tile, so @(j&1) is unambiguous even if
-        // a producer raced ahead).
+        asm volatile("bar.sync 1, 256;" ::: "memory");
         mbarrier_wait(&pv_tile_done, static_cast<uint32_t>(j & 1));
         uint32_t* output_bf16_smem = v_smem[0];
         const int epilogue_slot = warp_id - kConsumerBaseWarp;
@@ -2390,9 +2295,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
               row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
         }
         {
-          // Last chunk split: retire the final o_taddr lds, signal o_ld_done
-          // (o_taddr free for PV(t+1,i0)'s accumulate=false reset), then finish
-          // the FP pack. Same math as the fused wrapper.
           uint32_t r0[16];
           uint32_t r1[16];
           TCGEN05_LD_X16(row_taddr0 + 48u, r0);
@@ -2430,14 +2332,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
         tma_store_fence();
         if (lane0) mbarrier_arrive(&o_drained);
-        // ensure all drains done before next tile's softmax reuses o_taddr / partials
         asm volatile("bar.sync 1, 256;" ::: "memory");
 #if ATTENTION_CONTINUOUS_FLAT
-        // Post-drain relay of the NEXT tile's seam-QK completion onto qk_done
-        // (PPAS conditions: the commit landed mid-drain with no waiter; in the
-        // common case QK finished during the drain so this returns instantly).
-        // One designated warp per pipe; the other warps enter softmax(j+1) and
-        // block on qk_done until this arrive. Seam commit #(j+1) -> parity j&1.
         if (j + 1 < J && consumer_warp == 0) {
           mbarrier_wait(&qk_seam_done[pipe * 16], static_cast<uint32_t>(j & 1));
           if (lane0) mbarrier_arrive(&qk_done[pipe]);
@@ -2448,9 +2344,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_FLAT_DEBUG
 #undef mbarrier_wait
 #endif
-    // Free tmem (D1 does this after the per-tile loop; the flat path returns
-    // before reaching it, which would leave tmem allocated -> "tensor memory not
-    // completely freed"). All 384 threads converge here first.
     if (threadIdx.x == 0) tcgen05_fence_after_thread_sync();
     __syncthreads();
     if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
@@ -2496,14 +2389,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)qk_peeled;
 
 #if ATTENTION_PERSISTENT
-  // Continuous inter-q-tile pipeline (14_CONTINUOUS_DESIGN.md): ALL pipeline
-  // barriers are init-once (first tile only) and cycle continuously across tile
-  // boundaries -- no per-tile re-init. The phase is carried by register
-  // (phase_carry below) for the odd-per-tile barriers, exactly as q_ready
-  // already does via q_ready_phase. This replaces the old per-tile re-init +
-  // peel-bridge scaffolding (qk_peel_done / AFTER_SYNC peel / store-tail
-  // softmax / body-start conversion+replay), which existed only because the old
-  // boundary wiped these barriers.
   if (tile == static_cast<int>(blockIdx.x) && threadIdx.x == 0) {
     mbarrier_init(&q_ready, 1);
 #if ATTENTION_PERSISTENT
@@ -2657,12 +2542,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const unsigned int q_ready_phase = 0u;
   const bool k_prefetched = false;
 #endif
-  // Continuous pipeline phase carry for odd-per-tile barriers (qk_done,
-  // qk_all_done): == tile_local_idx&1, the offset vs the role's phase-0-start
-  // assumption now that barriers are init-once (no per-tile re-init). The
-  // even-per-tile barriers (p_done/s_h1_done/v_ready/v_h1_ready/pv_done/k_ready)
-  // return to phase 0 each tile for power-of-2 R>=8 (n_p=R/2 even), so they need
-  // no carry -- just the re-init removal. See 14_CONTINUOUS_DESIGN.md §E.
   const unsigned int phase_carry = q_ready_phase;
 
   if (warp_id == 0
@@ -2688,10 +2567,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
     attention_consumer_pipe_role(
-        s_smem, qk_done, p_done, s_h1_done, row_sum_partial,
+        s_smem, qk_done, p_done, s_h1_done, pv_done, row_sum_partial,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
         score_to_exp2_scale,
-        output != nullptr, clock_trace_eff, clock_trace_iters, clock_trace_start,
+        output != nullptr,
+        /*det_cold=*/ ATTENTION_PERSISTENT != 0 ||
+            (ATTENTION_BASE_DET_COLD != 0 &&
+             (kFixedKTiles == 16 || kFixedKTiles == 32 || kFixedKTiles == 128)),
+        clock_trace_eff, clock_trace_iters, clock_trace_start,
         clock_trace_base,
         phase_carry,
         lane);
@@ -2762,9 +2645,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             const uint32_t q_smem_addr = smem_ptr_u32(q_smem);
             const int next_q_row = next_tile * kTileM;
 #if ATTENTION_CLOCK_TRACE_2TILE
-            // tile (t+1)'s Q is TMA-prefetched here, during tile t's epilogue.
-            // Record the issue onto tile (t+1)'s trace page so the SVG shows the
-            // Q load launching inside tile t's drain window (the "fill hide").
             ClockTraceRecord* const q_pf_page =
                 (clock_trace != nullptr && ct_is_tile0)
                     ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
@@ -2791,9 +2671,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const int pf_k_tile =
             local_k_tile_for_iter<kFixedKTiles>(pf_pipe, loop_k_tiles);
 #if ATTENTION_CLOCK_TRACE_2TILE
-        // EARLY first-K prefetch = the peel's K1 (warp2->pipe0) / K2 (warp3->
-        // pipe1). Record the issue onto tile (t+1)'s page so the SVG shows the
-        // peel's K TMA, separate from the QK MMA. slot = pf_pipe*64 + 5.
         ClockTraceRecord* const k_pf_page =
             (clock_trace != nullptr && ct_is_tile0)
                 ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
@@ -2911,18 +2788,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const unsigned int peel_q_phase =
             static_cast<unsigned int>((tile_local_idx + 1) & 1);
 #if ATTENTION_CLOCK_TRACE_2TILE
-        // The iter0/1 QK of tile (t+1) is peeled here (issued by tile t's w0/w1
-        // during tile t's drain). The helper records its sub-phases onto tile
-        // (t+1)'s page: wait(Q TMA) / wait(K TMA) / QK MMA issue, at slots
-        // warp_id*64 + {0,1,2}. Only when THIS tile is the trace's tile0.
         ClockTraceRecord* const peel_trace_page =
             (clock_trace != nullptr && ct_is_tile0)
                 ? clock_trace + (clock_trace_iters * kClockTraceSlotsPerIter +
                                  kClockTraceExtraSlots)
                 : nullptr;
-        // Write into the page's EXTRA region (alongside q_tma at +12), NOT the
-        // iter0/1 per-iter block — tile (t+1) still runs iter0/1's PV/done marks
-        // there and would overwrite the peel records. warp0 -> +13..15, warp1 -> +16..18.
         const int peel_slot_base = clock_trace_iters * kClockTraceSlotsPerIter +
                                    13 + warp_id * 3;
 #endif
@@ -3094,9 +2964,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_CLOCK_TRACE
   if (output != nullptr && trace_cta && threadIdx.x == 0) {
     const unsigned long long store_end = clock64();
-    // O-store box ends at the async ISSUE (commit_group), NOT at store_end:
-    // store_end is sampled after the store-tail peel + __syncthreads, which would
-    // make the box absorb the peel time even though the DMA is async/deferred.
     write_clock_trace_record(clock_trace_eff, trace_extra_base + 9,
                              kClockTraceGlobalStore, loop_repeats, -1, 0, -1, -1,
                              tma_store_start_shared, tma_store_issued_shared,
