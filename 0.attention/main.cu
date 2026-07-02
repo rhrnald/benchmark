@@ -125,7 +125,6 @@ static constexpr double kFlopsPerMma =
     2.0 * static_cast<double>(kTileM) * static_cast<double>(kTileN) *
     static_cast<double>(kMmaK);
 
-
 template <int kFixedKTiles>
 __device__ __forceinline__ int kv_tile_base_for_block(int block_idx,
                                                       int loop_k_tiles) {
@@ -273,10 +272,6 @@ enum ClockTraceStage {
   kClockTracePeelKWait = 24,
   kClockTracePeelIssue = 25,
   kClockTracePeelKTma = 26,
-  // B3 (softmax-peel): tile (t+1)'s iter0/1 consumer softmax run inside tile t's
-  // store-tail window. Split per half so the SVG renders ld -> softmax -> ld ->
-  // softmax (like the body first-iter): the tmem read (PeelSoftmaxLd) and the
-  // exp2+pack+store (PeelSoftmax), each tagged with the `half` field.
   kClockTracePeelSoftmax = 27,
   kClockTracePeelSoftmaxLd = 28,
 };
@@ -570,41 +565,6 @@ RunResult run_kernel(const Args& args,
   if (launch_grid > args.blocks) launch_grid = args.blocks;
 #else
   const int launch_grid = args.blocks;
-#endif
-
-#if ATTENTION_PEEL_HB
-  if (std::getenv("PEEL_HB") != nullptr) {
-    cudaStream_t ks, hs;
-    cudaStreamCreateWithFlags(&ks, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&hs, cudaStreamNonBlocking);
-    unsigned int zero[16] = {0};
-    CUDA_CHECK(cudaMemcpyToSymbol(g_peel_hb, zero, sizeof(zero)));
-    kernel<<<launch_grid, kMainThreads, kDynamicSmemBytes, ks>>>(
-        q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
-        score_to_exp2_scale, output, args.blocks
-#if ATTENTION_CLOCK_TRACE
-        ,
-        clock_trace, clock_trace_iters, args.clock_trace_start
-#endif
-        );
-    unsigned int hb[16];
-    for (int t = 0; t < 40; ++t) {
-      struct timespec ts {0, 100000000L};  // 100 ms
-      nanosleep(&ts, nullptr);
-      cudaMemcpyFromSymbolAsync(hb, g_peel_hb, sizeof(hb), 0,
-                                cudaMemcpyDeviceToHost, hs);
-      cudaStreamSynchronize(hs);
-      const bool done = (cudaStreamQuery(ks) == cudaSuccess);
-      std::fprintf(stderr,
-                   "PEELHB t=%d done=%d | peel0=%u peel1=%u qkrole0=%u qkrole1=%u "
-                   "pv0=%u pv1=%u fwd0=%u fwd1=%u\n",
-                   t, done ? 1 : 0, hb[0], hb[1], hb[8], hb[9], hb[6], hb[7],
-                   hb[12], hb[13]);
-      if (done) break;
-    }
-    result.status = "peel_hb_done";
-    return result;
-  }
 #endif
 
   for (int i = 0; i < args.warmup; ++i) {
@@ -2312,3 +2272,4 @@ int main(int argc, char** argv) {
   if (args.stage == "scalar_validate") return run_scalar_real_validation(args);
   return run_benchmark(args);
 }
+

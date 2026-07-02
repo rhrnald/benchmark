@@ -9,144 +9,84 @@
 #define ATTENTION_EPILOGUE_O_IN_S_SMEM 1
 #endif
 
-#ifndef ATTENTION_PERSISTENT
-#define ATTENTION_PERSISTENT 0
-#endif
-
-#ifndef ATTENTION_PERSISTENT_NOINLINE_ROLES
-#define ATTENTION_PERSISTENT_NOINLINE_ROLES 0
-#endif
-#if ATTENTION_PERSISTENT && ATTENTION_PERSISTENT_NOINLINE_ROLES
-#define ATTENTION_PIPE_ROLE_INLINE __noinline__
-#else
 #define ATTENTION_PIPE_ROLE_INLINE __forceinline__
-#endif
 
-#ifndef ATTENTION_PERSISTENT_DESC_GEN
-#define ATTENTION_PERSISTENT_DESC_GEN ATTENTION_PERSISTENT
-#endif
-
-#ifndef ATTENTION_PERSISTENT_OVERLAP
-#define ATTENTION_PERSISTENT_OVERLAP 0
-#endif
-#if ATTENTION_PERSISTENT_OVERLAP && !ATTENTION_PERSISTENT
-#error "ATTENTION_PERSISTENT_OVERLAP requires ATTENTION_PERSISTENT"
-#endif
-#ifndef ATTENTION_PERSISTENT_OVERLAP_PREFETCH
-#define ATTENTION_PERSISTENT_OVERLAP_PREFETCH ATTENTION_PERSISTENT_OVERLAP
-#endif
+// ---- persistent-kernel build profiles (default off = base 32k schedule) ----
+// Pick ONE profile flag; each implies the persistent occupancy-1 overlap core
+// (ATTENTION_PERSISTENT: persistent loop, tmem alloc once, prefetch + early
+// prefetch overlap, O stored in V smem). The historical sub-flags that always
+// moved with a profile were merged into these three representatives:
+//   scr  = CONTINUOUS_FLAT (+ former FLAT_TMA_PUSH / FLAT_SEAM_PV_FIRST / _CONSUMER_REPLAY)
+//   fast = ..._QK_PEEL     (+ former ..._DEFER_STORE / PEEL_PREARM / _DURING_DRAIN / _AFTER_SYNC)
+//   core = PERSISTENT      (+ former ..._OVERLAP / _PREFETCH / _EARLY / _O_IN_V / _DESC_GEN)
 
 // Continuous flatten pipeline (15_FLATTEN_IMPL.md): all roles own their own
 // cross-tile loop; no outer per-tile loop, no CTA boundary __syncthreads, so
-// QK(t+1) overlaps drain(t). Only the live benchmark config is supported (see
-// 15 §0). Off => D1 (2ce1d8a) path is byte-for-byte intact.
+// QK(t+1) overlaps drain(t). This "scr" schedule (markdown/21, 1071 TFLOPS) also
+// runs the master push-style flat TMA (F1, 19 §3), the seam PV-first de-convoy
+// (G4, 19 §5) and SEAM_CONSUMER_REPLAY (the seam QK commits to an isolated
+// qk_seam_done[pipe]; one consumer warp replays it into qk_done after the drain's
+// bar.sync). The producer waits v_ready/v_h1_ready on every PV (push makes V
+// arrive early enough that this is ~free; skipping caused GPU faults, 20 §2). Gate
+// = numerical equality (make validation + masked-ck / autopsy diff <=1ULP), not
+// raw bit-identity (benign +-1ULP tie wobble). Build with
+// -DATTENTION_SKIP_V_TMA_EXPECT_TX=0 so the V barriers are armed. Off => D1
+// (2ce1d8a) path byte-for-byte intact.
 #ifndef ATTENTION_CONTINUOUS_FLAT
 #define ATTENTION_CONTINUOUS_FLAT 0
 #endif
-// Deadlock locator: when on, every mbarrier_wait in the flat block becomes a
-// timed spin that printf's (line, warp, phase) if it stalls > ~0.5s, then breaks
+// QK-peel schedule (~963): drain(t) overlaps QK(t+1) via qk_peel_done; the only
+// trace-able persistent kernel (make plot), CONTINUOUS_FLAT #errors with trace.
+#ifndef ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+#define ATTENTION_PERSISTENT_OVERLAP_QK_PEEL 0
+#endif
+#if ATTENTION_CONTINUOUS_FLAT && ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
+#error "ATTENTION_CONTINUOUS_FLAT and ATTENTION_PERSISTENT_OVERLAP_QK_PEEL are mutually exclusive"
+#endif
+#define ATTENTION_PERSISTENT (ATTENTION_CONTINUOUS_FLAT || ATTENTION_PERSISTENT_OVERLAP_QK_PEEL)
+
+// Deadlock locator: when on, every mbarrier_wait in the flat block becomes a timed
+// spin that printf's (line, warp, phase) if it stalls > ~0.5s, then breaks
 // (false-success) so the kernel limps to exit and flushes the printf buffer.
 #ifndef ATTENTION_FLAT_DEBUG
 #define ATTENTION_FLAT_DEBUG 0
 #endif
-// NOTE: the producer waits v_ready/v_h1_ready on EVERY PV in the flat path.
-// Under TMA_PUSH the V arrives early enough that these waits are ~free (push ==
-// base perf), and skipping them (D1-style timing / sparse GUARD) caused
-// nondeterministic GPU faults — dead experiments removed 2026-07-02 (see
-// markdown/20 §2). Build with -DATTENTION_SKIP_V_TMA_EXPECT_TX=0 so the V
-// barriers are actually armed.
-// F1 (19_DIAGNOSIS_SCHEDULE_NOT_CONTENTION.md §3): rewrite the flat TMA loop in
-// the master PUSH-style choreography. Body gl issues K(gl+1) + EARLY Vh0(gl) as
-// soon as qk_done(gl) fires (master steady order, attention_pv_pipe_role
-// 796->882->936); only Vh1(gl) (+ the final iter's Vh0) waits pv_done(gl-1)
-// (master 977->1033->1051). The default pull loop instead reaches its K(gl)/V(gl)
-// issues only after pv_done(gl-1) in TMA program order, so K/Vh0 land ~7 PV-MMAs
-// (~1,300cyc) later every iter (k_ready 800->1765, v_ready ~1000 newly exposed)
-// = the flat -12%. Compute barriers' arrive/commit are untouched (16 §9.0
-// doctrine); qk_done is consumed once per body in order (bodies 0..G-2), so
-// running parity holds (15 §6b). The early Vh0 runs master's exact timing race
-// (TMA flight > PV h0 tail MMAs) — D1-proven, ck bit-identical.
-#ifndef ATTENTION_FLAT_TMA_PUSH
-#define ATTENTION_FLAT_TMA_PUSH 0
+#if ATTENTION_CONTINUOUS_FLAT && (ATTENTION_CLOCK_TRACE || (ATTENTION_CROSS_PIPE_PHASE != 0))
+#error "ATTENTION_CONTINUOUS_FLAT does not support CLOCK_TRACE / CROSS_PIPE_PHASE"
 #endif
-#if ATTENTION_FLAT_TMA_PUSH && !ATTENTION_CONTINUOUS_FLAT
-#error "ATTENTION_FLAT_TMA_PUSH requires ATTENTION_CONTINUOUS_FLAT"
+#if ATTENTION_CONTINUOUS_FLAT && ATTENTION_FLAT_DEBUG
+__device__ int g_dbg_gl[16];
 #endif
-// G4 seam de-convoy (19 §5-G4). At each tile seam (producer body L==0) the flat
-// loop issues QK(t+1,i0) BEFORE PV(t,last), so tile t's last PV — and the
-// pv_done confirm + pv_tile_done arrive the drain waits on — sit behind
-// q_ready/k_ready/p_done of tile t+1: the drain starts ~3.4k cyc late
-// (pvtile_wait). With this ON, the seam body finishes tile t FIRST (PV(t,last)
-// -> confirm -> pv_tile_done) and only then starts QK(t+1,i0). qk_done(gl)'s
-// commit moves after the QK MMAs (the PV is already confirmed complete, so it
-// tracks QK alone — slightly EARLIER fire than the fused EARLY_COMMIT); commit
-// counts and per-barrier order are unchanged, so all phase algebra holds.
-// Output note (markdown/21): the seam's timing occasionally realizes the
-// codebase's pre-existing benign +-1ULP rounding wobble at kt64 (base realizes
-// the same wobble at kt8), so the gate for this path is numerical equality
-// (make validation + masked-ck / autopsy diff <=1ULP), not raw bit-identity.
-#ifndef ATTENTION_FLAT_SEAM_PV_FIRST
-#define ATTENTION_FLAT_SEAM_PV_FIRST 0
-#endif
-#if ATTENTION_FLAT_SEAM_PV_FIRST && !ATTENTION_CONTINUOUS_FLAT
-#error "ATTENTION_FLAT_SEAM_PV_FIRST requires ATTENTION_CONTINUOUS_FLAT"
-#endif
-// SEAM_CONSUMER_REPLAY (markdown/21, adopted at 1071 TFLOPS): the seam QK
-// commits to an isolated 128B-strided qk_seam_done[pipe] (init-once, nobody
-// waits it while the drain runs); after the drain's closing bar.sync, ONE
-// designated consumer warp per pipe waits it (in the common case QK completed
-// mid-drain, so the wait returns instantly) and plain-arrives qk_done[pipe].
-// qk_done's per-gl transition order and total count (G+1) are preserved: the
-// seam gl's transition #gl+1 comes from the replay, and body gl+1's fused
-// commit still follows it (its QK needs K(gl+1), whose TMA gate is transition
-// #gl+1). At seams the K(gl+1)/Vh0(gl) TMA issue slides to post-drain and
-// aligns with the O-store tail — measured faster than the direct-commit seam
-// (1071 vs 1042).
-#ifndef ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
-#define ATTENTION_FLAT_SEAM_CONSUMER_REPLAY 0
-#endif
-#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY && !ATTENTION_FLAT_SEAM_PV_FIRST
-#error "ATTENTION_FLAT_SEAM_CONSUMER_REPLAY requires ATTENTION_FLAT_SEAM_PV_FIRST"
-#endif
-// (b) o_taddr early-free (markdown/21 §4-3): split the drain's completion
-// signal so the producer's accumulate=false PV(t+1,i0) — which only needs the
-// drain's tcgen05.lds of o_taddr to have RETIRED — no longer waits for the FP
-// pack as well. The drain's last chunk is split into [ld+wait::ld -> arrive
-// o_ld_done] then [scale/pack]; warp2's O store keeps waiting o_drained
-// (pack+fence done). Expected ~neutral under SEAM_CONSUMER_REPLAY (there the
-// binding chain for PV(t+1,i0) is [replay -> softmax(t+1,i0) -> p_done], and
-// o_drained already fires before the replay) — kept as the correct signal
-// split for any schedule where the o_taddr WAR is binding.
+
+// (b) o_taddr early-free (markdown/21 §4-3): split the drain's completion signal so
+// the producer's accumulate=false PV(t+1,i0) — which only needs the drain's
+// tcgen05.lds of o_taddr to have RETIRED — no longer waits for the FP pack too.
+// Neutral under scr (o_drained already fires before the seam replay); kept for
+// schedules where the o_taddr WAR is binding (32K +45, HIGH_SEQLEN_NOTES).
 #ifndef ATTENTION_FLAT_O_LD_DONE
 #define ATTENTION_FLAT_O_LD_DONE 0
 #endif
 #if ATTENTION_FLAT_O_LD_DONE && !ATTENTION_CONTINUOUS_FLAT
 #error "ATTENTION_FLAT_O_LD_DONE requires ATTENTION_CONTINUOUS_FLAT"
 #endif
-// Manual per-tile timing probe for the flat path (CLOCK_TRACE is #error'd for FLAT).
-// Records CTA0 pipe0's per-tile QK-start + drain start/end clocks -> printf the
-// cadence and drain time at exit, to locate the flat's structural overhead vs base.
-#ifndef ATTENTION_FLAT_PROBE
-#define ATTENTION_FLAT_PROBE 0
+// (P_LD_EARLY, deleted 2026-07-02: the p_taddr twin of O_LD_DONE — numerically
+// exact but r0[64]+r1[64] blow the 168-reg cap -> 402 TFLOPS. Design in markdown/22.)
+// Flat drain in 2x32-col chunks (D1 EPILOGUE_CHUNK_COLS=32 ported): halves the
+// tcgen05.ld/wait::ld round trips of the O drain pack. Bit-identical (32K +25).
+#ifndef ATTENTION_FLAT_DRAIN_CHUNK32
+#define ATTENTION_FLAT_DRAIN_CHUNK32 0
 #endif
-#ifndef ATTENTION_FLAT_PROBE_GL
-#define ATTENTION_FLAT_PROBE_GL 18   // target steady L2 iter (18%4==2) for within-iter probe
+#if ATTENTION_FLAT_DRAIN_CHUNK32 && !ATTENTION_CONTINUOUS_FLAT
+#error "ATTENTION_FLAT_DRAIN_CHUNK32 requires ATTENTION_CONTINUOUS_FLAT"
 #endif
-#if ATTENTION_CONTINUOUS_FLAT
-#if !(ATTENTION_PERSISTENT && ATTENTION_PERSISTENT_OVERLAP &&                   \
-      ATTENTION_PERSISTENT_OVERLAP_EARLY && ATTENTION_PERSISTENT_OVERLAP_O_IN_V)
-#error "ATTENTION_CONTINUOUS_FLAT requires the live config: PERSISTENT + OVERLAP + EARLY + O_IN_V"
-#endif
-#if ATTENTION_CLOCK_TRACE || ATTENTION_PERSISTENT_OVERLAP_QK_PEEL ||            \
-    ATTENTION_PEEL_SOFTMAX || (ATTENTION_CROSS_PIPE_PHASE != 0)
-#error "ATTENTION_CONTINUOUS_FLAT does not support TRACE / PEEL / CROSS_PIPE_PHASE"
-#endif
+#if ATTENTION_FLAT_DRAIN_CHUNK32 && ATTENTION_FLAT_O_LD_DONE
+#error "ATTENTION_FLAT_DRAIN_CHUNK32 conflicts with ATTENTION_FLAT_O_LD_DONE"
 #endif
 
 // Inter-Q-tile clock trace: capture TWO consecutive tiles of the SAME persistent
 // CTA (blockIdx.x==0, tile_local_idx == ATTENTION_TRACE_TILE0 and +1) into two
-// pages of the clock-trace buffer, sharing ONE clock base so the two tiles land
-// on a common timeline (records store start-base) -> real cross-tile overlap.
+// pages of the clock-trace buffer, sharing ONE clock base so the two tiles land on
+// a common timeline (records store start-base) -> real cross-tile overlap.
 #ifndef ATTENTION_CLOCK_TRACE_2TILE
 #define ATTENTION_CLOCK_TRACE_2TILE 0
 #endif
@@ -156,146 +96,8 @@
 #if ATTENTION_CLOCK_TRACE_2TILE && !ATTENTION_CLOCK_TRACE
 #error "ATTENTION_CLOCK_TRACE_2TILE requires ATTENTION_CLOCK_TRACE"
 #endif
-#if ATTENTION_CLOCK_TRACE_2TILE && !ATTENTION_PERSISTENT_OVERLAP
-#error "ATTENTION_CLOCK_TRACE_2TILE requires ATTENTION_PERSISTENT_OVERLAP"
-#endif
-
-#ifndef ATTENTION_PERSISTENT_OVERLAP_EARLY
-#define ATTENTION_PERSISTENT_OVERLAP_EARLY 0
-#endif
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY && !ATTENTION_PERSISTENT_OVERLAP_PREFETCH
-#error "ATTENTION_PERSISTENT_OVERLAP_EARLY requires ATTENTION_PERSISTENT_OVERLAP_PREFETCH"
-#endif
-
-#ifndef ATTENTION_PERSISTENT_OVERLAP_O_IN_V
-#define ATTENTION_PERSISTENT_OVERLAP_O_IN_V 0
-#endif
-#if ATTENTION_PERSISTENT_OVERLAP_O_IN_V && !ATTENTION_PERSISTENT
-#error "ATTENTION_PERSISTENT_OVERLAP_O_IN_V requires ATTENTION_PERSISTENT"
-#endif
-
-#ifndef ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
-#define ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE 0
-#endif
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE && \
-    !(ATTENTION_PERSISTENT_OVERLAP_O_IN_V && ATTENTION_PERSISTENT_OVERLAP_EARLY)
-#error "ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE requires O_IN_V and EARLY"
-#endif
-
-#ifndef ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
-#define ATTENTION_PERSISTENT_OVERLAP_QK_PEEL 0
-#endif
-#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
-#error "ATTENTION_PERSISTENT_OVERLAP_QK_PEEL requires ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE"
-#endif
-
-#ifndef ATTENTION_PEEL_PREARM
-#define ATTENTION_PEEL_PREARM 0
-#endif
-
-#ifndef ATTENTION_PEEL_HB
-#define ATTENTION_PEEL_HB 0
-#endif
-#if ATTENTION_CONTINUOUS_FLAT && ATTENTION_FLAT_DEBUG
-__device__ int g_dbg_gl[16];
-#endif
-#if ATTENTION_FLAT_PROBE
-__device__ unsigned long long g_probe_qk[64];      // CTA0 pipe0: per-tile QK start
-__device__ unsigned long long g_probe_dr0[64];     // CTA0: per-tile drain start
-__device__ unsigned long long g_probe_dr1[64];     // CTA0: per-tile drain end
-__device__ unsigned long long g_probe_gl[80];      // CTA0 pipe0: per-gl (iter) start
-__device__ unsigned long long g_probe_seg[8];      // within-iter wait segments @gl==PROBE_GL
-__device__ unsigned long long g_probe_sm0[64];     // CTA0: per-tile consumer softmax start
-__device__ unsigned long long g_probe_dra[64];     // drain: after bar.sync1
-__device__ unsigned long long g_probe_drb[64];     // drain: after pv_tile_done wait
-__device__ unsigned long long g_probe_drc[64];     // drain: after pack (before fence/bar2)
-__device__ unsigned long long g_probe_smqk;        // CTA0 consumer pipe0: accumulated qk_done wait
-__device__ unsigned long long g_probe_smqk_n;      // ...count of waits (for average)
-__device__ unsigned long long g_probe_tmaqk;       // CTA0 TMA pipe0: accumulated qk_done(K-buf) wait
-__device__ unsigned long long g_probe_tmaqk_n;
-__device__ unsigned long long g_probe_kready;      // CTA0 producer pipe0: accumulated k_ready wait
-__device__ unsigned long long g_probe_kready_n;
-// Barriered clock read: plain clock64() has no memory side-effect so the compiler
-// reorders it freely (the per-gl vs seg deltas came out mathematically inconsistent
-// => reordering). The "memory" clobber + volatile pin it to its source position.
-__device__ __forceinline__ unsigned long long probe_clk() {
-  unsigned long long t;
-  asm volatile("mov.u64 %0, %%clock64;" : "=l"(t) :: "memory");
-  return t;
-}
-#endif
-#if ATTENTION_PEEL_HB
-__device__ unsigned int g_peel_hb[16];
-#define PEEL_HB_SET(slot, val)                              \
-  do {                                                      \
-    if (blockIdx.x == 0 && lane0) {                         \
-      g_peel_hb[(slot)] = (val);                            \
-      __threadfence();                                      \
-    }                                                       \
-  } while (0)
-#else
-#define PEEL_HB_SET(slot, val) do { } while (0)
-#endif
-
-#ifndef ATTENTION_PEEL_ISO
-#define ATTENTION_PEEL_ISO 0
-#endif
-#if ATTENTION_PEEL_ISO && !ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
-#error "ATTENTION_PEEL_ISO requires ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE"
-#endif
-#ifndef ATTENTION_ISO_ARRAY
-#define ATTENTION_ISO_ARRAY 0
-#endif
-
-#ifndef ATTENTION_PEEL_ROLE_NOSKIP
-#define ATTENTION_PEEL_ROLE_NOSKIP 0
-#endif
-
-#ifndef ATTENTION_PEEL_PIPE0_ONLY
-#define ATTENTION_PEEL_PIPE0_ONLY 0
-#endif
-
-#ifndef ATTENTION_PEEL_DURING_DRAIN
-#define ATTENTION_PEEL_DURING_DRAIN 0
-#endif
-
-#ifndef ATTENTION_PEEL_AFTER_SYNC
-#define ATTENTION_PEEL_AFTER_SYNC 0
-#endif
-
-#ifndef ATTENTION_PEEL_DD_PRESYNC
-#define ATTENTION_PEEL_DD_PRESYNC 0
-#endif
-
-#ifndef ATTENTION_PEEL_DD_SINGLE_ISSUER
-#define ATTENTION_PEEL_DD_SINGLE_ISSUER 0
-#endif
-
-#ifndef ATTENTION_PEEL_DD_SERIAL_COMMIT
-#define ATTENTION_PEEL_DD_SERIAL_COMMIT 0
-#endif
-
-// B3 (softmax-peel): in tile t's store-tail (after the drain-pack, while the O
-// TMA store is async in flight) the consumer warps run tile (t+1)'s iter0/1
-// softmax on the QK that was peeled during tile t's drain (commit ->
-// qk_peel_done). This packs s_smem and reads p_taddr early, the precondition for
-// B1's iter2/3 QK-peel. No new tcgen05.commit is issued by the consumer, so the
-// deadlock risk is barrier phase accounting only. The p_done / s_h1_done arrives
-// are NOT issued in the store-tail (they would be wiped by tile (t+1)'s
-// body-start re-init); they are replayed at tile (t+1)'s body-start post-reinit
-// (search "B3 body-start replay"), mirroring the qk_peel_done -> qk_done
-// conversion. The peeled iter0/1 row_max/row_sum are carried into tile (t+1)'s
-// consumer role via row_sum_partial (sum, shared) + the next tile's
-// row_max_scratch (max, gmem -- no extra static smem), and that role then skips
-// its own first iteration.
-#ifndef ATTENTION_PEEL_SOFTMAX
-#define ATTENTION_PEEL_SOFTMAX 0
-#endif
-#if ATTENTION_PEEL_SOFTMAX &&                                                  \
-    !(ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PEEL_DURING_DRAIN &&   \
-      ATTENTION_PEEL_AFTER_SYNC && ATTENTION_PEEL_PREARM)
-#error                                                                         \
-    "ATTENTION_PEEL_SOFTMAX requires QK_PEEL + PEEL_DURING_DRAIN + PEEL_AFTER_SYNC + PEEL_PREARM"
+#if ATTENTION_CLOCK_TRACE_2TILE && !ATTENTION_PERSISTENT
+#error "ATTENTION_CLOCK_TRACE_2TILE requires the persistent overlap core"
 #endif
 
 #ifndef ATTENTION_ROW_MAX_ONLY
@@ -316,15 +118,6 @@ __device__ unsigned int g_peel_hb[16];
 
 #ifndef ATTENTION_FIRST_ITER_COMPUTE_MAX
 #define ATTENTION_FIRST_ITER_COMPUTE_MAX ATTENTION_FIRST_ITER_ROW_MAX_SHIFT
-#endif
-
-// B3 mirrors the consumer first-iter COMPUTE_MAX + APPLY_SHIFT path verbatim, so
-// it needs all three on (the FAST default). Checked here, after they are defined.
-#if ATTENTION_PEEL_SOFTMAX &&                                                  \
-    !(ATTENTION_FIRST_ITER_ROW_MAX_SHIFT &&                                    \
-      ATTENTION_FIRST_ITER_APPLY_SHIFT && ATTENTION_FIRST_ITER_COMPUTE_MAX)
-#error                                                                         \
-    "ATTENTION_PEEL_SOFTMAX requires FIRST_ITER_ROW_MAX_SHIFT + APPLY_SHIFT + COMPUTE_MAX"
 #endif
 
 #ifndef ATTENTION_ROW_SUM_RARE_UPDATE
@@ -399,10 +192,13 @@ __device__ unsigned int g_peel_hb[16];
 #define ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER 9
 #endif
 
+// 8 = commit right after the QK MMAs (qk_done tracks QK alone; all PV h0 MMAs
+// trail it). The accumulate flag of the post-commit loop respects the
+// tile-first reset (pv_accum / local!=1), so 8 is valid everywhere.
 #if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER != 0 && \
-    (ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER <= 8 || \
+    (ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER <= 7 || \
      ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER >= 12)
-#error "ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER must be 0 or 9..11"
+#error "ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER must be 0 or 8..11"
 #endif
 
 #ifndef ATTENTION_MINIMAL_TMA_GAP_TRACE
@@ -599,11 +395,8 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
     int clock_trace_start,
     unsigned long long clock_trace_base,
     bool k_prefetched,
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     bool wait_prev_store,
-#endif
-#if ATTENTION_PEEL_HB
-    bool hb_peeled,
 #endif
     unsigned int qk_done_carry,
     int lane) {
@@ -615,7 +408,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
 #endif
   int iter = pipe;
   int local = 0;
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
 #if ATTENTION_CLOCK_TRACE
   // Deferred-store completion: how long tile t blocks on tile (t-1)'s O store.
   // This is the residual (un-hidden) store tail; it lands at tile t's start, so on
@@ -809,13 +602,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
         qk_wait_start = clock64();
       }
 #endif
-#if ATTENTION_PEEL_HB
-      if (hb_peeled && local == 0) PEEL_HB_SET(6 + pipe, 1u);
-#endif
       mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
-#if ATTENTION_PEEL_HB
-      if (hb_peeled && local == 0) PEEL_HB_SET(6 + pipe, 2u);
-#endif
 #if ATTENTION_CLOCK_TRACE
       if (qk_wait_start != 0ull) {
         write_clock_trace_record(clock_trace,
@@ -1143,7 +930,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
     unsigned long long q_tma_start_shared,
     unsigned long long* k_tma_start_shared,
     unsigned int q_ready_phase,
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT
     uint64_t* qk_all_done_bar,
 #endif
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
@@ -1159,7 +946,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
 #endif
   const uint32_t idesc = make_qk_idesc();
   const uint32_t pv_idesc = make_qk_idesc() | (1u << 16);
-#if ATTENTION_PERSISTENT_DESC_GEN
+#if ATTENTION_PERSISTENT
   QkDescGen q_desc{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
   QkDescGen k_desc{static_cast<uint32_t>(smem_ptr_u32(k_smem[pipe]) >> 4)};
   PvSDescGen pv_s_desc{static_cast<uint32_t>(smem_ptr_u32(s_smem[pipe]) >> 4)};
@@ -1210,7 +997,6 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
   if (qk_peeled) {
     iter = pipe + kActivePipeStride;
     local = 1;
-    PEEL_HB_SET(8 + pipe, 100u);
   } else
 #endif
   if (iter < loop_repeats) {
@@ -1286,7 +1072,6 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
-    if (qk_peeled) PEEL_HB_SET(8 + pipe, 200u + static_cast<unsigned int>(local));
 #endif
 #if ATTENTION_CLOCK_TRACE
     const int trace_idx = iter - clock_trace_start;
@@ -1299,14 +1084,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
     const int done_iter = iter - kActivePipeStride;
     const int done_trace_idx = done_iter - clock_trace_start;
 #endif
-#if ATTENTION_FLAT_PROBE
-    const bool _pk = blockIdx.x == 0 && pipe == 0 && lane == 0;
-    const unsigned long long _kt0 = _pk ? probe_clk() : 0ull;
-#endif
     mbarrier_wait(&k_ready[pipe], phase);
-#if ATTENTION_FLAT_PROBE
-    if (_pk) { g_probe_kready += probe_clk() - _kt0; g_probe_kready_n += 1; }
-#endif
 #if ATTENTION_CLOCK_TRACE
     if (clock_trace != nullptr && blockIdx.x == 0 && lane0 &&
         done_trace_idx >= 0 && done_trace_idx < clock_trace_iters) {
@@ -1391,7 +1169,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
       for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
            mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                            pv_idesc, true);
+                            pv_idesc, local != 1 || mma != 0);  // EC=8: mma0 here
       }
 #else
 #pragma unroll
@@ -1453,7 +1231,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
   if (local > 0) {
     const uint32_t tail_phase = static_cast<uint32_t>((local - 1) & 1);
     mbarrier_wait(&qk_done[pipe], tail_phase ^ q_ready_phase);
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT
     if (lane0) mbarrier_arrive(qk_all_done_bar);
 #endif
 #if ATTENTION_CLOCK_TRACE
@@ -1504,7 +1282,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
       for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
            mma < kMmasPerTile / 2; ++mma) {
         tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
-                            pv_idesc, true);
+                            pv_idesc, local != 1 || mma != 0);  // EC=8: mma0 here
       }
 #else
 #pragma unroll
@@ -1665,9 +1443,6 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     int clock_trace_iters,
     int clock_trace_start,
     unsigned long long clock_trace_base,
-#if ATTENTION_PEEL_SOFTMAX
-    bool softmax_peeled,
-#endif
     unsigned int qk_done_carry,
     int lane) {
   const int row = consumer_warp * 32 + lane;
@@ -1685,23 +1460,6 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #if ATTENTION_ROW_SUM_RARE_UPDATE
   const float row_sum_update_limit =
       static_cast<float>(ATTENTION_ROW_SUM_UPDATE_LIMIT);
-#endif
-#if ATTENTION_PEEL_SOFTMAX
-  // B3: iter0/1 softmax (ld -> row_max -> pack+store -> p_done / s_h1_done) was
-  // already run in the PREVIOUS tile's store-tail. Pick up its carried state and
-  // resume at iter2 (local=1). The phantom qk_done arrive at the tile body start
-  // keeps qk_done's phase clock aligned, so the phase math below is unchanged.
-  if (softmax_peeled) {
-    // Carry from the previous tile's store-tail peel: row_max via this tile's
-    // own row_max_scratch (gmem, written there by the prior tile), row_sum via
-    // row_sum_partial. row_max_scratch is read here before this role overwrites
-    // it at the end, and the gmem load latency is hidden behind the qk_done wait
-    // in the prefix/steady loop below.
-    row_max_reg = row_max_scratch[pipe * kTileM + row];
-    if (do_row_sum) row_sum_reg = row_sum_partial[pipe][row];
-    iter = pipe + kActivePipeStride;
-    local = 1;
-  } else
 #endif
   if (iter < loop_repeats) {
     mbarrier_wait(&qk_done[pipe], qk_done_carry);
@@ -1794,14 +1552,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
 #endif
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
-#if ATTENTION_FLAT_PROBE
-    const bool _pk = blockIdx.x == 0 && pipe == 0 && consumer_warp == 0 && lane == 0;
-    const unsigned long long _t0 = _pk ? probe_clk() : 0ull;
-#endif
     mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
-#if ATTENTION_FLAT_PROBE
-    if (_pk) { g_probe_smqk += probe_clk() - _t0; g_probe_smqk_n += 1; }
-#endif
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
@@ -1949,15 +1700,13 @@ __device__ __forceinline__ void attention_issue_qk_peel(
   }
 #endif
   if (lane0) {
-#if !ATTENTION_PEEL_PREARM
+#if !ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     mbarrier_init(&qk_peel_done[PIPE], 1);
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
 #endif
-#if !ATTENTION_PEEL_NO_FENCE
     tcgen05_fence_after_thread_sync();
-#endif
     const uint32_t peel_idesc = make_qk_idesc();
-#if ATTENTION_PERSISTENT_DESC_GEN
+#if ATTENTION_PERSISTENT
     const QkDescGen qd{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
     const QkDescGen kd{static_cast<uint32_t>(smem_ptr_u32(k_smem[PIPE]) >> 4)};
 #pragma unroll
@@ -1976,9 +1725,7 @@ __device__ __forceinline__ void attention_issue_qk_peel(
     }
 #endif
     tcgen05_commit(&qk_peel_done[PIPE]);
-#if !ATTENTION_PEEL_NO_FENCE
     tcgen05_fence_before_thread_sync();
-#endif
 #if ATTENTION_CLOCK_TRACE_2TILE
     if (peel_page != nullptr) {
       write_clock_trace_record(peel_page, peel_slot_base + 2, kClockTracePeelIssue,
@@ -1998,15 +1745,13 @@ __device__ __forceinline__ void attention_peel_issue_mma_only(
   mbarrier_wait(q_ready, peel_q_phase);
   mbarrier_wait(&k_ready[PIPE], 0u);
   if (lane0) {
-#if !ATTENTION_PEEL_PREARM
+#if !ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     mbarrier_init(&qk_peel_done[PIPE], 1);
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
 #endif
-#if !ATTENTION_PEEL_NO_FENCE
     tcgen05_fence_after_thread_sync();
-#endif
     const uint32_t peel_idesc = make_qk_idesc();
-#if ATTENTION_PERSISTENT_DESC_GEN
+#if ATTENTION_PERSISTENT
     const QkDescGen qd{static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
     const QkDescGen kd{static_cast<uint32_t>(smem_ptr_u32(k_smem[PIPE]) >> 4)};
 #pragma unroll
@@ -2032,9 +1777,7 @@ __device__ __forceinline__ void attention_peel_commit_only(
     uint64_t qk_peel_done[kPipeCount], bool lane0) {
   if (lane0) {
     tcgen05_commit(&qk_peel_done[PIPE]);
-#if !ATTENTION_PEEL_NO_FENCE
     tcgen05_fence_before_thread_sync();
-#endif
   }
 }
 #endif
@@ -2137,7 +1880,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ uint64_t v_ready[kPipeCount];
   __shared__ uint64_t v_h1_ready[kPipeCount];
   __shared__ uint64_t pv_done[kPipeCount];
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT
   __shared__ uint64_t qk_all_done;
 #endif
 #if ATTENTION_CONTINUOUS_FLAT
@@ -2152,7 +1895,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   // COMPLETED, arrives this once per tile; the drain waits it @(tile&1). count =
   // 2 (both producer pipes). Advances exactly once per tile.
   __shared__ uint64_t pv_tile_done;
-#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+#if ATTENTION_CONTINUOUS_FLAT
   // Dedicated seam-QK commit target: 128B stride so the two pipes' barriers do
   // not share an adjacency window; nobody waits it until after the drain (the
   // post-drain consumer replay consumes it). See macro note.
@@ -2253,7 +1996,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         mbarrier_init(&v_ready[p], 1);
         mbarrier_init(&v_h1_ready[p], 1);
         mbarrier_init(&pv_done[p], 1);
-#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+#if ATTENTION_CONTINUOUS_FLAT
         mbarrier_init(&qk_seam_done[p * 16], 1);
 #endif
       }
@@ -2295,15 +2038,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = gl;
 #endif
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && pipe == 0 && lane0 && gl < 80) g_probe_gl[gl] = probe_clk();
-#endif
         const int L = gl % n_p;
         const uint32_t ph = static_cast<uint32_t>(gl & 1);
         const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
-#if ATTENTION_FLAT_SEAM_PV_FIRST
+#if ATTENTION_CONTINUOUS_FLAT
         if (L == 0) {
-          // Seam body (see ATTENTION_FLAT_SEAM_PV_FIRST note): tile j-1 first.
+          // Seam body (see ATTENTION_CONTINUOUS_FLAT note): tile j-1 first.
           const int j = gl / n_p;
           mbarrier_wait(&qk_done[pipe], pph);  // QK(gl-1) done -> q_smem free
           if (lane0) mbarrier_arrive(&qk_all_done);
@@ -2330,15 +2070,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           mbarrier_wait(&k_ready[pipe], ph);
           mbarrier_wait(&p_done[pipe], pph);        // dep2: p_taddr WAR
           if (lane0) {
-#if ATTENTION_FLAT_PROBE
-            if (bx == 0 && pipe == 0 && (gl / n_p) < 64)
-              g_probe_qk[gl / n_p] = probe_clk();   // per-tile QK start (cadence)
-#endif
 #pragma unroll
             for (int mma = 0; mma < kMmasPerTile; ++mma)
               tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
                                   mma != 0);
-#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+#if ATTENTION_CONTINUOUS_FLAT
             // Isolated commit target; the post-drain consumer replay provides
             // the qk_done arrive. Without a drain (no output) there is no
             // replayer, so commit qk_done directly (uniform across the CTA).
@@ -2359,18 +2095,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           mbarrier_wait(&q_ready, static_cast<uint32_t>(j & 1));
         }
         mbarrier_wait(&k_ready[pipe], ph);
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[0] = probe_clk();
-#endif
         mbarrier_wait(&p_done[pipe], pph);       // dep2: p_taddr WAR
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[1] = probe_clk();
-#endif
         if (lane0) {
-#if ATTENTION_FLAT_PROBE
-          if (L == 0 && bx == 0 && pipe == 0 && (gl / n_p) < 64)
-            g_probe_qk[gl / n_p] = probe_clk();    // per-tile QK start (cadence)
-#endif
 #pragma unroll
           for (int mma = 0; mma < kMmasPerTile; ++mma)
             tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
@@ -2380,9 +2106,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const int prevj = (gl - 1) / n_p;
         const bool pv_accum = (prevL != 0);
         mbarrier_wait(&v_ready[pipe], pph);       // V h0 ready (~free under PUSH)
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[2] = probe_clk();
-#endif
         if (lane0) {
           if (!pv_accum && prevj > 0 && has_output) {
             // dep4: o_taddr WAR vs the previous drain's reads. With O_LD_DONE
@@ -2401,34 +2124,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           tcgen05_commit(&qk_done[pipe]);
 #pragma unroll
           for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
-            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);  // EC=8: mma0 lands here
         }
         mbarrier_wait(&s_h1_done[pipe], pph);
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[3] = probe_clk();
-#endif
         mbarrier_wait(&v_h1_ready[pipe], pph);
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[4] = probe_clk();
-#endif
         if (lane0) {
 #pragma unroll
           for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
             tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
           tcgen05_commit(&pv_done[pipe]);
         }
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[5] = probe_clk();
-#endif
         // PV(gl-1) was tile (j-1)'s last iter when L==0: confirm it COMPLETED
         // (pv_done@pph flips after the MMAs finish) then signal the drain.
         if (L == 0) {
           mbarrier_wait(&pv_done[pipe], pph);
           if (lane0) mbarrier_arrive(&pv_tile_done);
         }
-#if ATTENTION_FLAT_PROBE
-        if (gl == ATTENTION_FLAT_PROBE_GL && bx == 0 && pipe == 0 && lane0) g_probe_seg[6] = probe_clk();
-#endif
       }
       // tail: PV for gl=G-1
       {
@@ -2455,7 +2167,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           tcgen05_commit(&qk_done[pipe]);
 #pragma unroll
           for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
-            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);  // EC=8: mma0 lands here
         }
         mbarrier_wait(&s_h1_done[pipe], pph);
         mbarrier_wait(&v_h1_ready[pipe], pph);
@@ -2496,7 +2209,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0, lane0);
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
       }
-#if ATTENTION_FLAT_TMA_PUSH
+#if ATTENTION_CONTINUOUS_FLAT
       // F1 push-style body (see macro note): K(gl+1)+Vh0(gl) at qk_done(gl),
       // Vh1(gl) at pv_done(gl-1). Continuous: has_next is global (gl+1<G), never
       // per-tile, so there is no boundary ramp; the only seam specials are Q
@@ -2531,14 +2244,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           const int ngkt =
               kv_tile_base_for_block<kFixedKTiles>(ntile, loop_k_tiles) +
               local_k_tile_for_iter<kFixedKTiles>(niter, loop_k_tiles);
-#if ATTENTION_FLAT_PROBE
-          const bool _tk = bx == 0 && pipe == 0 && lane0;
-          const unsigned long long _tt0 = _tk ? probe_clk() : 0ull;
-#endif
           mbarrier_wait(&qk_done[pipe], ph);
-#if ATTENTION_FLAT_PROBE
-          if (_tk) { g_probe_tmaqk += probe_clk() - _tt0; g_probe_tmaqk_n += 1; }
-#endif
           issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], ngkt, lane0);
         }
         // warp2 stores prev tile's O AFTER the K flow is unblocked (drain chain
@@ -2573,7 +2279,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                 lane0);
         }
       }
-#else  // !ATTENTION_FLAT_TMA_PUSH: pull-style (Jun-30 M1 verified; K/V late)
+#else
       for (int gl = 1; gl < G; ++gl) {
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = gl;
@@ -2597,16 +2303,9 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         const int iter = L * kActivePipeStride + pipe;
         const int gkt = kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles) +
                         local_k_tile_for_iter<kFixedKTiles>(iter, loop_k_tiles);
-#if ATTENTION_FLAT_PROBE
-        const bool _tk = bx == 0 && pipe == 0 && lane0;
-        const unsigned long long _tt0 = _tk ? probe_clk() : 0ull;
-#endif
         mbarrier_wait(&qk_done[pipe], pph);      // K buffer free; also frees V h0
                                                  // region (producer EARLY-commits
                                                  // qk_done inside PV h0).
-#if ATTENTION_FLAT_PROBE
-        if (_tk) { g_probe_tmaqk += probe_clk() - _tt0; g_probe_tmaqk_n += 1; }
-#endif
         issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], gkt, lane0);
         // warp2 stores prev tile's O AFTER issuing K (so the producer is unblocked
         // and can reach the PV/pv_tile_done the drain needs -> o_drained -> this
@@ -2625,7 +2324,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0, lane0);
         issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
       }
-#endif  // ATTENTION_FLAT_TMA_PUSH
+#endif
       // final tile (J-1) store (warp2): after its drain.
       if (warp_id == 2 && has_output) {
         mbarrier_wait(&o_drained, store_wait & 1u);
@@ -2648,10 +2347,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         g_dbg_gl[warp_id] = j;
 #endif
         const int tile = bx + j * gx;
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64)
-          g_probe_sm0[j] = probe_clk();   // consumer softmax start (per tile)
-#endif
         float* row_max_scratch =
             out_f32 != nullptr ? out_f32 + static_cast<size_t>(tile) * kTileWords : nullptr;
         attention_consumer_pipe_role(
@@ -2660,21 +2355,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             has_output, nullptr, 0, 0, 0ull, 0u, lane);
         if (!has_output) continue;
         // ---- drain tile j (both pipes; all 8 consumer warps) ----
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64)
-          g_probe_dr0[j] = probe_clk();   // drain start
-#endif
         asm volatile("bar.sync 1, 256;" ::: "memory");  // softmax partials visible
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64) g_probe_dra[j] = probe_clk();
-#endif
         // tile j's PVs (both pipes) completed -> producers arrived pv_tile_done
         // once for this tile (advances once/tile, so @(j&1) is unambiguous even if
         // a producer raced ahead).
         mbarrier_wait(&pv_tile_done, static_cast<uint32_t>(j & 1));
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64) g_probe_drb[j] = probe_clk();
-#endif
         uint32_t* output_bf16_smem = v_smem[0];
         const int epilogue_slot = warp_id - kConsumerBaseWarp;
         const int drain_warp = epilogue_slot & (kConsumerWarpsPerPipe - 1);
@@ -2726,6 +2411,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
             dst[i >> 1] = pack_bf16_pair_device(lo, hi);
           }
         }
+#elif ATTENTION_FLAT_DRAIN_CHUNK32
+#pragma unroll
+        for (int chunk = 0; chunk < 2; ++chunk) {
+          const uint32_t chunk_offset = static_cast<uint32_t>(chunk * 32);
+          store_tmem_x32_pair_scale_norm_bf16_smem(
+              row_taddr0 + chunk_offset, row_taddr1 + chunk_offset,
+              row_dst + chunk * 16, pipe0_scale, pipe1_scale, inv_sum);
+        }
 #else
 #pragma unroll
         for (int chunk = 0; chunk < 4; ++chunk) {
@@ -2735,14 +2428,11 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
               row_dst + chunk * 8, pipe0_scale, pipe1_scale, inv_sum);
         }
 #endif
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64) g_probe_drc[j] = probe_clk();
-#endif
         tma_store_fence();
         if (lane0) mbarrier_arrive(&o_drained);
         // ensure all drains done before next tile's softmax reuses o_taddr / partials
         asm volatile("bar.sync 1, 256;" ::: "memory");
-#if ATTENTION_FLAT_SEAM_CONSUMER_REPLAY
+#if ATTENTION_CONTINUOUS_FLAT
         // Post-drain relay of the NEXT tile's seam-QK completion onto qk_done
         // (PPAS conditions: the commit landed mid-drain with no waiter; in the
         // common case QK finished during the drain so this returns instantly).
@@ -2752,10 +2442,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           mbarrier_wait(&qk_seam_done[pipe * 16], static_cast<uint32_t>(j & 1));
           if (lane0) mbarrier_arrive(&qk_done[pipe]);
         }
-#endif
-#if ATTENTION_FLAT_PROBE
-        if (bx == 0 && warp_id == kConsumerBaseWarp && lane0 && j < 64)
-          g_probe_dr1[j] = probe_clk();   // drain end
 #endif
       }
     }
@@ -2767,34 +2453,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     // completely freed"). All 384 threads converge here first.
     if (threadIdx.x == 0) tcgen05_fence_after_thread_sync();
     __syncthreads();
-#if ATTENTION_FLAT_PROBE
-    if (bx == 0 && threadIdx.x == 0) {
-      // producer(warp0) & consumer(warp4) share CTA0's clock -> aligned timeline.
-      for (int t = 2; t < J && t < 8; ++t)
-        printf("PROBE t%d cad=%llu sm=%llu | drain bar1=%llu pvtile=%llu pack=%llu "
-               "fence+bar2=%llu tot=%llu\n",
-               t, g_probe_qk[t] - g_probe_qk[t - 1],
-               g_probe_dr0[t] - g_probe_sm0[t], g_probe_dra[t] - g_probe_dr0[t],
-               g_probe_drb[t] - g_probe_dra[t], g_probe_drc[t] - g_probe_drb[t],
-               g_probe_dr1[t] - g_probe_drc[t], g_probe_dr1[t] - g_probe_dr0[t]);
-      printf("PROBE softmax qk_wait avg=%llu (n=%llu) | TMA Kbuf_wait avg=%llu (n=%llu)\n",
-             g_probe_smqk_n ? g_probe_smqk / g_probe_smqk_n : 0ull, g_probe_smqk_n,
-             g_probe_tmaqk_n ? g_probe_tmaqk / g_probe_tmaqk_n : 0ull, g_probe_tmaqk_n);
-      const int n_pp = (R + 1) / 2;  // pipe0 n_p
-      for (int g = 14; g < 26; ++g)
-        printf("PROBE gl%d(L%d) dur=%llu\n", g, g % n_pp,
-               g_probe_gl[g] - g_probe_gl[g - 1]);
-      printf("PROBE seg@gl%d k_ready=%llu p_done=%llu QK+vready=%llu PVh0+sh1=%llu "
-             "vh1ready=%llu PVh1=%llu body=%llu\n",
-             ATTENTION_FLAT_PROBE_GL,
-             g_probe_seg[0] - g_probe_gl[ATTENTION_FLAT_PROBE_GL],
-             g_probe_seg[1] - g_probe_seg[0], g_probe_seg[2] - g_probe_seg[1],
-             g_probe_seg[3] - g_probe_seg[2], g_probe_seg[4] - g_probe_seg[3],
-             g_probe_seg[5] - g_probe_seg[4],
-             g_probe_seg[6] - g_probe_gl[ATTENTION_FLAT_PROBE_GL]);
-    }
-    __syncthreads();
-#endif
     if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
     __syncthreads();
     if (warp_id == 0) tcgen05_relinquish_alloc_permit();
@@ -2830,18 +2488,14 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
   const bool qk_peeled =
-#if ATTENTION_PEEL_ROLE_NOSKIP
-      false;
-#else
       output != nullptr && tile != static_cast<int>(blockIdx.x) &&
       loop_repeats >= kActivePipeStride;
-#endif
 #else
   const bool qk_peeled = false;
 #endif
   (void)qk_peeled;
 
-#if ATTENTION_PERSISTENT_OVERLAP
+#if ATTENTION_PERSISTENT
   // Continuous inter-q-tile pipeline (14_CONTINUOUS_DESIGN.md): ALL pipeline
   // barriers are init-once (first tile only) and cycle continuously across tile
   // boundaries -- no per-tile re-init. The phase is carried by register
@@ -2852,7 +2506,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   // boundary wiped these barriers.
   if (tile == static_cast<int>(blockIdx.x) && threadIdx.x == 0) {
     mbarrier_init(&q_ready, 1);
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT
     mbarrier_init(&qk_all_done, 2);
 #endif
 #pragma unroll
@@ -2864,7 +2518,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_init(&v_ready[p], 1);
       mbarrier_init(&v_h1_ready[p], 1);
       mbarrier_init(&pv_done[p], 1);
-#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PEEL_NO_INITONCE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
       mbarrier_init(&qk_peel_done[p], 1);
 #endif
     }
@@ -2872,10 +2526,10 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   }
 #endif
   if (threadIdx.x == 0) {
-#if !ATTENTION_PERSISTENT_OVERLAP
+#if !ATTENTION_PERSISTENT
     mbarrier_init(&q_ready, 1);
 #endif
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY && !ATTENTION_PERSISTENT_OVERLAP
+#if ATTENTION_PERSISTENT && !ATTENTION_PERSISTENT
     mbarrier_init(&qk_all_done, 2);
 #endif
 #if ATTENTION_PIPE1_TMA_HEAD_MARKER
@@ -2883,7 +2537,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
 #pragma unroll
     for (int p = 0; p < kPipeCount; ++p) {
-#if !ATTENTION_PERSISTENT_OVERLAP
+#if !ATTENTION_PERSISTENT
       mbarrier_init(&k_ready[p], 1);
       mbarrier_init(&qk_done[p], 1);
       mbarrier_init(&p_done[p], kConsumerWarpsPerPipe);
@@ -2911,51 +2565,23 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __syncthreads();
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
   if (qk_peeled && warp_id == 0) {
-    PEEL_HB_SET(12, 1u);
     mbarrier_wait(&qk_peel_done[0], 0u);
-    PEEL_HB_SET(12, 2u);
     if (lane0) mbarrier_arrive(&qk_done[0]);
-#if ATTENTION_PEEL_PREARM
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     if (lane0) {
       mbarrier_init(&qk_peel_done[0], 1);
       asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
     }
 #endif
-    PEEL_HB_SET(12, 3u);
   } else if (qk_peeled && warp_id == 1) {
-    PEEL_HB_SET(13, 1u);
     mbarrier_wait(&qk_peel_done[1], 0u);
-    PEEL_HB_SET(13, 2u);
     if (lane0) mbarrier_arrive(&qk_done[1]);
-#if ATTENTION_PEEL_PREARM
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     if (lane0) {
       mbarrier_init(&qk_peel_done[1], 1);
       asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
     }
 #endif
-    PEEL_HB_SET(13, 3u);
-  }
-#endif
-#if ATTENTION_PEEL_SOFTMAX
-  // B3 body-start replay. Tile t's store-tail already ran THIS tile's iter0/1
-  // softmax (ld p_taddr -> pack s_smem), but deferred the p_done / s_h1_done
-  // arrives because those barriers are re-initialized just above (every tile,
-  // thread 0), which would have wiped a store-tail arrive. Replay them here,
-  // post-reinit, so the producer's first steady iter (waits p_done[pipe] and
-  // s_h1_done[pipe] phase 0) is released. The consumer (softmax_peeled) skips
-  // iter0/1 and never arrives them in its body, so this replay is the only
-  // source. Each pipe's kConsumerWarpsPerPipe consumer warps arrive once (lane0)
-  // -> the barrier count (kConsumerWarpsPerPipe) is met -> phase 0 completes,
-  // exactly as the in-body iter0/1 softmax would have. s_smem (packed in the
-  // store-tail) is already visible after the __syncthreads above. This mirrors
-  // the qk_peel_done -> qk_done conversion right before it.
-  if (qk_peeled && warp_id >= kConsumerBaseWarp &&
-      warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe) {
-    const int sm_pipe = (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
-    if (lane0) {
-      mbarrier_arrive(&p_done[sm_pipe]);
-      mbarrier_arrive(&s_h1_done[sm_pipe]);
-    }
   }
 #endif
 #if ATTENTION_CLOCK_TRACE
@@ -3017,13 +2643,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const int q_contig_row = tile * kTileM;
   const int kv_tile_base =
       kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles);
-#if ATTENTION_PERSISTENT_OVERLAP
+#if ATTENTION_PERSISTENT
   const int tile_local_idx =
       (tile - static_cast<int>(blockIdx.x)) / static_cast<int>(gridDim.x);
   const unsigned int q_ready_phase = static_cast<unsigned int>(tile_local_idx & 1);
-  const bool k_prefetched = ATTENTION_PERSISTENT_OVERLAP_PREFETCH &&
+  const bool k_prefetched = ATTENTION_PERSISTENT &&
       output != nullptr && tile != static_cast<int>(blockIdx.x);
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
   const bool wait_prev_store =
       output != nullptr && tile != static_cast<int>(blockIdx.x);
 #endif
@@ -3040,7 +2666,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const unsigned int phase_carry = q_ready_phase;
 
   if (warp_id == 0
-#if ATTENTION_PERSISTENT_OVERLAP && ATTENTION_PERSISTENT_OVERLAP_PREFETCH
+#if ATTENTION_PERSISTENT && ATTENTION_PERSISTENT
       && (output == nullptr || tile == static_cast<int>(blockIdx.x))
 #endif
   ) {
@@ -3067,9 +2693,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         score_to_exp2_scale,
         output != nullptr, clock_trace_eff, clock_trace_iters, clock_trace_start,
         clock_trace_base,
-#if ATTENTION_PEEL_SOFTMAX
-        qk_peeled,
-#endif
         phase_carry,
         lane);
   }
@@ -3082,11 +2705,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         k_issue_gen, v_issue_gen, &tma_head_marker,
         k_tma_start_shared, pipe, loop_repeats, loop_k_tiles, kv_tile_base, clock_trace_eff,
         clock_trace_iters, clock_trace_start, clock_trace_base, k_prefetched,
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
         wait_prev_store,
-#endif
-#if ATTENTION_PEEL_HB
-        qk_peeled,
 #endif
         phase_carry,
         lane);
@@ -3101,7 +2721,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         loop_repeats, clock_trace_eff,
         clock_trace_iters, clock_trace_start, clock_trace_base,
         q_tma_start_shared, k_tma_start_shared, q_ready_phase,
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT
         &qk_all_done,
 #endif
 #if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
@@ -3131,7 +2751,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     const int pipe0_local_count =
         (loop_repeats + 1) / 2;
     const int pipe1_local_count = loop_repeats / 2;
-#if ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT
     if (warp_id == 2 || warp_id == 3) {
       const int next_tile = tile + static_cast<int>(gridDim.x);
       if (next_tile < total_tiles) {
@@ -3225,55 +2845,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       }
 #endif
     }
-#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PEEL_DURING_DRAIN && \
-    !ATTENTION_PEEL_AFTER_SYNC
-#if ATTENTION_PEEL_DD_PRESYNC
-    __syncthreads();
-#endif
-#if ATTENTION_PEEL_DD_SINGLE_ISSUER
-    if (warp_id == 0 && loop_repeats >= kActivePipeStride) {
-      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
-      if (peel_next_tile < total_tiles) {
-        const unsigned int peel_q_phase =
-            static_cast<unsigned int>((tile_local_idx + 1) & 1);
-        PEEL_HB_SET(0, 3u);
-        attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
-                                   qk_peel_done, peel_q_phase, lane0);
-        PEEL_HB_SET(0, 4u);
-        PEEL_HB_SET(1, 3u);
-        attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
-                                   qk_peel_done, peel_q_phase, lane0);
-        PEEL_HB_SET(1, 4u);
-      }
-    }
-#elif ATTENTION_PEEL_DD_SERIAL_COMMIT
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && \
+    !ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
       const int peel_next_tile = tile + static_cast<int>(gridDim.x);
       if (peel_next_tile < total_tiles) {
         const unsigned int peel_q_phase =
             static_cast<unsigned int>((tile_local_idx + 1) & 1);
-        PEEL_HB_SET(warp_id, 3u);
-        if (warp_id == 0) {
-          attention_peel_issue_mma_only<0>(q_smem, k_smem, p_taddr, &q_ready,
-                                           k_ready, qk_peel_done, peel_q_phase, lane0);
-        } else {
-          attention_peel_issue_mma_only<1>(q_smem, k_smem, p_taddr, &q_ready,
-                                           k_ready, qk_peel_done, peel_q_phase, lane0);
-        }
-        asm volatile("bar.sync 6, 64;" ::: "memory");
-        if (warp_id == 0) attention_peel_commit_only<0>(qk_peel_done, lane0);
-        asm volatile("bar.sync 6, 64;" ::: "memory");
-        if (warp_id == 1) attention_peel_commit_only<1>(qk_peel_done, lane0);
-        PEEL_HB_SET(warp_id, 4u);
-      }
-    }
-#else
-    if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
-      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
-      if (peel_next_tile < total_tiles) {
-        const unsigned int peel_q_phase =
-            static_cast<unsigned int>((tile_local_idx + 1) & 1);
-        PEEL_HB_SET(warp_id, 3u);
         if (warp_id == 0) {
           attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
                                      qk_peel_done, peel_q_phase, lane0);
@@ -3281,10 +2859,8 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
                                      qk_peel_done, peel_q_phase, lane0);
         }
-        PEEL_HB_SET(warp_id, 4u);
       }
     }
-#endif
 #endif
 #if ATTENTION_CLOCK_TRACE
     if (trace_cta && threadIdx.x == 0) {
@@ -3294,7 +2870,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                                tail_wait_end, clock_trace_base);
     }
 #endif
-#if ATTENTION_PERSISTENT_OVERLAP_PREFETCH && !ATTENTION_PERSISTENT_OVERLAP_EARLY
+#if ATTENTION_PERSISTENT && !ATTENTION_PERSISTENT
     {
       const int next_tile = tile + static_cast<int>(gridDim.x);
       if (next_tile < total_tiles) {
@@ -3320,21 +2896,20 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
 #endif
     __syncthreads();
-#if ATTENTION_PERSISTENT_OVERLAP_O_IN_V
+#if ATTENTION_PERSISTENT
     uint32_t* output_bf16_smem = v_smem[0];
 #elif ATTENTION_EPILOGUE_O_IN_S_SMEM
     uint32_t* output_bf16_smem = s_smem[0];
 #else
     uint32_t* output_bf16_smem = reinterpret_cast<uint32_t*>(q_smem);
 #endif
-#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PEEL_DURING_DRAIN && \
-    ATTENTION_PEEL_AFTER_SYNC
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && \
+    ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
       const int peel_next_tile = tile + static_cast<int>(gridDim.x);
       if (peel_next_tile < total_tiles) {
         const unsigned int peel_q_phase =
             static_cast<unsigned int>((tile_local_idx + 1) & 1);
-        PEEL_HB_SET(warp_id, 3u);
 #if ATTENTION_CLOCK_TRACE_2TILE
         // The iter0/1 QK of tile (t+1) is peeled here (issued by tile t's w0/w1
         // during tile t's drain). The helper records its sub-phases onto tile
@@ -3368,7 +2943,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
           );
         }
-        PEEL_HB_SET(warp_id, 4u);
       }
     }
 #endif
@@ -3467,59 +3041,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     }
     tma_store_fence();
     __syncthreads();
-#if ATTENTION_PEEL_ISO
-#if ATTENTION_ISO_ARRAY
-    __shared__ uint64_t iso_bar[kPipeCount];
-#ifndef ATTENTION_ISO_ARRAY_IDX
-#define ATTENTION_ISO_ARRAY_IDX warp_id
-#endif
-    uint64_t* const iso_b = &iso_bar[ATTENTION_ISO_ARRAY_IDX];
-#else
-    __shared__ uint64_t iso_bar;
-    uint64_t* const iso_b = &iso_bar;
-#endif
-    if (warp_id == 0 && loop_repeats >= kActivePipeStride) {
-      const int next_tile = tile + static_cast<int>(gridDim.x);
-      if (next_tile < total_tiles && lane0) {
-        PEEL_HB_SET(0, 1u);
-        const unsigned int iso_q_phase =
-            static_cast<unsigned int>((tile_local_idx + 1) & 1);
-        mbarrier_wait(&q_ready, iso_q_phase);
-        PEEL_HB_SET(0, 2u);
-        mbarrier_wait(&k_ready[0], 0u);
-        PEEL_HB_SET(0, 3u);
-        mbarrier_init(iso_b, 1);
-        asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
-#if !ATTENTION_PEEL_NO_FENCE
-        tcgen05_fence_after_thread_sync();
-#endif
-        const uint32_t iso_idesc = make_qk_idesc();
-        const QkDescGen iso_q_desc{
-            static_cast<uint32_t>(smem_ptr_u32(q_smem) >> 4)};
-        const QkDescGen iso_k_desc{
-            static_cast<uint32_t>(smem_ptr_u32(k_smem[0]) >> 4)};
-#pragma unroll
-        for (int mma = 0; mma < kMmasPerTile; ++mma) {
-          tcgen05_mma_bf16_ss(p_taddr[0], iso_q_desc[mma], iso_k_desc[mma],
-                              iso_idesc, mma != 0);
-        }
-        tcgen05_commit(iso_b);
-#if !ATTENTION_PEEL_NO_FENCE
-        tcgen05_fence_before_thread_sync();
-#endif
-        PEEL_HB_SET(0, 4u);
-        mbarrier_wait(iso_b, 0u);
-        PEEL_HB_SET(0, 5u);
-      }
-    }
-#endif
-#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PEEL_DURING_DRAIN
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL && !ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     if ((warp_id == 0 || warp_id == 1) && loop_repeats >= kActivePipeStride) {
       const int next_tile = tile + static_cast<int>(gridDim.x);
       if (next_tile < total_tiles) {
         const unsigned int peel_q_phase =
             static_cast<unsigned int>((tile_local_idx + 1) & 1);
-        PEEL_HB_SET(warp_id, 3u);
         if (warp_id == 0) {
           attention_issue_qk_peel<0>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
                                      qk_peel_done, peel_q_phase, lane0);
@@ -3527,7 +3054,6 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           attention_issue_qk_peel<1>(q_smem, k_smem, p_taddr, &q_ready, k_ready,
                                      qk_peel_done, peel_q_phase, lane0);
         }
-        PEEL_HB_SET(warp_id, 4u);
       }
     }
 #endif
@@ -3536,7 +3062,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       tma_store_start_shared = clock64();
     }
 #endif
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
     if (lane0 && warp_id == 2) {
 #else
     if (lane0 && warp_id == 0) {
@@ -3548,136 +3074,19 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       if (trace_cta) tma_store_issued_shared = clock64();
 #endif
     }
-#if ATTENTION_PEEL_SOFTMAX
-    // B3 store-tail softmax peel. The O TMA store above is async (DEFER_STORE
-    // also defers its wait to the next tile), so this window is tensor-core /
-    // consumer idle. The 8 consumer warps run tile (t+1)'s iter0/1 softmax on
-    // the QK peeled during this tile's drain (AFTER_SYNC peel -> qk_peel_done).
-    // This mirrors the consumer first-iter block (attention_consumer_pipe_role,
-    // FIRST_ITER_COMPUTE_MAX + APPLY_SHIFT path): two row_max loads, then two
-    // pack+store+shift halves that arrive p_done (h1) and free p_taddr[pipe]
-    // early. row_max/row_sum are carried forward; tile (t+1)'s consumer skips
-    // its first iter. No new tcgen05.commit here -> phase-accounting risk only.
-    if (epilogue_warp && loop_repeats >= kActivePipeStride) {
-      const int peel_next_tile = tile + static_cast<int>(gridDim.x);
-      if (peel_next_tile < total_tiles) {
-        const int sm_pipe =
-            (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
-        const int sm_warp =
-            (warp_id - kConsumerBaseWarp) - sm_pipe * kConsumerWarpsPerPipe;
-        const int sm_row = sm_warp * 32 + lane;
-#if ATTENTION_CLOCK_TRACE_2TILE
-        const bool sm_trace = trace_cta && lane0;
-#endif
-        // Wait for the peeled QK MMA result in p_taddr[sm_pipe] (commit ->
-        // qk_peel_done[sm_pipe], phase 0). The body-start conversion still
-        // re-arms qk_peel_done after the next __syncthreads, so the phase is
-        // consistent across tiles (see lines re: PREARM re-init).
-        mbarrier_wait(&qk_peel_done[sm_pipe], 0u);
-        const uint32_t sm_row_taddr =
-            p_taddr[sm_pipe] + (static_cast<uint32_t>(sm_warp * 32) << 16);
-        // row max over both halves (untraced, like the body's COMPUTE_MAX --
-        // the two halves of one row share a single max, so both reads must
-        // precede either pack).
-        float sm_row_max = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
-            sm_row_taddr, score_to_exp2_scale);
-        sm_row_max =
-            fmaxf(sm_row_max, tcgen05_ld_x64_wait_row_max_scaled_nvcc(
-                                  sm_row_taddr + 64u, score_to_exp2_scale));
-        // Per-half ld -> exp2+pack, each traced separately so the SVG renders
-        // "ld -> softmax -> ld -> softmax" (the body first-iter shape) instead of
-        // one merged block. DO NOT arrive p_done / s_h1_done here: tile (t+1)'s
-        // body-start re-init (every tile, thread 0) would wipe them and hang the
-        // producer (waits p_done/s_h1_done phase 0). They are replayed post-reinit
-        // at tile (t+1)'s body-start (search "B3 body-start replay"), mirroring
-        // the qk_peel_done -> qk_done conversion. Data is safe: p_taddr fully read,
-        // s_smem fully packed, and the body-start __syncthreads makes the s_smem
-        // writes visible to the producer.
-#if ATTENTION_CLOCK_TRACE_2TILE
-        const int sm_detail_base =
-            trace_extra_base + kClockTracePeelSoftmaxDetailBase +
-            (warp_id - kConsumerBaseWarp) * 4;
-#endif
-        float sm_sum0;
-        float sm_sum1;
-        {
-          uint32_t r[64];
-#if ATTENTION_CLOCK_TRACE_2TILE
-          const unsigned long long ld0_s = sm_trace ? clock64() : 0ull;
-#endif
-          TCGEN05_LD_X64(sm_row_taddr, r);
-          tcgen05_wait_ld();
-#if ATTENTION_CLOCK_TRACE_2TILE
-          const unsigned long long ld0_e = sm_trace ? clock64() : 0ull;
-#endif
-          sm_sum0 = pack_store_x64_loop_shifted<true>(
-              s_smem[sm_pipe] + s_store_word_offset(sm_row, 0), r,
-              score_to_exp2_scale, sm_row_max);
-#if ATTENTION_CLOCK_TRACE_2TILE
-          if (sm_trace) {
-            write_clock_trace_record(clock_trace_eff, sm_detail_base + 0,
-                                     kClockTracePeelSoftmaxLd, sm_pipe, sm_pipe,
-                                     warp_id, sm_warp, 0, ld0_s, ld0_e,
-                                     clock_trace_base);
-            write_clock_trace_record(clock_trace_eff, sm_detail_base + 1,
-                                     kClockTracePeelSoftmax, sm_pipe, sm_pipe,
-                                     warp_id, sm_warp, 0, ld0_e, clock64(),
-                                     clock_trace_base);
-          }
-          const unsigned long long ld1_s = sm_trace ? clock64() : 0ull;
-#endif
-          TCGEN05_LD_X64(sm_row_taddr + 64u, r);
-          tcgen05_wait_ld();
-#if ATTENTION_CLOCK_TRACE_2TILE
-          const unsigned long long ld1_e = sm_trace ? clock64() : 0ull;
-#endif
-          sm_sum1 = pack_store_x64_loop_shifted<true>(
-              s_smem[sm_pipe] + s_store_word_offset(sm_row, 32), r,
-              score_to_exp2_scale, sm_row_max);
-#if ATTENTION_CLOCK_TRACE_2TILE
-          if (sm_trace) {
-            write_clock_trace_record(clock_trace_eff, sm_detail_base + 2,
-                                     kClockTracePeelSoftmaxLd, sm_pipe, sm_pipe,
-                                     warp_id, sm_warp, 1, ld1_s, ld1_e,
-                                     clock_trace_base);
-            write_clock_trace_record(clock_trace_eff, sm_detail_base + 3,
-                                     kClockTracePeelSoftmax, sm_pipe, sm_pipe,
-                                     warp_id, sm_warp, 1, ld1_e, clock64(),
-                                     clock_trace_base);
-          }
-#endif
-        }
-        // Carry to tile (t+1): row_max into ITS row_max_scratch (gmem, same
-        // thread reads it back next iteration -> no fence needed), row_sum into
-        // row_sum_partial (shared, free here since the drain-pack already read
-        // tile t's). row_max_scratch = output base + tile*kTileWords, so the
-        // next tile's scratch is +gridDim.x*kTileWords.
-        float* const sm_next_scratch =
-            row_max_scratch + static_cast<size_t>(gridDim.x) * kTileWords;
-        sm_next_scratch[sm_pipe * kTileM + sm_row] = sm_row_max;
-        row_sum_partial[sm_pipe][sm_row] = sm_sum0 + sm_sum1;
-      }
-    }
-#endif
   }
 
   if (threadIdx.x == 0) {
     tcgen05_fence_after_thread_sync();
   }
   __syncthreads();
-#if ATTENTION_FLAT_PROBE
-  if (blockIdx.x == 0 && threadIdx.x == 0)
-    printf("PROBEBASE k_ready avg=%llu (n=%llu) | softmax qk_wait avg=%llu (n=%llu)\n",
-           g_probe_kready_n ? g_probe_kready / g_probe_kready_n : 0ull, g_probe_kready_n,
-           g_probe_smqk_n ? g_probe_smqk / g_probe_smqk_n : 0ull, g_probe_smqk_n);
-#endif
 
 #if !ATTENTION_PERSISTENT
   if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
   __syncthreads();
   if (warp_id == 0) tcgen05_relinquish_alloc_permit();
 #endif
-#if !ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if !ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
   if (output != nullptr && lane0 && warp_id == 0) {
     tma_store_wait_group_read();
   }
@@ -3702,7 +3111,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __syncthreads();
   }
 
-#if ATTENTION_PERSISTENT_OVERLAP_DEFER_STORE
+#if ATTENTION_PERSISTENT_OVERLAP_QK_PEEL
   if (output != nullptr && warp_id == 2 && lane0) {
     tma_store_wait_group_read();
   }
@@ -3717,3 +3126,4 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
 #endif
 }
+
