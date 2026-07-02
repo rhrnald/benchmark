@@ -24,6 +24,14 @@
 #define GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K 96
 #endif
 
+#ifndef GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES
+#define GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES GEMM_PIPE1_PHASE_SHIFT_CYCLES
+#endif
+
+#ifndef GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES
+#define GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES GEMM_PIPE1_PHASE_SHIFT_CYCLES
+#endif
+
 #ifndef GEMM_GRID_B_REUSE
 #define GEMM_GRID_B_REUSE 0
 #endif
@@ -69,7 +77,16 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES 152
+#define GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES 136
+#endif
+
+#ifndef GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES
+#define GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES 40
+#endif
+
+#ifndef GEMM_TUNED_8K_PIPE1_MMA_PHASE_SHIFT_CYCLES
+#define GEMM_TUNED_8K_PIPE1_MMA_PHASE_SHIFT_CYCLES \
+  GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES
 #endif
 
 #ifndef GEMM_TUNED_8K_TMA_A_L2_PROMOTION
@@ -96,6 +113,16 @@
 #define GEMM_TUNED_16K_PIPE1_PHASE_SHIFT_CYCLES 96
 #endif
 
+#ifndef GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES
+#define GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES \
+  GEMM_TUNED_16K_PIPE1_PHASE_SHIFT_CYCLES
+#endif
+
+#ifndef GEMM_TUNED_16K_PIPE1_MMA_PHASE_SHIFT_CYCLES
+#define GEMM_TUNED_16K_PIPE1_MMA_PHASE_SHIFT_CYCLES \
+  GEMM_TUNED_16K_PIPE1_PHASE_SHIFT_CYCLES
+#endif
+
 #ifndef GEMM_TUNED_32K_GRID_SWIZZLE_M
 #define GEMM_TUNED_32K_GRID_SWIZZLE_M 12
 #endif
@@ -106,6 +133,16 @@
 
 #ifndef GEMM_TUNED_32K_PIPE1_PHASE_SHIFT_CYCLES
 #define GEMM_TUNED_32K_PIPE1_PHASE_SHIFT_CYCLES 512
+#endif
+
+#ifndef GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES
+#define GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES \
+  GEMM_TUNED_32K_PIPE1_PHASE_SHIFT_CYCLES
+#endif
+
+#ifndef GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES
+#define GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES \
+  GEMM_TUNED_32K_PIPE1_PHASE_SHIFT_CYCLES
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
@@ -175,19 +212,35 @@ static constexpr int kTmemTileStride = 128;
     GEMM_PIPE1_PHASE_SHIFT_CYCLES;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles8K =
     GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K;
+[[maybe_unused]] static constexpr int kPipe1TmaPhaseShiftCycles =
+    GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES;
+[[maybe_unused]] static constexpr int kPipe1MmaPhaseShiftCycles =
+    GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES;
 
 static constexpr int kTuned8KGroupM = GEMM_TUNED_8K_GRID_SWIZZLE_M;
 static constexpr int kTuned8KGroupN = GEMM_TUNED_8K_GRID_SWIZZLE_N;
 static constexpr int kTuned8KPhaseCycles =
     GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned8KTmaPhaseCycles =
+    GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned8KMmaPhaseCycles =
+    GEMM_TUNED_8K_PIPE1_MMA_PHASE_SHIFT_CYCLES;
 static constexpr int kTuned16KGroupM = GEMM_TUNED_16K_GRID_SWIZZLE_M;
 static constexpr int kTuned16KGroupN = GEMM_TUNED_16K_GRID_SWIZZLE_N;
 static constexpr int kTuned16KPhaseCycles =
     GEMM_TUNED_16K_PIPE1_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned16KTmaPhaseCycles =
+    GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned16KMmaPhaseCycles =
+    GEMM_TUNED_16K_PIPE1_MMA_PHASE_SHIFT_CYCLES;
 static constexpr int kTuned32KGroupM = GEMM_TUNED_32K_GRID_SWIZZLE_M;
 static constexpr int kTuned32KGroupN = GEMM_TUNED_32K_GRID_SWIZZLE_N;
 static constexpr int kTuned32KPhaseCycles =
     GEMM_TUNED_32K_PIPE1_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned32KTmaPhaseCycles =
+    GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES;
+static constexpr int kTuned32KMmaPhaseCycles =
+    GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES;
 static constexpr int kTuningTagGeneric = 0;
 static constexpr int kTuningTag8K = 8;
 static constexpr int kTuningTag16K = 16;
@@ -819,7 +872,8 @@ __device__ __forceinline__ void issue_b_pipe_stage_tma(
 template <int GridSwizzle,
           int GroupM,
           int GroupN,
-          int Pipe1PhaseCycles,
+          int Pipe1TmaPhaseCycles,
+          int Pipe1MmaPhaseCycles,
           int TuningTag>
 __global__ __launch_bounds__(kThreads, 1)
 void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
@@ -956,7 +1010,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   }
 
   if (warp_id == 1 && lane0) {
-    wait_pipe1_phase_shift_tuned<Pipe1PhaseCycles>();
+    wait_pipe1_phase_shift_tuned<Pipe1TmaPhaseCycles>();
     for (int kt = 0; kt < ktiles; ++kt) {
       const int stage = kt % kStages;
       uint32_t* stage_smem = smem + stage * kStageWords;
@@ -972,7 +1026,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 
   if ((warp_id == 2 || warp_id == 3) && lane0) {
     const int pipe = warp_id - 2;
-    if (pipe == 1) wait_pipe1_phase_shift_tuned<Pipe1PhaseCycles>();
+    if (pipe == 1) wait_pipe1_phase_shift_tuned<Pipe1MmaPhaseCycles>();
     const int top_c = pipe;
     const int bottom_c = pipe + 2;
     for (int kt = 0; kt < ktiles; ++kt) {
@@ -1294,6 +1348,8 @@ struct GemmTuning {
   int group_m = 1;
   int group_n = 1;
   int pipe1_phase_cycles = GEMM_PIPE1_PHASE_SHIFT_CYCLES;
+  int pipe1_tma_phase_cycles = GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES;
+  int pipe1_mma_phase_cycles = GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES;
   int tag = kTuningTagGeneric;
 };
 
@@ -1313,24 +1369,32 @@ GemmTuning select_gemm_tuning(int mtile, int ntile, int ktiles) {
   tuning.group_m = GEMM_GRID_SWIZZLE_M;
   tuning.group_n = GEMM_GRID_SWIZZLE_N;
   tuning.pipe1_phase_cycles = GEMM_PIPE1_PHASE_SHIFT_CYCLES;
+  tuning.pipe1_tma_phase_cycles = GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES;
+  tuning.pipe1_mma_phase_cycles = GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES;
   if (tuning.grid_swizzle > 0) {
     if (mtile == 8192 / kCtaM && ntile == 8192 / kCtaN &&
         ktiles == 8192 / kStageK) {
       tuning.group_m = kTuned8KGroupM;
       tuning.group_n = kTuned8KGroupN;
       tuning.pipe1_phase_cycles = kTuned8KPhaseCycles;
+      tuning.pipe1_tma_phase_cycles = kTuned8KTmaPhaseCycles;
+      tuning.pipe1_mma_phase_cycles = kTuned8KMmaPhaseCycles;
       tuning.tag = kTuningTag8K;
     } else if (mtile == 16384 / kCtaM && ntile == 16384 / kCtaN &&
                ktiles == 16384 / kStageK) {
       tuning.group_m = kTuned16KGroupM;
       tuning.group_n = kTuned16KGroupN;
       tuning.pipe1_phase_cycles = kTuned16KPhaseCycles;
+      tuning.pipe1_tma_phase_cycles = kTuned16KTmaPhaseCycles;
+      tuning.pipe1_mma_phase_cycles = kTuned16KMmaPhaseCycles;
       tuning.tag = kTuningTag16K;
     } else if (mtile == 32768 / kCtaM && ntile == 32768 / kCtaN &&
                ktiles == 32768 / kStageK) {
       tuning.group_m = kTuned32KGroupM;
       tuning.group_n = kTuned32KGroupN;
       tuning.pipe1_phase_cycles = kTuned32KPhaseCycles;
+      tuning.pipe1_tma_phase_cycles = kTuned32KTmaPhaseCycles;
+      tuning.pipe1_mma_phase_cycles = kTuned32KMmaPhaseCycles;
       tuning.tag = kTuningTag32K;
     }
   }
@@ -1353,14 +1417,16 @@ dim3 launch_grid(int mtile, int ntile, const GemmTuning& tuning) {
 template <int GridSwizzle,
           int GroupM,
           int GroupN,
-          int Pipe1PhaseCycles,
+          int Pipe1TmaPhaseCycles,
+          int Pipe1MmaPhaseCycles,
           int TuningTag>
 void set_one_gemm_kernel_attribute() {
   CUDA_CHECK(cudaFuncSetAttribute(
       gemm256_tma_tcgen05_kernel<GridSwizzle,
                                  GroupM,
                                  GroupN,
-                                 Pipe1PhaseCycles,
+                                 Pipe1TmaPhaseCycles,
+                                 Pipe1MmaPhaseCycles,
                                  TuningTag>,
       cudaFuncAttributeMaxDynamicSharedMemorySize,
       kDynamicSmemBytes));
@@ -1370,28 +1436,33 @@ void set_gemm_kernel_attributes() {
   set_one_gemm_kernel_attribute<0,
                                 1,
                                 1,
-                                GEMM_PIPE1_PHASE_SHIFT_CYCLES,
+                                GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
+                                GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                                 kTuningTagGeneric>();
 #if GEMM_GRID_SWIZZLE > 0
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 GEMM_GRID_SWIZZLE_M,
                                 GEMM_GRID_SWIZZLE_N,
-                                GEMM_PIPE1_PHASE_SHIFT_CYCLES,
+                                GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
+                                GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                                 kTuningTagGeneric>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned8KGroupM,
                                 kTuned8KGroupN,
-                                kTuned8KPhaseCycles,
+                                kTuned8KTmaPhaseCycles,
+                                kTuned8KMmaPhaseCycles,
                                 kTuningTag8K>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned16KGroupM,
                                 kTuned16KGroupN,
-                                kTuned16KPhaseCycles,
+                                kTuned16KTmaPhaseCycles,
+                                kTuned16KMmaPhaseCycles,
                                 kTuningTag16K>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned32KGroupM,
                                 kTuned32KGroupN,
-                                kTuned32KPhaseCycles,
+                                kTuned32KTmaPhaseCycles,
+                                kTuned32KMmaPhaseCycles,
                                 kTuningTag32K>();
 #endif
 }
@@ -1418,7 +1489,8 @@ void launch_gemm_kernel(const GemmTuning& tuning,
       gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE,
                                  kTuned8KGroupM,
                                  kTuned8KGroupN,
-                                 kTuned8KPhaseCycles,
+                                 kTuned8KTmaPhaseCycles,
+                                 kTuned8KMmaPhaseCycles,
                                  kTuningTag8K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1429,7 +1501,8 @@ void launch_gemm_kernel(const GemmTuning& tuning,
       gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE,
                                  kTuned16KGroupM,
                                  kTuned16KGroupN,
-                                 kTuned16KPhaseCycles,
+                                 kTuned16KTmaPhaseCycles,
+                                 kTuned16KMmaPhaseCycles,
                                  kTuningTag16K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1440,7 +1513,8 @@ void launch_gemm_kernel(const GemmTuning& tuning,
       gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE,
                                  kTuned32KGroupM,
                                  kTuned32KGroupN,
-                                 kTuned32KPhaseCycles,
+                                 kTuned32KTmaPhaseCycles,
+                                 kTuned32KMmaPhaseCycles,
                                  kTuningTag32K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1450,7 +1524,8 @@ void launch_gemm_kernel(const GemmTuning& tuning,
     gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE,
                                GEMM_GRID_SWIZZLE_M,
                                GEMM_GRID_SWIZZLE_N,
-                               GEMM_PIPE1_PHASE_SHIFT_CYCLES,
+                               GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
+                               GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                                kTuningTagGeneric>
         <<<grid, block, kDynamicSmemBytes>>>(
             a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1461,7 +1536,8 @@ void launch_gemm_kernel(const GemmTuning& tuning,
   gemm256_tma_tcgen05_kernel<0,
                              1,
                              1,
-                             GEMM_PIPE1_PHASE_SHIFT_CYCLES,
+                             GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
+                             GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                              kTuningTagGeneric>
       <<<grid, block, kDynamicSmemBytes>>>(
           a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1478,6 +1554,8 @@ struct CaseResult {
   int group_m = 1;
   int group_n = 1;
   int pipe1_phase_cycles = 0;
+  int pipe1_tma_phase_cycles = 0;
+  int pipe1_mma_phase_cycles = 0;
   int tma_a_l2_promotion = 0;
   int tma_b_l2_promotion = 0;
   int tma_c_l2_promotion = 0;
@@ -1587,6 +1665,8 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   result.group_m = tuning.group_m;
   result.group_n = tuning.group_n;
   result.pipe1_phase_cycles = tuning.pipe1_phase_cycles;
+  result.pipe1_tma_phase_cycles = tuning.pipe1_tma_phase_cycles;
+  result.pipe1_mma_phase_cycles = tuning.pipe1_mma_phase_cycles;
   result.tma_a_l2_promotion = static_cast<int>(a_l2_promotion);
   result.tma_b_l2_promotion = static_cast<int>(b_l2_promotion);
   result.tma_c_l2_promotion = static_cast<int>(c_l2_promotion);
@@ -1956,6 +2036,7 @@ int main(int argc, char** argv) {
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
                "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
+               "pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,"
                "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
                "store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
@@ -1965,21 +2046,28 @@ int main(int argc, char** argv) {
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
               "pipe1_phase_shift_cycles=%d pipe1_phase_shift_cycles_8k=%d "
+              "pipe1_tma_phase_shift_cycles=%d "
+              "pipe1_mma_phase_shift_cycles=%d "
               "grid_swizzle=%d "
               "grid_swizzle_m=%d grid_swizzle_n=%d "
               "grid_swizzle_min_tiles=%d "
-              "tuned8k=%dx%d:%d tuned16k=%dx%d:%d tuned32k=%dx%d:%d "
+              "tuned8k=%dx%d:%d/%d tuned16k=%dx%d:%d/%d "
+              "tuned32k=%dx%d:%d/%d "
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
               "tma_l2_promotion_c=%d tuned8k_tma_l2=%d/%d/%d "
               "store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
+              kPipe1TmaPhaseShiftCycles, kPipe1MmaPhaseShiftCycles,
               GEMM_GRID_SWIZZLE,
               GEMM_GRID_SWIZZLE_M, GEMM_GRID_SWIZZLE_N,
               GEMM_GRID_SWIZZLE_MIN_TILES,
-              kTuned8KGroupM, kTuned8KGroupN, kTuned8KPhaseCycles,
-              kTuned16KGroupM, kTuned16KGroupN, kTuned16KPhaseCycles,
-              kTuned32KGroupM, kTuned32KGroupN, kTuned32KPhaseCycles,
+              kTuned8KGroupM, kTuned8KGroupN, kTuned8KTmaPhaseCycles,
+              kTuned8KMmaPhaseCycles,
+              kTuned16KGroupM, kTuned16KGroupN, kTuned16KTmaPhaseCycles,
+              kTuned16KMmaPhaseCycles,
+              kTuned32KGroupM, kTuned32KGroupN, kTuned32KTmaPhaseCycles,
+              kTuned32KMmaPhaseCycles,
               static_cast<int>(GEMM_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_C_L2_PROMOTION),
@@ -1993,21 +2081,24 @@ int main(int argc, char** argv) {
     CaseResult r = run_case(size, args.warmup, args.iters, args.store_mode);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
+                "pipe1_tma_phase=%d pipe1_mma_phase=%d "
                 "tma_l2=%d/%d/%d "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
                 r.group_m, r.group_n, r.pipe1_phase_cycles,
+                r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                 r.tma_c_l2_promotion,
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
+                 r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                  r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                  r.tma_c_l2_promotion,
                  store_mode_name(r.store_mode),
