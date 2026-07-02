@@ -17,7 +17,7 @@
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 1000
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 512
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K
@@ -46,6 +46,18 @@
 
 #ifndef GEMM_CSTORE_CHUNK_N
 #define GEMM_CSTORE_CHUNK_N 128
+#endif
+
+#ifndef GEMM_TMA_A_L2_PROMOTION
+#define GEMM_TMA_A_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_NONE
+#endif
+
+#ifndef GEMM_TMA_B_L2_PROMOTION
+#define GEMM_TMA_B_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_NONE
+#endif
+
+#ifndef GEMM_TMA_C_L2_PROMOTION
+#define GEMM_TMA_C_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_NONE
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
@@ -1036,7 +1048,7 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
                                       CU_TENSOR_MAP_SWIZZLE_128B,
-                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      GEMM_TMA_A_L2_PROMOTION,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(a_row_major_sw128)");
 }
@@ -1063,7 +1075,7 @@ void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
                                       CU_TENSOR_MAP_SWIZZLE_128B,
-                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      GEMM_TMA_B_L2_PROMOTION,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(b_row_major_sw128_k16)");
 }
@@ -1086,7 +1098,7 @@ void encode_c_row_major_float_tma_map(CUtensorMap* map,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
                                       CU_TENSOR_MAP_SWIZZLE_NONE,
-                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      GEMM_TMA_C_L2_PROMOTION,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(c_row_major_float)");
 }
@@ -1739,12 +1751,18 @@ int main(int argc, char** argv) {
               "pipe1_phase_shift_cycles=%d pipe1_phase_shift_cycles_8k=%d "
               "grid_swizzle=%d "
               "grid_swizzle_m=%d grid_swizzle_n=%d "
-              "grid_swizzle_min_tiles=%d store_mode=%s c_type=%s\n",
+              "grid_swizzle_min_tiles=%d "
+              "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
+              "tma_l2_promotion_c=%d store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
               GEMM_GRID_SWIZZLE,
               GEMM_GRID_SWIZZLE_M, GEMM_GRID_SWIZZLE_N,
-              GEMM_GRID_SWIZZLE_MIN_TILES, store_mode_name(args.store_mode),
+              GEMM_GRID_SWIZZLE_MIN_TILES,
+              static_cast<int>(GEMM_TMA_A_L2_PROMOTION),
+              static_cast<int>(GEMM_TMA_B_L2_PROMOTION),
+              static_cast<int>(GEMM_TMA_C_L2_PROMOTION),
+              store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
 
   for (int size : args.sizes) {

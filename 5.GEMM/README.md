@@ -30,7 +30,7 @@ Current kernel shape:
   (`12 x 1` groups for sizes with at least 32 CTA tiles per dimension). This
   preserves B-tile locality better than the earlier square swizzle when FP32 C
   stores are enabled. Pipe 1 uses a size-specific phase shift: `96` cycles for
-  8K and `1000` cycles for larger sizes.
+  8K and `512` cycles for larger sizes.
 - A and B global inputs are row-major packed BF16. TMA uses `SWIZZLE_128B`
   layouts matching the attention path:
   - A is loaded as one logical `256 x 64` row-major tile into `major_k`
