@@ -15,7 +15,9 @@ Current kernel shape:
   - `B_stage`: two `64 x 128 x 2B = 16 KiB` pipe buffers
   - total triple buffer: `192 KiB`
   - C TMA store staging: two `128 x 128` FP32 chunks (`2 x 64 KiB`),
-    overlaid on the triple-buffer storage.
+    overlaid on the triple-buffer storage. `GEMM_CSTORE_CHUNK_N=256` is also
+    supported for paired `128 x 256` TMA stores, but it is not the balanced
+    default across the benchmark sizes.
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
 - The mainloop uses two N-direction MMA pipes:
@@ -24,6 +26,10 @@ Current kernel shape:
   - warp 2 lane 0 issues MMA for C00/C10.
   - warp 3 lane 0 issues MMA for C01/C11.
   - stage reuse is fenced by each pipe's `mma_done` barrier from three K stages earlier.
+- C-store benchmark runs use an M-major rectangular CTA swizzle by default
+  (`12 x 1` groups for sizes with at least 32 CTA tiles per dimension). This
+  preserves B-tile locality better than the earlier square swizzle when FP32 C
+  stores are enabled.
 - A and B global inputs are row-major packed BF16. TMA uses `SWIZZLE_128B`
   layouts matching the attention path:
   - A is loaded as one logical `256 x 64` row-major tile into `major_k`

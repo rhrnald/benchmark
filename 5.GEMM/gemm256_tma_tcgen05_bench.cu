@@ -17,7 +17,7 @@
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 512
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 1000
 #endif
 
 #ifndef GEMM_GRID_B_REUSE
@@ -25,11 +25,23 @@
 #endif
 
 #ifndef GEMM_GRID_SWIZZLE
-#define GEMM_GRID_SWIZZLE 4
+#define GEMM_GRID_SWIZZLE 1
+#endif
+
+#ifndef GEMM_GRID_SWIZZLE_M
+#define GEMM_GRID_SWIZZLE_M 12
+#endif
+
+#ifndef GEMM_GRID_SWIZZLE_N
+#define GEMM_GRID_SWIZZLE_N 1
 #endif
 
 #ifndef GEMM_GRID_SWIZZLE_MIN_TILES
-#define GEMM_GRID_SWIZZLE_MIN_TILES 64
+#define GEMM_GRID_SWIZZLE_MIN_TILES 32
+#endif
+
+#ifndef GEMM_CSTORE_CHUNK_N
+#define GEMM_CSTORE_CHUNK_N 128
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
@@ -76,13 +88,16 @@ static constexpr int kBPipeBytes = kBPipeWords * static_cast<int>(sizeof(uint32_
 static constexpr int kStageBytes = kStageWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kMainloopSmemBytes = kStages * kStageBytes;
 static constexpr int kCStoreChunkM = 128;
-static constexpr int kCStoreChunkN = 128;
-static constexpr int kCStoreChunkLoads = kCStoreChunkN / 64;
+static constexpr int kCStoreChunkN = GEMM_CSTORE_CHUNK_N;
 static constexpr int kCStoreWarps = kCStoreChunkM / 32;
 static constexpr int kCStoreStageWords = kCStoreChunkM * kCStoreChunkN;
 static constexpr int kCStoreStageBytes =
     kCStoreStageWords * static_cast<int>(sizeof(uint32_t));
-static constexpr int kCStoreBuffers = 2;
+static constexpr int kCStoreChunksM = kCtaM / kCStoreChunkM;
+static constexpr int kCStoreChunksN = kCtaN / kCStoreChunkN;
+static constexpr int kCStoreChunkCount = kCStoreChunksM * kCStoreChunksN;
+static constexpr int kCStoreTilesPerChunkN = kCStoreChunkN / kMmaN;
+static constexpr int kCStoreBuffers = kCStoreTilesPerChunkN == 1 ? 2 : 1;
 static constexpr int kCStoreTotalBytes = kCStoreBuffers * kCStoreStageBytes;
 static constexpr int kDynamicSmemPayloadBytes =
     kMainloopSmemBytes > kCStoreTotalBytes ? kMainloopSmemBytes
@@ -97,10 +112,12 @@ static constexpr int kTmemTileStride = 128;
 
 static_assert(kPipes * kBPipeWords == kBStageWords);
 static_assert(kMmaM % kCStoreChunkM == 0);
-static_assert(kMmaN % kCStoreChunkN == 0);
+static_assert(kCStoreChunkN % kMmaN == 0);
+static_assert(kCtaN % kCStoreChunkN == 0);
 static_assert(kCStoreChunkN % 64 == 0);
 static_assert(kCStoreWarps * (kMmaM / kCStoreChunkM) <= kWarps);
-static_assert(4 % kCStoreBuffers == 0);
+static_assert(kCStoreChunkCount % kCStoreBuffers == 0);
+static_assert(kCStoreChunkN == 128 || kCStoreChunkN == 256);
 
 enum TraceStage {
   kTraceNone = 0,
@@ -570,51 +587,61 @@ __device__ __forceinline__ void store_128x128_float_tile(uint32_t src_taddr,
 #endif
 }
 
-__device__ __forceinline__ void stage_float_c_chunk(uint32_t src_taddr,
-                                                    uint32_t* c_smem,
-                                                    int row_chunk,
-                                                    int col_chunk) {
+__device__ __forceinline__ void stage_float_c_chunk(
+    const uint32_t (&c_taddr)[4],
+    uint32_t* c_smem,
+    int chunk_m,
+    int chunk_n) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
-  const int selected_warp_base = row_chunk * kCStoreWarps;
+  const int selected_warp_base = 0;
   if (warp_id >= selected_warp_base &&
       warp_id < selected_warp_base + kCStoreWarps) {
     uint32_t r[64];
     const int local_warp = warp_id - selected_warp_base;
-    const uint32_t row_base =
-        static_cast<uint32_t>(row_chunk * kCStoreChunkM + local_warp * 32);
+    const uint32_t row_base = static_cast<uint32_t>(local_warp * 32);
     float* dst = reinterpret_cast<float*>(c_smem) +
                  (local_warp * 32 + lane) * kCStoreChunkN;
 #pragma unroll
-    for (int load = 0; load < kCStoreChunkLoads; ++load) {
-      const uint32_t col_base =
-          static_cast<uint32_t>(col_chunk * kCStoreChunkN + load * 64);
-      const uint32_t row_taddr = src_taddr + (row_base << 16) + col_base;
-      tcgen05_ld_32x32b_x64(r, row_taddr);
-      tcgen05_wait_ld();
+    for (int tile_n_part = 0; tile_n_part < kCStoreTilesPerChunkN;
+         ++tile_n_part) {
+      const int tile = chunk_m * 2 + chunk_n * kCStoreTilesPerChunkN +
+                       tile_n_part;
 #pragma unroll
-      for (int i = 0; i < 64; ++i) {
-        dst[load * 64 + i] = __uint_as_float(r[i]);
+      for (int load = 0; load < kMmaN / 64; ++load) {
+        const uint32_t col_base = static_cast<uint32_t>(load * 64);
+        const uint32_t row_taddr =
+            c_taddr[tile] + (row_base << 16) + col_base;
+        tcgen05_ld_32x32b_x64(r, row_taddr);
+        tcgen05_wait_ld();
+        float* dst_part =
+            dst + tile_n_part * kMmaN + load * 64;
+#pragma unroll
+        for (int i = 0; i < 64; ++i) {
+          dst_part[i] = __uint_as_float(r[i]);
+        }
       }
     }
   }
 #else
-  (void)src_taddr;
+  (void)c_taddr;
   (void)c_smem;
-  (void)row_chunk;
-  (void)col_chunk;
+  (void)chunk_m;
+  (void)chunk_n;
 #endif
 }
 
 __device__ __forceinline__ void issue_float_c_chunk_tma(
-    uint32_t src_taddr,
+    const uint32_t (&c_taddr)[4],
     const CUtensorMap* c_map,
     uint32_t* c_smem,
+    int chunk_m,
+    int chunk_n,
     int row_offset,
     int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  stage_float_c_chunk(src_taddr, c_smem, 0, 0);
+  stage_float_c_chunk(c_taddr, c_smem, chunk_m, chunk_n);
   __syncthreads();
   tma_store_fence_shared();
   __syncthreads();
@@ -622,9 +649,11 @@ __device__ __forceinline__ void issue_float_c_chunk_tma(
     tma_store_2d(c_map, smem_ptr_u32(c_smem), col_offset, row_offset);
   }
 #else
-  (void)src_taddr;
+  (void)c_taddr;
   (void)c_map;
   (void)c_smem;
+  (void)chunk_m;
+  (void)chunk_n;
   (void)row_offset;
   (void)col_offset;
 #endif
@@ -638,17 +667,17 @@ __device__ __forceinline__ void store_256x256_float_tile_tma(
     int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
 #pragma unroll
-  for (int group = 0; group < 4; group += kCStoreBuffers) {
+  for (int group = 0; group < kCStoreChunkCount; group += kCStoreBuffers) {
 #pragma unroll
     for (int i = 0; i < kCStoreBuffers; ++i) {
-      const int tile = group + i;
-      if (tile < 4) {
-        uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
-        const int tile_row = row_offset + (tile / 2) * kMmaM;
-        const int tile_col = col_offset + (tile % 2) * kMmaN;
-        issue_float_c_chunk_tma(c_taddr[tile], c_map, tile_smem, tile_row,
-                                tile_col);
-      }
+      const int chunk = group + i;
+      uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
+      const int chunk_m = chunk / kCStoreChunksN;
+      const int chunk_n = chunk - chunk_m * kCStoreChunksN;
+      const int tile_row = row_offset + chunk_m * kCStoreChunkM;
+      const int tile_col = col_offset + chunk_n * kCStoreChunkN;
+      issue_float_c_chunk_tma(c_taddr, c_map, tile_smem, chunk_m, chunk_n,
+                              tile_row, tile_col);
     }
     if (threadIdx.x == 0) {
       tma_store_commit_group();
@@ -771,8 +800,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   int tile_n = 0;
   int ntile = ntile_count;
   if constexpr (GridSwizzle > 0) {
-    const int group_m = GridSwizzle;
-    const int group_n = GridSwizzle;
+    const int group_m = GEMM_GRID_SWIZZLE_M;
+    const int group_n = GEMM_GRID_SWIZZLE_N;
     const int groups_n = (ntile_count + group_n - 1) / group_n;
     const int group_tiles = group_m * group_n;
     const int linear_cta = static_cast<int>(blockIdx.x);
@@ -1164,10 +1193,11 @@ int select_grid_swizzle(int mtile, int ntile) {
 
 dim3 launch_grid(int mtile, int ntile, int grid_swizzle) {
   if (grid_swizzle > 0) {
-    const int group = grid_swizzle;
-    const int groups_m = (mtile + group - 1) / group;
-    const int groups_n = (ntile + group - 1) / group;
-    return dim3(groups_m * groups_n * group * group, 1, 1);
+    const int group_m = GEMM_GRID_SWIZZLE_M;
+    const int group_n = GEMM_GRID_SWIZZLE_N;
+    const int groups_m = (mtile + group_m - 1) / group_m;
+    const int groups_n = (ntile + group_n - 1) / group_n;
+    return dim3(groups_m * groups_n * group_m * group_n, 1, 1);
   }
 #if GEMM_GRID_B_REUSE
   return dim3(mtile, ntile, 1);
@@ -1683,9 +1713,11 @@ int main(int argc, char** argv) {
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
               "pipe1_phase_shift_cycles=%d grid_swizzle=%d "
+              "grid_swizzle_m=%d grid_swizzle_n=%d "
               "grid_swizzle_min_tiles=%d store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, GEMM_GRID_SWIZZLE,
+              GEMM_GRID_SWIZZLE_M, GEMM_GRID_SWIZZLE_N,
               GEMM_GRID_SWIZZLE_MIN_TILES, store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
 
