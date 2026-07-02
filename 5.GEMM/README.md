@@ -9,10 +9,12 @@ Current kernel shape:
 - Each K stage loads:
   - A: `256 x 64` BF16 through TMA.
   - B: two independent `64 x 128` BF16 pipe tiles through TMA.
-- Shared memory is partitioned as three `64 KiB` stages:
+- Shared memory is partitioned as three `64 KiB` stages plus an optional
+  FP32 C-store staging buffer:
   - `A_stage`: `256 x 64 x 2B = 32 KiB`
   - `B_stage`: two `64 x 128 x 2B = 16 KiB` pipe buffers
   - total triple buffer: `192 KiB`
+  - C TMA store staging: one `64 x 64` FP32 chunk (`16 KiB`)
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
 - The mainloop uses two N-direction MMA pipes:
@@ -28,9 +30,11 @@ Current kernel shape:
   - B is loaded as two `64 x 128` row-major halves into `major_mn`
     shared-memory layout.
 
-The benchmark path consumes TMEM accumulators into a checksum sink. The
-validation path stores the full FP32 C matrix to global memory and compares it
-against a CPU reference.
+The default benchmark path consumes TMEM accumulators into a checksum sink.
+`--store-c` stores the full FP32 C matrix with scalar global stores, and
+`--store-c-tma` stages FP32 C chunks through shared memory and stores them with
+TMA. The validation path compares the stored FP32 C matrix against a CPU
+reference.
 
 ## Build
 
@@ -42,6 +46,7 @@ make build
 
 ```bash
 make run SIZES=4096,8192,16384,32768 WARMUP=2 ITERS=5 DEVICE=0
+make run SIZES=4096,8192,16384,32768 WARMUP=5 ITERS=30 STORE_C=--store-c-tma
 ```
 
 Or directly:
@@ -55,6 +60,7 @@ Or directly:
 ```bash
 ./gemm256_tma_tcgen05_bench --validate --validate-size 256 --validate-pattern pattern
 ./gemm256_tma_tcgen05_bench --validate --validate-size 512 --validate-pattern pattern
+./gemm256_tma_tcgen05_bench --validate --validate-size 512 --validate-pattern pattern --store-c-tma
 ```
 
 ## Trace

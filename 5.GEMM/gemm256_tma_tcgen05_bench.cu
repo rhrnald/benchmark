@@ -74,7 +74,14 @@ static constexpr int kStageWords = kAStageWords + kBStageWords;
 static constexpr int kAStageBytes = kAStageWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kBPipeBytes = kBPipeWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kStageBytes = kStageWords * static_cast<int>(sizeof(uint32_t));
-static constexpr int kDynamicSmemBytes = kStages * kStageBytes + 1024;
+static constexpr int kCStoreChunkM = 64;
+static constexpr int kCStoreChunkN = 64;
+static constexpr int kCStoreChunkLoads = kCStoreChunkN / 64;
+static constexpr int kCStoreStageWords = kCStoreChunkM * kCStoreChunkN;
+static constexpr int kCStoreStageBytes =
+    kCStoreStageWords * static_cast<int>(sizeof(uint32_t));
+static constexpr int kDynamicSmemBytes =
+    kStages * kStageBytes + kCStoreStageBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
@@ -82,6 +89,9 @@ static constexpr int kTmemTileStride = 128;
     GEMM_PIPE1_PHASE_SHIFT_CYCLES;
 
 static_assert(kPipes * kBPipeWords == kBStageWords);
+static_assert(kMmaM % kCStoreChunkM == 0);
+static_assert(kMmaN % kCStoreChunkN == 0);
+static_assert(kCStoreChunkN % 64 == 0);
 
 enum TraceStage {
   kTraceNone = 0,
@@ -92,13 +102,19 @@ enum TraceStage {
   kTraceDrain = 5,
 };
 
+enum StoreMode : int {
+  kStoreNone = 0,
+  kStoreScalar = 1,
+  kStoreTma = 2,
+};
+
 struct Args {
   int device = 0;
   int warmup = 2;
   int iters = 5;
   std::vector<int> sizes = {4096, 8192, 16384, 32768};
   const char* csv = "gemm256_tma_tcgen05_bench.csv";
-  bool store_c = false;
+  int store_mode = kStoreNone;
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
@@ -327,6 +343,43 @@ __device__ __forceinline__ void tma_load_4d(const CUtensorMap* map,
 #endif
 }
 
+__device__ __forceinline__ void tma_store_fence_shared() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("fence.proxy.async.shared::cta;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void tma_store_2d(const CUtensorMap* map,
+                                             uint32_t src_smem,
+                                             int c,
+                                             int r) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile(
+      "cp.async.bulk.tensor.2d.global.shared::cta.bulk_group"
+      " [%0, {%2, %3}], [%1];"
+      :
+      : "l"(map), "r"(src_smem), "r"(c), "r"(r)
+      : "memory");
+#else
+  (void)map;
+  (void)src_smem;
+  (void)c;
+  (void)r;
+#endif
+}
+
+__device__ __forceinline__ void tma_store_commit_group() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("cp.async.bulk.commit_group;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void tma_store_wait_group_0() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("cp.async.bulk.wait_group 0;" ::: "memory");
+#endif
+}
+
 __device__ __forceinline__ uint32_t tcgen05_alloc_512cols(uint32_t* smem_out_taddr) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t smem_addr = smem_ptr_u32(smem_out_taddr);
@@ -508,6 +561,76 @@ __device__ __forceinline__ void store_128x128_float_tile(uint32_t src_taddr,
 #endif
 }
 
+__device__ __forceinline__ void stage_64x64_float_chunk(uint32_t src_taddr,
+                                                        uint32_t* c_smem,
+                                                        int row_chunk,
+                                                        int col_chunk) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int warp_id = threadIdx.x >> 5;
+  const int selected_warp_base = row_chunk * 2;
+  if (warp_id == selected_warp_base || warp_id == selected_warp_base + 1) {
+    uint32_t r[64];
+    const int local_warp = warp_id - selected_warp_base;
+    const uint32_t row_base =
+        static_cast<uint32_t>(row_chunk * kCStoreChunkM + local_warp * 32);
+    float* dst = reinterpret_cast<float*>(c_smem) +
+                 (local_warp * 32 + lane) * kCStoreChunkN;
+#pragma unroll
+    for (int load = 0; load < kCStoreChunkLoads; ++load) {
+      const uint32_t col_base =
+          static_cast<uint32_t>(col_chunk * kCStoreChunkN + load * 64);
+      const uint32_t row_taddr = src_taddr + (row_base << 16) + col_base;
+      tcgen05_ld_32x32b_x64(r, row_taddr);
+      tcgen05_wait_ld();
+#pragma unroll
+      for (int i = 0; i < 64; ++i) {
+        dst[load * 64 + i] = __uint_as_float(r[i]);
+      }
+    }
+  }
+#else
+  (void)src_taddr;
+  (void)c_smem;
+  (void)row_chunk;
+  (void)col_chunk;
+#endif
+}
+
+__device__ __forceinline__ void store_128x128_float_tile_tma(
+    uint32_t src_taddr,
+    const CUtensorMap* c_map,
+    uint32_t* c_smem,
+    int row_offset,
+    int col_offset) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+#pragma unroll
+  for (int row_chunk = 0; row_chunk < 2; ++row_chunk) {
+#pragma unroll
+    for (int col_chunk = 0; col_chunk < kMmaN / kCStoreChunkN; ++col_chunk) {
+      stage_64x64_float_chunk(src_taddr, c_smem, row_chunk, col_chunk);
+      __syncthreads();
+      tma_store_fence_shared();
+      __syncthreads();
+      if (threadIdx.x == 0) {
+        tma_store_2d(c_map, smem_ptr_u32(c_smem),
+                     col_offset + col_chunk * kCStoreChunkN,
+                     row_offset + row_chunk * kCStoreChunkM);
+        tma_store_commit_group();
+        tma_store_wait_group_0();
+      }
+      __syncthreads();
+    }
+  }
+#else
+  (void)src_taddr;
+  (void)c_map;
+  (void)c_smem;
+  (void)row_offset;
+  (void)col_offset;
+#endif
+}
+
 __device__ __forceinline__ void issue_a_stage_tma(const CUtensorMap* a_map,
                                                   uint32_t* a_smem,
                                                   uint64_t* ready,
@@ -549,9 +672,11 @@ template <int GridSwizzle>
 __global__ __launch_bounds__(kThreads, 1)
 void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                                 const __grid_constant__ CUtensorMap b_map,
+                                const __grid_constant__ CUtensorMap c_map,
                                 uint32_t* __restrict__ sink,
                                 float* __restrict__ out,
                                 int out_ld,
+                                int store_mode,
                                 int ktiles,
                                 int mtile_count,
                                 int ntile_count,
@@ -561,9 +686,11 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)a_map;
   (void)b_map;
+  (void)c_map;
   (void)sink;
   (void)out;
   (void)out_ld;
+  (void)store_mode;
   (void)ktiles;
   (void)mtile_count;
   (void)ntile_count;
@@ -575,6 +702,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const uintptr_t smem_addr =
       (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
   uint32_t* smem = reinterpret_cast<uint32_t*>(smem_addr);
+  uint32_t* c_store_smem = smem + kStages * kStageWords;
 
   __shared__ uint64_t a_ready[kStages];
   __shared__ uint64_t b_ready[kPipes][kStages];
@@ -750,21 +878,23 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 
   uint32_t acc = static_cast<uint32_t>(threadIdx.x + 0x9e3779b9u);
   if (warp_id < kWarps) {
-    const unsigned long long drain_start =
-        lane0 && clock_trace != nullptr ? clock64() : 0ull;
-    acc ^= consume_128x128(c_taddr[warp_id]);
-    const unsigned long long drain_end =
-        lane0 && clock_trace != nullptr ? clock64() : 0ull;
-    if (lane0) {
-      write_trace_extra_record(clock_trace, clock_trace_iters, trace_base_shared,
-                               kTraceDrain, ktiles, warp_id, warp_id,
-                               drain_start, drain_end);
+    if (store_mode == kStoreNone) {
+      const unsigned long long drain_start =
+          lane0 && clock_trace != nullptr ? clock64() : 0ull;
+      acc ^= consume_128x128(c_taddr[warp_id]);
+      const unsigned long long drain_end =
+          lane0 && clock_trace != nullptr ? clock64() : 0ull;
+      if (lane0) {
+        write_trace_extra_record(clock_trace, clock_trace_iters,
+                                 trace_base_shared, kTraceDrain, ktiles,
+                                 warp_id, warp_id, drain_start, drain_end);
+      }
     }
     if (lane0) warp_sinks[warp_id] = acc;
   }
   __syncthreads();
 
-  if (out != nullptr && warp_id < kWarps) {
+  if (out != nullptr && store_mode == kStoreScalar && warp_id < kWarps) {
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
     store_128x128_float_tile(c_taddr[0], out, out_ld, global_row_base,
@@ -775,6 +905,18 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                              global_col_base);
     store_128x128_float_tile(c_taddr[3], out, out_ld, global_row_base + 128,
                              global_col_base + 128);
+  } else if (out != nullptr && store_mode == kStoreTma) {
+    const int global_row_base = tile_m * kCtaM;
+    const int global_col_base = tile_n * kCtaN;
+    store_128x128_float_tile_tma(c_taddr[0], &c_map, c_store_smem,
+                                 global_row_base, global_col_base);
+    store_128x128_float_tile_tma(c_taddr[1], &c_map, c_store_smem,
+                                 global_row_base, global_col_base + 128);
+    store_128x128_float_tile_tma(c_taddr[2], &c_map, c_store_smem,
+                                 global_row_base + 128, global_col_base);
+    store_128x128_float_tile_tma(c_taddr[3], &c_map, c_store_smem,
+                                 global_row_base + 128,
+                                 global_col_base + 128);
   }
   __syncthreads();
 
@@ -846,6 +988,42 @@ void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
                "cuTensorMapEncodeTiled(b_row_major_sw128_k16)");
 }
 
+void encode_c_row_major_float_tma_map(CUtensorMap* map,
+                                      void* base,
+                                      uint64_t rows,
+                                      uint64_t cols) {
+  const cuuint64_t global_dim[2] = {cols, rows};
+  const cuuint64_t global_stride[1] = {cols * sizeof(float)};
+  const cuuint32_t box_dim[2] = {kCStoreChunkN, kCStoreChunkM};
+  const cuuint32_t elem_stride[2] = {1, 1};
+  driver_check(cuTensorMapEncodeTiled(map,
+                                      CU_TENSOR_MAP_DATA_TYPE_FLOAT32,
+                                      2,
+                                      base,
+                                      global_dim,
+                                      global_stride,
+                                      box_dim,
+                                      elem_stride,
+                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                      CU_TENSOR_MAP_SWIZZLE_NONE,
+                                      CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(c_row_major_float)");
+}
+
+const char* store_mode_name(int store_mode) {
+  switch (store_mode) {
+    case kStoreNone:
+      return "none";
+    case kStoreScalar:
+      return "scalar";
+    case kStoreTma:
+      return "tma";
+    default:
+      return "unknown";
+  }
+}
+
 std::vector<int> parse_sizes(const char* s) {
   std::vector<int> out;
   const char* p = s;
@@ -865,7 +1043,8 @@ std::vector<int> parse_sizes(const char* s) {
 
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
-              "[--warmup W] [--iters I] [--csv PATH] [--store-c] "
+              "[--warmup W] [--iters I] [--csv PATH] "
+              "[--store-c|--store-c-tma] "
               "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
               "[--clock-trace] [--clock-trace-start N] "
               "[--clock-trace-iters N] [--trace-csv PATH]\n",
@@ -894,7 +1073,9 @@ Args parse_args(int argc, char** argv) {
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
     } else if (std::strcmp(argv[i], "--store-c") == 0) {
-      args.store_c = true;
+      args.store_mode = kStoreScalar;
+    } else if (std::strcmp(argv[i], "--store-c-tma") == 0) {
+      args.store_mode = kStoreTma;
     } else if (std::strcmp(argv[i], "--validate") == 0) {
       args.validate = true;
     } else if (std::strcmp(argv[i], "--validate-size") == 0) {
@@ -986,7 +1167,7 @@ struct CaseResult {
   int ktiles = 0;
   int ctas = 0;
   int grid_swizzle = 0;
-  bool store_c = false;
+  int store_mode = kStoreNone;
   float event_ms = 0.0f;
   double wall_ms = 0.0;
   double event_tflops = 0.0;
@@ -994,7 +1175,7 @@ struct CaseResult {
   uint32_t checksum = 0;
 };
 
-CaseResult run_case(int size, int warmup, int iters, bool store_c) {
+CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   if (size % kCtaM != 0 || size % kCtaN != 0 || size % kStageK != 0) {
     std::fprintf(stderr, "size must be a multiple of 256 and 64; got %d\n", size);
     std::exit(EXIT_FAILURE);
@@ -1017,7 +1198,7 @@ CaseResult run_case(int size, int warmup, int iters, bool store_c) {
   CUDA_CHECK(cudaMalloc(&d_a, a_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_b, b_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_sink, static_cast<size_t>(ctas) * sizeof(uint32_t)));
-  if (store_c) {
+  if (store_mode != kStoreNone) {
     CUDA_CHECK(cudaMalloc(&d_c, static_cast<size_t>(m) * n * sizeof(float)));
     CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
   }
@@ -1026,9 +1207,12 @@ CaseResult run_case(int size, int warmup, int iters, bool store_c) {
   CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  CUtensorMap a_map{}, b_map{};
+  CUtensorMap a_map{}, b_map{}, c_map{};
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  if (store_mode == kStoreTma) {
+    encode_c_row_major_float_tma_map(&c_map, d_c, m, n);
+  }
 
   set_gemm_kernel_attributes();
 
@@ -1039,14 +1223,15 @@ CaseResult run_case(int size, int warmup, int iters, bool store_c) {
 #if GEMM_GRID_SWIZZLE > 0
     if (grid_swizzle > 0) {
       gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
-          <<<grid, block, kDynamicSmemBytes>>>(a_map, b_map, d_sink, d_c,
-                                               n, ktiles, mtile, ntile, nullptr,
-                                               0, 0);
+          <<<grid, block, kDynamicSmemBytes>>>(
+              a_map, b_map, c_map, d_sink, d_c, n, store_mode, ktiles, mtile,
+              ntile, nullptr, 0, 0);
       return;
     }
 #endif
     gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
-        a_map, b_map, d_sink, d_c, n, ktiles, mtile, ntile, nullptr, 0, 0);
+        a_map, b_map, c_map, d_sink, d_c, n, store_mode, ktiles, mtile,
+        ntile, nullptr, 0, 0);
   };
 
   for (int i = 0; i < warmup; ++i) {
@@ -1088,7 +1273,7 @@ CaseResult run_case(int size, int warmup, int iters, bool store_c) {
   result.ktiles = ktiles;
   result.ctas = ctas;
   result.grid_swizzle = grid_swizzle;
-  result.store_c = store_c;
+  result.store_mode = store_mode;
   result.event_ms = static_cast<float>(avg_event_ms);
   result.wall_ms = avg_wall_ms;
   result.event_tflops = flops / (avg_event_ms * 1.0e-3) / 1.0e12;
@@ -1148,7 +1333,10 @@ struct ValidateResult {
   float first_bad_ref = 0.0f;
 };
 
-ValidateResult run_validation(int size, const char* pattern) {
+ValidateResult run_validation(int size, const char* pattern, int store_mode) {
+  if (store_mode == kStoreNone) {
+    store_mode = kStoreScalar;
+  }
   const int m = size;
   const int n = size;
   const int k = size;
@@ -1204,9 +1392,12 @@ ValidateResult run_validation(int size, const char* pattern) {
   CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
 
-  CUtensorMap a_map{}, b_map{};
+  CUtensorMap a_map{}, b_map{}, c_map{};
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  if (store_mode == kStoreTma) {
+    encode_c_row_major_float_tma_map(&c_map, d_c, m, n);
+  }
   set_gemm_kernel_attributes();
 
   const int grid_swizzle = select_grid_swizzle(mtile, ntile);
@@ -1215,13 +1406,15 @@ ValidateResult run_validation(int size, const char* pattern) {
 #if GEMM_GRID_SWIZZLE > 0
   if (grid_swizzle > 0) {
     gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
-        <<<grid, block, kDynamicSmemBytes>>>(a_map, b_map, d_sink, d_c, n,
-                                             ktiles, mtile, ntile, nullptr, 0, 0);
+        <<<grid, block, kDynamicSmemBytes>>>(
+            a_map, b_map, c_map, d_sink, d_c, n, store_mode, ktiles, mtile,
+            ntile, nullptr, 0, 0);
   } else
 #endif
   {
     gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
-        a_map, b_map, d_sink, d_c, n, ktiles, mtile, ntile, nullptr, 0, 0);
+        a_map, b_map, c_map, d_sink, d_c, n, store_mode, ktiles, mtile,
+        ntile, nullptr, 0, 0);
   }
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
@@ -1352,7 +1545,7 @@ void run_trace_case(const Args& args) {
                         static_cast<size_t>(records_count) *
                             sizeof(ClockTraceRecord)));
 
-  CUtensorMap a_map{}, b_map{};
+  CUtensorMap a_map{}, b_map{}, c_map{};
   encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
   encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
   set_gemm_kernel_attributes();
@@ -1366,14 +1559,14 @@ void run_trace_case(const Args& args) {
     if (grid_swizzle > 0) {
       gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
           <<<grid, block, kDynamicSmemBytes>>>(
-              a_map, b_map, d_sink, nullptr, 0, ktiles, mtile, ntile, trace,
-              trace_start, trace_iters_arg);
+              a_map, b_map, c_map, d_sink, nullptr, 0, kStoreNone, ktiles,
+              mtile, ntile, trace, trace_start, trace_iters_arg);
       return;
     }
 #endif
     gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
-        a_map, b_map, d_sink, nullptr, 0, ktiles, mtile, ntile, trace,
-        trace_start, trace_iters_arg);
+        a_map, b_map, c_map, d_sink, nullptr, 0, kStoreNone, ktiles, mtile,
+        ntile, trace, trace_start, trace_iters_arg);
   };
   for (int i = 0; i < args.warmup; ++i) {
     launch_trace_gemm(nullptr, 0, 0);
@@ -1431,9 +1624,15 @@ int main(int argc, char** argv) {
   }
 
   if (args.validate) {
-    ValidateResult r = run_validation(args.validate_size, args.validate_pattern);
-    std::printf("validation size=%d pattern=%s status=%s max_abs=%g max_rel=%g bad=%zu\n",
-                args.validate_size, args.validate_pattern, r.ok ? "ok" : "fail",
+    const int validation_store_mode =
+        args.store_mode == kStoreTma ? kStoreTma : kStoreScalar;
+    ValidateResult r =
+        run_validation(args.validate_size, args.validate_pattern,
+                       validation_store_mode);
+    std::printf("validation size=%d pattern=%s store_mode=%s status=%s "
+                "max_abs=%g max_rel=%g bad=%zu\n",
+                args.validate_size, args.validate_pattern,
+                store_mode_name(validation_store_mode), r.ok ? "ok" : "fail",
                 r.max_abs, r.max_rel, r.bad_count);
     if (!r.ok) {
       std::printf("first_bad row=%d col=%d got=%g ref=%g\n", r.first_bad_row,
@@ -1449,7 +1648,7 @@ int main(int argc, char** argv) {
   }
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
-               "warmup,iters,grid_swizzle,store_c,dynamic_smem_bytes,event_ms,"
+               "warmup,iters,grid_swizzle,store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
@@ -1457,26 +1656,27 @@ int main(int argc, char** argv) {
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
               "pipe1_phase_shift_cycles=%d grid_swizzle=%d "
-              "grid_swizzle_min_tiles=%d store_c=%d c_type=%s\n",
+              "grid_swizzle_min_tiles=%d store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, GEMM_GRID_SWIZZLE,
-              GEMM_GRID_SWIZZLE_MIN_TILES, args.store_c ? 1 : 0,
-              args.store_c ? "fp32" : "none");
+              GEMM_GRID_SWIZZLE_MIN_TILES, store_mode_name(args.store_mode),
+              args.store_mode == kStoreNone ? "none" : "fp32");
 
   for (int size : args.sizes) {
-    CaseResult r = run_case(size, args.warmup, args.iters, args.store_c);
+    CaseResult r = run_case(size, args.warmup, args.iters, args.store_mode);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
-                "grid_swizzle=%d store_c=%d event_ms=%.6f wall_ms=%.6f "
+                "grid_swizzle=%d store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
-                r.store_c ? 1 : 0, r.event_ms, r.wall_ms, r.event_tflops,
-                r.wall_tflops, r.checksum);
+                store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
+                r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
-                 r.grid_swizzle, r.store_c ? 1 : 0, kDynamicSmemBytes,
+                 r.grid_swizzle, store_mode_name(r.store_mode),
+                 kDynamicSmemBytes,
                  r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
                  r.checksum, prop.name);
     std::fflush(csv);
