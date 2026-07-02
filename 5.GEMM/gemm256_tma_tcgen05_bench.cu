@@ -17,7 +17,7 @@
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 0
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 24
 #endif
 
 #define CUDA_CHECK(stmt)                                                        \
