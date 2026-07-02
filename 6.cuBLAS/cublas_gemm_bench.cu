@@ -78,7 +78,7 @@ struct Options {
 void usage(const char *argv0) {
   std::printf(
       "Usage: %s [--device N] [--m M] [--n N] [--k K] [--repeat R] "
-      "[--warmup W] [--mode fp16|bf16|tf32|fp32]\n",
+      "[--warmup W] [--mode fp16|bf16|bf16fp32|tf32|fp32]\n",
       argv0);
 }
 
@@ -135,33 +135,63 @@ void *alloc_and_init(size_t elements, float scale) {
 }
 
 struct GemmConfig {
-  cudaDataType_t data_type;
+  cudaDataType_t a_type;
+  cudaDataType_t b_type;
+  cudaDataType_t c_type;
   cublasComputeType_t compute_type;
   cublasGemmAlgo_t algo;
-  size_t element_size;
+  size_t a_element_size;
+  size_t b_element_size;
+  size_t c_element_size;
   const char *label;
 };
 
 GemmConfig config_for_mode(const std::string &mode) {
   if (mode == "fp16") {
-    return {CUDA_R_16F, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP,
+    return {CUDA_R_16F, CUDA_R_16F, CUDA_R_16F, CUBLAS_COMPUTE_32F,
+            CUBLAS_GEMM_DEFAULT_TENSOR_OP, sizeof(__half), sizeof(__half),
             sizeof(__half), "FP16 input/output, FP32 accumulate"};
   }
   if (mode == "bf16") {
-    return {CUDA_R_16BF, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP,
-            sizeof(__nv_bfloat16), "BF16 input/output, FP32 accumulate"};
+    return {CUDA_R_16BF, CUDA_R_16BF, CUDA_R_16BF, CUBLAS_COMPUTE_32F,
+            CUBLAS_GEMM_DEFAULT_TENSOR_OP, sizeof(__nv_bfloat16),
+            sizeof(__nv_bfloat16), sizeof(__nv_bfloat16),
+            "BF16 input/output, FP32 accumulate"};
+  }
+  if (mode == "bf16fp32") {
+    return {CUDA_R_16BF, CUDA_R_16BF, CUDA_R_32F, CUBLAS_COMPUTE_32F,
+            CUBLAS_GEMM_DEFAULT_TENSOR_OP, sizeof(__nv_bfloat16),
+            sizeof(__nv_bfloat16), sizeof(float),
+            "BF16 input, FP32 output, FP32 accumulate"};
   }
   if (mode == "tf32") {
-    return {CUDA_R_32F, CUBLAS_COMPUTE_32F_FAST_TF32,
-            CUBLAS_GEMM_DEFAULT_TENSOR_OP, sizeof(float),
+    return {CUDA_R_32F, CUDA_R_32F, CUDA_R_32F, CUBLAS_COMPUTE_32F_FAST_TF32,
+            CUBLAS_GEMM_DEFAULT_TENSOR_OP, sizeof(float), sizeof(float),
+            sizeof(float),
             "TF32 tensor cores, FP32 input/output"};
   }
   if (mode == "fp32") {
-    return {CUDA_R_32F, CUBLAS_COMPUTE_32F_PEDANTIC, CUBLAS_GEMM_DEFAULT,
-            sizeof(float), "FP32 CUDA cores, FP32 input/output"};
+    return {CUDA_R_32F, CUDA_R_32F, CUDA_R_32F, CUBLAS_COMPUTE_32F_PEDANTIC,
+            CUBLAS_GEMM_DEFAULT, sizeof(float), sizeof(float), sizeof(float),
+            "FP32 CUDA cores, FP32 input/output"};
   }
 
   std::fprintf(stderr, "Unsupported mode: %s\n", mode.c_str());
+  std::exit(EXIT_FAILURE);
+}
+
+void *alloc_and_init_by_type(cudaDataType_t type, size_t elements, float scale) {
+  if (type == CUDA_R_16F) {
+    return alloc_and_init<__half>(elements, scale);
+  }
+  if (type == CUDA_R_16BF) {
+    return alloc_and_init<__nv_bfloat16>(elements, scale);
+  }
+  if (type == CUDA_R_32F) {
+    return alloc_and_init<float>(elements, scale);
+  }
+  std::fprintf(stderr, "Unsupported allocation type: %d\n",
+               static_cast<int>(type));
   std::exit(EXIT_FAILURE);
 }
 
@@ -205,19 +235,9 @@ int main(int argc, char **argv) {
   void *A = nullptr;
   void *B = nullptr;
   void *C = nullptr;
-  if (cfg.data_type == CUDA_R_16F) {
-    A = alloc_and_init<__half>(a_elems, 1.0e-3f);
-    B = alloc_and_init<__half>(b_elems, 1.0e-3f);
-    C = alloc_and_init<__half>(c_elems, 0.0f);
-  } else if (cfg.data_type == CUDA_R_16BF) {
-    A = alloc_and_init<__nv_bfloat16>(a_elems, 1.0e-3f);
-    B = alloc_and_init<__nv_bfloat16>(b_elems, 1.0e-3f);
-    C = alloc_and_init<__nv_bfloat16>(c_elems, 0.0f);
-  } else {
-    A = alloc_and_init<float>(a_elems, 1.0e-3f);
-    B = alloc_and_init<float>(b_elems, 1.0e-3f);
-    C = alloc_and_init<float>(c_elems, 0.0f);
-  }
+  A = alloc_and_init_by_type(cfg.a_type, a_elems, 1.0e-3f);
+  B = alloc_and_init_by_type(cfg.b_type, b_elems, 1.0e-3f);
+  C = alloc_and_init_by_type(cfg.c_type, c_elems, 0.0f);
   CHECK_CUDA(cudaDeviceSynchronize());
 
   const float alpha = 1.0f;
@@ -225,8 +245,8 @@ int main(int argc, char **argv) {
 
   auto run_gemm = [&]() {
     CHECK_CUBLAS(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, opt.m, opt.n,
-                              opt.k, &alpha, A, cfg.data_type, opt.m, B,
-                              cfg.data_type, opt.k, &beta, C, cfg.data_type,
+                              opt.k, &alpha, A, cfg.a_type, opt.m, B,
+                              cfg.b_type, opt.k, &beta, C, cfg.c_type,
                               opt.m, cfg.compute_type, cfg.algo));
   };
 
@@ -259,7 +279,9 @@ int main(int argc, char **argv) {
   const double event_tflops = flops_per_gemm / (event_avg_ms * 1.0e-3) / 1.0e12;
   const double wall_tflops = flops_per_gemm / (wall_avg_ms * 1.0e-3) / 1.0e12;
   const double gib =
-      static_cast<double>((a_elems + b_elems + c_elems) * cfg.element_size) /
+      static_cast<double>(a_elems * cfg.a_element_size +
+                          b_elems * cfg.b_element_size +
+                          c_elems * cfg.c_element_size) /
       (1024.0 * 1024.0 * 1024.0);
 
   std::printf("device=%d name=\"%s\" cc=%d.%d\n", opt.device, prop.name,
@@ -267,9 +289,9 @@ int main(int argc, char **argv) {
   std::printf("mode=%s (%s)\n", opt.mode.c_str(), cfg.label);
   std::printf("m=%d n=%d k=%d repeat=%d warmup=%d\n", opt.m, opt.n, opt.k,
               opt.repeat, opt.warmup);
-  std::printf("data_type=%s compute_type=%d memory=%.2f GiB\n",
-              type_name(cfg.data_type), static_cast<int>(cfg.compute_type),
-              gib);
+  std::printf("a_type=%s b_type=%s c_type=%s compute_type=%d memory=%.2f GiB\n",
+              type_name(cfg.a_type), type_name(cfg.b_type),
+              type_name(cfg.c_type), static_cast<int>(cfg.compute_type), gib);
   std::printf(
       "event_total_ms=%.3f event_avg_ms=%.6f event_TFLOPS=%.3f\n",
       event_total_ms, event_avg_ms, event_tflops);

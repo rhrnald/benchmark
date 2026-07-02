@@ -98,6 +98,7 @@ struct Args {
   int iters = 5;
   std::vector<int> sizes = {4096, 8192, 16384, 32768};
   const char* csv = "gemm256_tma_tcgen05_bench.csv";
+  bool store_c = false;
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
@@ -864,7 +865,7 @@ std::vector<int> parse_sizes(const char* s) {
 
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
-              "[--warmup W] [--iters I] [--csv PATH] "
+              "[--warmup W] [--iters I] [--csv PATH] [--store-c] "
               "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
               "[--clock-trace] [--clock-trace-start N] "
               "[--clock-trace-iters N] [--trace-csv PATH]\n",
@@ -892,6 +893,8 @@ Args parse_args(int argc, char** argv) {
       args.iters = std::atoi(need_arg("--iters"));
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
+    } else if (std::strcmp(argv[i], "--store-c") == 0) {
+      args.store_c = true;
     } else if (std::strcmp(argv[i], "--validate") == 0) {
       args.validate = true;
     } else if (std::strcmp(argv[i], "--validate-size") == 0) {
@@ -983,6 +986,7 @@ struct CaseResult {
   int ktiles = 0;
   int ctas = 0;
   int grid_swizzle = 0;
+  bool store_c = false;
   float event_ms = 0.0f;
   double wall_ms = 0.0;
   double event_tflops = 0.0;
@@ -990,7 +994,7 @@ struct CaseResult {
   uint32_t checksum = 0;
 };
 
-CaseResult run_case(int size, int warmup, int iters) {
+CaseResult run_case(int size, int warmup, int iters, bool store_c) {
   if (size % kCtaM != 0 || size % kCtaN != 0 || size % kStageK != 0) {
     std::fprintf(stderr, "size must be a multiple of 256 and 64; got %d\n", size);
     std::exit(EXIT_FAILURE);
@@ -1009,9 +1013,14 @@ CaseResult run_case(int size, int warmup, int iters) {
   uint32_t* d_a = nullptr;
   uint32_t* d_b = nullptr;
   uint32_t* d_sink = nullptr;
+  float* d_c = nullptr;
   CUDA_CHECK(cudaMalloc(&d_a, a_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_b, b_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_sink, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  if (store_c) {
+    CUDA_CHECK(cudaMalloc(&d_c, static_cast<size_t>(m) * n * sizeof(float)));
+    CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
+  }
   CUDA_CHECK(cudaMemset(d_a, 0x3f, a_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_b, 0x11, b_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
@@ -1030,14 +1039,14 @@ CaseResult run_case(int size, int warmup, int iters) {
 #if GEMM_GRID_SWIZZLE > 0
     if (grid_swizzle > 0) {
       gemm256_tma_tcgen05_kernel<GEMM_GRID_SWIZZLE>
-          <<<grid, block, kDynamicSmemBytes>>>(a_map, b_map, d_sink, nullptr,
-                                               0, ktiles, mtile, ntile, nullptr,
+          <<<grid, block, kDynamicSmemBytes>>>(a_map, b_map, d_sink, d_c,
+                                               n, ktiles, mtile, ntile, nullptr,
                                                0, 0);
       return;
     }
 #endif
     gemm256_tma_tcgen05_kernel<0><<<grid, block, kDynamicSmemBytes>>>(
-        a_map, b_map, d_sink, nullptr, 0, ktiles, mtile, ntile, nullptr, 0, 0);
+        a_map, b_map, d_sink, d_c, n, ktiles, mtile, ntile, nullptr, 0, 0);
   };
 
   for (int i = 0; i < warmup; ++i) {
@@ -1079,6 +1088,7 @@ CaseResult run_case(int size, int warmup, int iters) {
   result.ktiles = ktiles;
   result.ctas = ctas;
   result.grid_swizzle = grid_swizzle;
+  result.store_c = store_c;
   result.event_ms = static_cast<float>(avg_event_ms);
   result.wall_ms = avg_wall_ms;
   result.event_tflops = flops / (avg_event_ms * 1.0e-3) / 1.0e12;
@@ -1090,6 +1100,9 @@ CaseResult run_case(int size, int warmup, int iters) {
   CUDA_CHECK(cudaFree(d_a));
   CUDA_CHECK(cudaFree(d_b));
   CUDA_CHECK(cudaFree(d_sink));
+  if (d_c != nullptr) {
+    CUDA_CHECK(cudaFree(d_c));
+  }
   return result;
 }
 
@@ -1436,34 +1449,36 @@ int main(int argc, char** argv) {
   }
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
-               "warmup,iters,grid_swizzle,dynamic_smem_bytes,event_ms,wall_ms,"
-               "event_TFLOPS,wall_TFLOPS,checksum,device\n");
+               "warmup,iters,grid_swizzle,store_c,dynamic_smem_bytes,event_ms,"
+               "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
               args.device, prop.name, prop.major, prop.minor, kDynamicSmemBytes);
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
               "pipe1_phase_shift_cycles=%d grid_swizzle=%d "
-              "grid_swizzle_min_tiles=%d\n",
+              "grid_swizzle_min_tiles=%d store_c=%d c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, GEMM_GRID_SWIZZLE,
-              GEMM_GRID_SWIZZLE_MIN_TILES);
+              GEMM_GRID_SWIZZLE_MIN_TILES, args.store_c ? 1 : 0,
+              args.store_c ? "fp32" : "none");
 
   for (int size : args.sizes) {
-    CaseResult r = run_case(size, args.warmup, args.iters);
+    CaseResult r = run_case(size, args.warmup, args.iters, args.store_c);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
-                "grid_swizzle=%d event_ms=%.6f wall_ms=%.6f event_TFLOPS=%.3f "
-                "wall_TFLOPS=%.3f checksum=%08x\n",
+                "grid_swizzle=%d store_c=%d event_ms=%.6f wall_ms=%.6f "
+                "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
-                r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
-                r.checksum);
+                r.store_c ? 1 : 0, r.event_ms, r.wall_ms, r.event_tflops,
+                r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,%.6f,"
-                 "%.3f,%.3f,%08x,%s\n",
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%.6f,"
+                 "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
-                 r.grid_swizzle, kDynamicSmemBytes, r.event_ms, r.wall_ms,
-                 r.event_tflops, r.wall_tflops, r.checksum, prop.name);
+                 r.grid_swizzle, r.store_c ? 1 : 0, kDynamicSmemBytes,
+                 r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
+                 r.checksum, prop.name);
     std::fflush(csv);
   }
 
