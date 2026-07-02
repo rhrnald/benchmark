@@ -16,6 +16,10 @@
 #define GEMM_CLOCK_TRACE 0
 #endif
 
+#ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 0
+#endif
+
 #define CUDA_CHECK(stmt)                                                        \
   do {                                                                          \
     cudaError_t err__ = (stmt);                                                 \
@@ -62,6 +66,8 @@ static constexpr int kDynamicSmemBytes = kStages * kStageBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
+[[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles =
+    GEMM_PIPE1_PHASE_SHIFT_CYCLES;
 
 static_assert(kPipes * kBPipeWords == kBStageWords);
 
@@ -103,6 +109,16 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
                : "=r"(addr)
                : "l"(ptr));
   return addr;
+}
+
+__device__ __forceinline__ void wait_pipe1_phase_shift() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000) && \
+    GEMM_PIPE1_PHASE_SHIFT_CYCLES > 0
+  const unsigned long long start = clock64();
+  while (clock64() - start <
+         static_cast<unsigned long long>(kPipe1PhaseShiftCycles)) {
+  }
+#endif
 }
 
 __device__ __forceinline__ void write_trace_record(ClockTraceRecord* records,
@@ -617,6 +633,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   }
 
   if (warp_id == 1 && lane0) {
+    wait_pipe1_phase_shift();
     for (int kt = 0; kt < ktiles; ++kt) {
       const int stage = kt % kStages;
       uint32_t* stage_smem = smem + stage * kStageWords;
@@ -632,6 +649,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 
   if ((warp_id == 2 || warp_id == 3) && lane0) {
     const int pipe = warp_id - 2;
+    if (pipe == 1) wait_pipe1_phase_shift();
     const int top_c = pipe;
     const int bottom_c = pipe + 2;
     for (int kt = 0; kt < ktiles; ++kt) {
@@ -1323,8 +1341,10 @@ int main(int argc, char** argv) {
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
               args.device, prop.name, prop.major, prop.minor, kDynamicSmemBytes);
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
-              "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d\n",
-              kCtaM, kCtaN, kStageK, kStages, kPipes);
+              "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
+              "pipe1_phase_shift_cycles=%d\n",
+              kCtaM, kCtaN, kStageK, kStages, kPipes,
+              kPipe1PhaseShiftCycles);
 
   for (int size : args.sizes) {
     CaseResult r = run_case(size, args.warmup, args.iters);

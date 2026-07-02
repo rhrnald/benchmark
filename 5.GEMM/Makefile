@@ -1,5 +1,6 @@
 NVCC ?= nvcc
 CXXFLAGS ?= -O3 -std=c++17
+EXTRA_NVCCFLAGS ?=
 GPU_ARCHS ?= -gencode arch=compute_100a,code=sm_100a
 
 TARGET := gemm256_tma_tcgen05_bench
@@ -25,10 +26,10 @@ all: build
 build: $(TARGET)
 
 $(TARGET): $(SRC)
-	$(NVCC) $(CXXFLAGS) $(GPU_ARCHS) $< -lcuda -o $@
+	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(GPU_ARCHS) $< -lcuda -o $@
 
 $(TRACE_TARGET): $(SRC)
-	$(NVCC) $(CXXFLAGS) -DGEMM_CLOCK_TRACE=1 $(GPU_ARCHS) $< -lcuda -o $@
+	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) -DGEMM_CLOCK_TRACE=1 $(GPU_ARCHS) $< -lcuda -o $@
 
 run: build
 	./$(TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS)
