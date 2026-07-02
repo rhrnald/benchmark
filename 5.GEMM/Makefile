@@ -12,7 +12,6 @@ SIZES ?= 4096,8192,16384,32768
 DEVICE ?= 0
 WARMUP ?= 2
 ITERS ?= 5
-COLD ?=
 TRACE_SIZE ?= 4096
 TRACE_START ?= 56
 TRACE_ITERS ?= 8
@@ -33,7 +32,7 @@ $(TRACE_TARGET): $(SRC)
 	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) -DGEMM_CLOCK_TRACE=1 $(GPU_ARCHS) $< -lcuda -o $@
 
 run: build
-	./$(TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) $(COLD)
+	./$(TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS)
 
 plot: $(TRACE_TARGET)
 	mkdir -p $(dir $(TRACE_CSV)) $(dir $(TRACE_SVG))
