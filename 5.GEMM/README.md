@@ -26,11 +26,13 @@ Current kernel shape:
   - warp 2 lane 0 issues MMA for C00/C10.
   - warp 3 lane 0 issues MMA for C01/C11.
   - stage reuse is fenced by each pipe's `mma_done` barrier from three K stages earlier.
-- C-store benchmark runs use an M-major rectangular CTA swizzle by default
-  (`12 x 1` groups for sizes with at least 32 CTA tiles per dimension). This
-  preserves B-tile locality better than the earlier square swizzle when FP32 C
-  stores are enabled. Pipe 1 uses a size-specific phase shift: `96` cycles for
-  8K and `512` cycles for larger sizes.
+- C-store benchmark runs use per-size template instantiations for the target
+  square sizes:
+  - 8K: `16 x 1` CTA groups, pipe 1 phase shift `96` cycles.
+  - 16K: `16 x 1` CTA groups, pipe 1 phase shift `96` cycles.
+  - 32K: `12 x 1` CTA groups, pipe 1 phase shift `512` cycles.
+  The generic fallback keeps the M-major `12 x 1` swizzle for sizes with at
+  least 32 CTA tiles per dimension.
 - A and B global inputs are row-major packed BF16. TMA uses `SWIZZLE_128B`
   layouts matching the attention path:
   - A is loaded as one logical `256 x 64` row-major tile into `major_k`
