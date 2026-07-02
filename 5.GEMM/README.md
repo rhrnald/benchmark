@@ -9,12 +9,13 @@ Current kernel shape:
 - Each K stage loads:
   - A: `256 x 64` BF16 through TMA.
   - B: two independent `64 x 128` BF16 pipe tiles through TMA.
-- Shared memory is partitioned as three `64 KiB` stages plus an optional
-  FP32 C-store staging buffer:
+- Shared memory is partitioned as three `64 KiB` stages. The TMA C-store
+  epilogue reuses this dynamic shared-memory region after the mainloop:
   - `A_stage`: `256 x 64 x 2B = 32 KiB`
   - `B_stage`: two `64 x 128 x 2B = 16 KiB` pipe buffers
   - total triple buffer: `192 KiB`
-  - C TMA store staging: one `64 x 64` FP32 chunk (`16 KiB`)
+  - C TMA store staging: two `128 x 128` FP32 chunks (`2 x 64 KiB`),
+    overlaid on the triple-buffer storage.
 - The `K=64` stage is issued as four `K=16` `tcgen05.mma` slices for each
   `128 x 128` accumulator tile.
 - The mainloop uses two N-direction MMA pipes:

@@ -17,7 +17,7 @@
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 8
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES 512
 #endif
 
 #ifndef GEMM_GRID_B_REUSE
@@ -25,7 +25,7 @@
 #endif
 
 #ifndef GEMM_GRID_SWIZZLE
-#define GEMM_GRID_SWIZZLE 5
+#define GEMM_GRID_SWIZZLE 4
 #endif
 
 #ifndef GEMM_GRID_SWIZZLE_MIN_TILES
@@ -74,14 +74,21 @@ static constexpr int kStageWords = kAStageWords + kBStageWords;
 static constexpr int kAStageBytes = kAStageWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kBPipeBytes = kBPipeWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kStageBytes = kStageWords * static_cast<int>(sizeof(uint32_t));
-static constexpr int kCStoreChunkM = 64;
-static constexpr int kCStoreChunkN = 64;
+static constexpr int kMainloopSmemBytes = kStages * kStageBytes;
+static constexpr int kCStoreChunkM = 128;
+static constexpr int kCStoreChunkN = 128;
 static constexpr int kCStoreChunkLoads = kCStoreChunkN / 64;
+static constexpr int kCStoreWarps = kCStoreChunkM / 32;
 static constexpr int kCStoreStageWords = kCStoreChunkM * kCStoreChunkN;
 static constexpr int kCStoreStageBytes =
     kCStoreStageWords * static_cast<int>(sizeof(uint32_t));
+static constexpr int kCStoreBuffers = 2;
+static constexpr int kCStoreTotalBytes = kCStoreBuffers * kCStoreStageBytes;
+static constexpr int kDynamicSmemPayloadBytes =
+    kMainloopSmemBytes > kCStoreTotalBytes ? kMainloopSmemBytes
+                                           : kCStoreTotalBytes;
 static constexpr int kDynamicSmemBytes =
-    kStages * kStageBytes + kCStoreStageBytes + 1024;
+    kDynamicSmemPayloadBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
@@ -92,6 +99,8 @@ static_assert(kPipes * kBPipeWords == kBStageWords);
 static_assert(kMmaM % kCStoreChunkM == 0);
 static_assert(kMmaN % kCStoreChunkN == 0);
 static_assert(kCStoreChunkN % 64 == 0);
+static_assert(kCStoreWarps * (kMmaM / kCStoreChunkM) <= kWarps);
+static_assert(4 % kCStoreBuffers == 0);
 
 enum TraceStage {
   kTraceNone = 0,
@@ -561,15 +570,16 @@ __device__ __forceinline__ void store_128x128_float_tile(uint32_t src_taddr,
 #endif
 }
 
-__device__ __forceinline__ void stage_64x64_float_chunk(uint32_t src_taddr,
-                                                        uint32_t* c_smem,
-                                                        int row_chunk,
-                                                        int col_chunk) {
+__device__ __forceinline__ void stage_float_c_chunk(uint32_t src_taddr,
+                                                    uint32_t* c_smem,
+                                                    int row_chunk,
+                                                    int col_chunk) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
-  const int selected_warp_base = row_chunk * 2;
-  if (warp_id == selected_warp_base || warp_id == selected_warp_base + 1) {
+  const int selected_warp_base = row_chunk * kCStoreWarps;
+  if (warp_id >= selected_warp_base &&
+      warp_id < selected_warp_base + kCStoreWarps) {
     uint32_t r[64];
     const int local_warp = warp_id - selected_warp_base;
     const uint32_t row_base =
@@ -597,33 +607,57 @@ __device__ __forceinline__ void stage_64x64_float_chunk(uint32_t src_taddr,
 #endif
 }
 
-__device__ __forceinline__ void store_128x128_float_tile_tma(
+__device__ __forceinline__ void issue_float_c_chunk_tma(
     uint32_t src_taddr,
     const CUtensorMap* c_map,
     uint32_t* c_smem,
     int row_offset,
     int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-#pragma unroll
-  for (int row_chunk = 0; row_chunk < 2; ++row_chunk) {
-#pragma unroll
-    for (int col_chunk = 0; col_chunk < kMmaN / kCStoreChunkN; ++col_chunk) {
-      stage_64x64_float_chunk(src_taddr, c_smem, row_chunk, col_chunk);
-      __syncthreads();
-      tma_store_fence_shared();
-      __syncthreads();
-      if (threadIdx.x == 0) {
-        tma_store_2d(c_map, smem_ptr_u32(c_smem),
-                     col_offset + col_chunk * kCStoreChunkN,
-                     row_offset + row_chunk * kCStoreChunkM);
-        tma_store_commit_group();
-        tma_store_wait_group_0();
-      }
-      __syncthreads();
-    }
+  stage_float_c_chunk(src_taddr, c_smem, 0, 0);
+  __syncthreads();
+  tma_store_fence_shared();
+  __syncthreads();
+  if (threadIdx.x == 0) {
+    tma_store_2d(c_map, smem_ptr_u32(c_smem), col_offset, row_offset);
   }
 #else
   (void)src_taddr;
+  (void)c_map;
+  (void)c_smem;
+  (void)row_offset;
+  (void)col_offset;
+#endif
+}
+
+__device__ __forceinline__ void store_256x256_float_tile_tma(
+    const uint32_t (&c_taddr)[4],
+    const CUtensorMap* c_map,
+    uint32_t* c_smem,
+    int row_offset,
+    int col_offset) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+#pragma unroll
+  for (int group = 0; group < 4; group += kCStoreBuffers) {
+#pragma unroll
+    for (int i = 0; i < kCStoreBuffers; ++i) {
+      const int tile = group + i;
+      if (tile < 4) {
+        uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
+        const int tile_row = row_offset + (tile / 2) * kMmaM;
+        const int tile_col = col_offset + (tile % 2) * kMmaN;
+        issue_float_c_chunk_tma(c_taddr[tile], c_map, tile_smem, tile_row,
+                                tile_col);
+      }
+    }
+    if (threadIdx.x == 0) {
+      tma_store_commit_group();
+      tma_store_wait_group_0();
+    }
+    __syncthreads();
+  }
+#else
+  (void)c_taddr;
   (void)c_map;
   (void)c_smem;
   (void)row_offset;
@@ -702,7 +736,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const uintptr_t smem_addr =
       (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) & ~static_cast<uintptr_t>(1023u);
   uint32_t* smem = reinterpret_cast<uint32_t*>(smem_addr);
-  uint32_t* c_store_smem = smem + kStages * kStageWords;
+  uint32_t* c_store_smem = smem;
 
   __shared__ uint64_t a_ready[kStages];
   __shared__ uint64_t b_ready[kPipes][kStages];
@@ -908,15 +942,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   } else if (out != nullptr && store_mode == kStoreTma) {
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
-    store_128x128_float_tile_tma(c_taddr[0], &c_map, c_store_smem,
+    store_256x256_float_tile_tma(c_taddr, &c_map, c_store_smem,
                                  global_row_base, global_col_base);
-    store_128x128_float_tile_tma(c_taddr[1], &c_map, c_store_smem,
-                                 global_row_base, global_col_base + 128);
-    store_128x128_float_tile_tma(c_taddr[2], &c_map, c_store_smem,
-                                 global_row_base + 128, global_col_base);
-    store_128x128_float_tile_tma(c_taddr[3], &c_map, c_store_smem,
-                                 global_row_base + 128,
-                                 global_col_base + 128);
   }
   __syncthreads();
 
