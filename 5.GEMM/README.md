@@ -28,7 +28,8 @@ Current kernel shape:
   - stage reuse is fenced by each pipe's `mma_done` barrier from three K stages earlier.
 - C-store benchmark runs use per-size template instantiations for the target
   square sizes:
-  - 8K: `16 x 1` CTA groups, pipe 1 phase shift `96` cycles.
+  - 8K: `16 x 1` CTA groups, pipe 1 phase shift `152` cycles, and
+    A/B/C TMA L2 promotion `256B`.
   - 16K: `16 x 1` CTA groups, pipe 1 phase shift `96` cycles.
   - 32K: `12 x 1` CTA groups, pipe 1 phase shift `512` cycles.
   The generic fallback keeps the M-major `12 x 1` swizzle for sizes with at

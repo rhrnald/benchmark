@@ -69,7 +69,19 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES 96
+#define GEMM_TUNED_8K_PIPE1_PHASE_SHIFT_CYCLES 152
+#endif
+
+#ifndef GEMM_TUNED_8K_TMA_A_L2_PROMOTION
+#define GEMM_TUNED_8K_TMA_A_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_L2_256B
+#endif
+
+#ifndef GEMM_TUNED_8K_TMA_B_L2_PROMOTION
+#define GEMM_TUNED_8K_TMA_B_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_L2_256B
+#endif
+
+#ifndef GEMM_TUNED_8K_TMA_C_L2_PROMOTION
+#define GEMM_TUNED_8K_TMA_C_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_L2_256B
 #endif
 
 #ifndef GEMM_TUNED_16K_GRID_SWIZZLE_M
@@ -1074,7 +1086,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
                                       void* base,
                                       uint64_t rows,
-                                      uint64_t cols_bf16) {
+                                      uint64_t cols_bf16,
+                                      CUtensorMapL2promotion l2_promotion) {
   const cuuint64_t cols_words = cols_bf16 / 2;
   const cuuint64_t global_dim[2] = {cols_words, rows};
   const cuuint64_t global_stride[1] = {cols_words * sizeof(uint32_t)};
@@ -1090,7 +1103,7 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
                                       CU_TENSOR_MAP_SWIZZLE_128B,
-                                      GEMM_TMA_A_L2_PROMOTION,
+                                      l2_promotion,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(a_row_major_sw128)");
 }
@@ -1098,7 +1111,8 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
 void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
                                           void* base,
                                           uint64_t rows,
-                                          uint64_t cols_bf16) {
+                                          uint64_t cols_bf16,
+                                          CUtensorMapL2promotion l2_promotion) {
   const cuuint64_t cols_words = cols_bf16 / 2;
   const cuuint64_t global_dim[4] = {cols_words, kMmaK, 2, rows / kMmaK};
   const cuuint64_t global_stride[3] = {
@@ -1117,7 +1131,7 @@ void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
                                       CU_TENSOR_MAP_SWIZZLE_128B,
-                                      GEMM_TMA_B_L2_PROMOTION,
+                                      l2_promotion,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(b_row_major_sw128_k16)");
 }
@@ -1125,7 +1139,8 @@ void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
 void encode_c_row_major_float_tma_map(CUtensorMap* map,
                                       void* base,
                                       uint64_t rows,
-                                      uint64_t cols) {
+                                      uint64_t cols,
+                                      CUtensorMapL2promotion l2_promotion) {
   const cuuint64_t global_dim[2] = {cols, rows};
   const cuuint64_t global_stride[1] = {cols * sizeof(float)};
   const cuuint32_t box_dim[2] = {kCStoreChunkN, kCStoreChunkM};
@@ -1140,9 +1155,24 @@ void encode_c_row_major_float_tma_map(CUtensorMap* map,
                                       elem_stride,
                                       CU_TENSOR_MAP_INTERLEAVE_NONE,
                                       CU_TENSOR_MAP_SWIZZLE_NONE,
-                                      GEMM_TMA_C_L2_PROMOTION,
+                                      l2_promotion,
                                       CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                "cuTensorMapEncodeTiled(c_row_major_float)");
+}
+
+CUtensorMapL2promotion tma_a_l2_promotion_for_size(int size) {
+  return size == 8192 ? GEMM_TUNED_8K_TMA_A_L2_PROMOTION
+                      : GEMM_TMA_A_L2_PROMOTION;
+}
+
+CUtensorMapL2promotion tma_b_l2_promotion_for_size(int size) {
+  return size == 8192 ? GEMM_TUNED_8K_TMA_B_L2_PROMOTION
+                      : GEMM_TMA_B_L2_PROMOTION;
+}
+
+CUtensorMapL2promotion tma_c_l2_promotion_for_size(int size) {
+  return size == 8192 ? GEMM_TUNED_8K_TMA_C_L2_PROMOTION
+                      : GEMM_TMA_C_L2_PROMOTION;
 }
 
 const char* store_mode_name(int store_mode) {
@@ -1448,6 +1478,9 @@ struct CaseResult {
   int group_m = 1;
   int group_n = 1;
   int pipe1_phase_cycles = 0;
+  int tma_a_l2_promotion = 0;
+  int tma_b_l2_promotion = 0;
+  int tma_c_l2_promotion = 0;
   int store_mode = kStoreNone;
   float event_ms = 0.0f;
   double wall_ms = 0.0;
@@ -1489,10 +1522,16 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   CUDA_CHECK(cudaDeviceSynchronize());
 
   CUtensorMap a_map{}, b_map{}, c_map{};
-  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
-  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  const CUtensorMapL2promotion a_l2_promotion =
+      tma_a_l2_promotion_for_size(size);
+  const CUtensorMapL2promotion b_l2_promotion =
+      tma_b_l2_promotion_for_size(size);
+  const CUtensorMapL2promotion c_l2_promotion =
+      tma_c_l2_promotion_for_size(size);
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k, a_l2_promotion);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n, b_l2_promotion);
   if (store_mode == kStoreTma) {
-    encode_c_row_major_float_tma_map(&c_map, d_c, m, n);
+    encode_c_row_major_float_tma_map(&c_map, d_c, m, n, c_l2_promotion);
   }
 
   set_gemm_kernel_attributes();
@@ -1548,6 +1587,9 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   result.group_m = tuning.group_m;
   result.group_n = tuning.group_n;
   result.pipe1_phase_cycles = tuning.pipe1_phase_cycles;
+  result.tma_a_l2_promotion = static_cast<int>(a_l2_promotion);
+  result.tma_b_l2_promotion = static_cast<int>(b_l2_promotion);
+  result.tma_c_l2_promotion = static_cast<int>(c_l2_promotion);
   result.store_mode = store_mode;
   result.event_ms = static_cast<float>(avg_event_ms);
   result.wall_ms = avg_wall_ms;
@@ -1668,10 +1710,16 @@ ValidateResult run_validation(int size, const char* pattern, int store_mode) {
   CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
 
   CUtensorMap a_map{}, b_map{}, c_map{};
-  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
-  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  const CUtensorMapL2promotion a_l2_promotion =
+      tma_a_l2_promotion_for_size(size);
+  const CUtensorMapL2promotion b_l2_promotion =
+      tma_b_l2_promotion_for_size(size);
+  const CUtensorMapL2promotion c_l2_promotion =
+      tma_c_l2_promotion_for_size(size);
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k, a_l2_promotion);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n, b_l2_promotion);
   if (store_mode == kStoreTma) {
-    encode_c_row_major_float_tma_map(&c_map, d_c, m, n);
+    encode_c_row_major_float_tma_map(&c_map, d_c, m, n, c_l2_promotion);
   }
   set_gemm_kernel_attributes();
 
@@ -1810,8 +1858,12 @@ void run_trace_case(const Args& args) {
                             sizeof(ClockTraceRecord)));
 
   CUtensorMap a_map{}, b_map{}, c_map{};
-  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
-  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  const CUtensorMapL2promotion a_l2_promotion =
+      tma_a_l2_promotion_for_size(size);
+  const CUtensorMapL2promotion b_l2_promotion =
+      tma_b_l2_promotion_for_size(size);
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k, a_l2_promotion);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n, b_l2_promotion);
   set_gemm_kernel_attributes();
 
   const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
@@ -1904,6 +1956,7 @@ int main(int argc, char** argv) {
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
                "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
+               "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
                "store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
@@ -1917,7 +1970,8 @@ int main(int argc, char** argv) {
               "grid_swizzle_min_tiles=%d "
               "tuned8k=%dx%d:%d tuned16k=%dx%d:%d tuned32k=%dx%d:%d "
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
-              "tma_l2_promotion_c=%d store_mode=%s c_type=%s\n",
+              "tma_l2_promotion_c=%d tuned8k_tma_l2=%d/%d/%d "
+              "store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
               GEMM_GRID_SWIZZLE,
@@ -1929,6 +1983,9 @@ int main(int argc, char** argv) {
               static_cast<int>(GEMM_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_C_L2_PROMOTION),
+              static_cast<int>(GEMM_TUNED_8K_TMA_A_L2_PROMOTION),
+              static_cast<int>(GEMM_TUNED_8K_TMA_B_L2_PROMOTION),
+              static_cast<int>(GEMM_TUNED_8K_TMA_C_L2_PROMOTION),
               store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
 
@@ -1936,18 +1993,23 @@ int main(int argc, char** argv) {
     CaseResult r = run_case(size, args.warmup, args.iters, args.store_mode);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
+                "tma_l2=%d/%d/%d "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
                 r.group_m, r.group_n, r.pipe1_phase_cycles,
+                r.tma_a_l2_promotion, r.tma_b_l2_promotion,
+                r.tma_c_l2_promotion,
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
+                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
+                 r.tma_c_l2_promotion,
                  store_mode_name(r.store_mode),
                  kDynamicSmemBytes,
                  r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
