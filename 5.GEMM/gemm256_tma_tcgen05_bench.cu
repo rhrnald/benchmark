@@ -20,6 +20,10 @@
 #define GEMM_PIPE1_PHASE_SHIFT_CYCLES 1000
 #endif
 
+#ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K
+#define GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K 96
+#endif
+
 #ifndef GEMM_GRID_B_REUSE
 #define GEMM_GRID_B_REUSE 0
 #endif
@@ -109,6 +113,8 @@ static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles =
     GEMM_PIPE1_PHASE_SHIFT_CYCLES;
+[[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles8K =
+    GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K;
 
 static_assert(kPipes * kBPipeWords == kBStageWords);
 static_assert(kMmaM % kCStoreChunkM == 0);
@@ -166,7 +172,7 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void* ptr) {
   return addr;
 }
 
-__device__ __forceinline__ void wait_pipe1_phase_shift() {
+__device__ __forceinline__ void wait_pipe1_phase_shift_default() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000) && \
     GEMM_PIPE1_PHASE_SHIFT_CYCLES > 0
   const unsigned long long start = clock64();
@@ -174,6 +180,24 @@ __device__ __forceinline__ void wait_pipe1_phase_shift() {
          static_cast<unsigned long long>(kPipe1PhaseShiftCycles)) {
   }
 #endif
+}
+
+__device__ __forceinline__ void wait_pipe1_phase_shift_8k() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000) && \
+    GEMM_PIPE1_PHASE_SHIFT_CYCLES_8K > 0
+  const unsigned long long start = clock64();
+  while (clock64() - start <
+         static_cast<unsigned long long>(kPipe1PhaseShiftCycles8K)) {
+  }
+#endif
+}
+
+__device__ __forceinline__ void wait_pipe1_phase_shift(int ktiles) {
+  if (ktiles == 8192 / kStageK) {
+    wait_pipe1_phase_shift_8k();
+  } else {
+    wait_pipe1_phase_shift_default();
+  }
 }
 
 __device__ __forceinline__ void write_trace_record(ClockTraceRecord* records,
@@ -866,7 +890,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   }
 
   if (warp_id == 1 && lane0) {
-    wait_pipe1_phase_shift();
+    wait_pipe1_phase_shift(ktiles);
     for (int kt = 0; kt < ktiles; ++kt) {
       const int stage = kt % kStages;
       uint32_t* stage_smem = smem + stage * kStageWords;
@@ -882,7 +906,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 
   if ((warp_id == 2 || warp_id == 3) && lane0) {
     const int pipe = warp_id - 2;
-    if (pipe == 1) wait_pipe1_phase_shift();
+    if (pipe == 1) wait_pipe1_phase_shift(ktiles);
     const int top_c = pipe;
     const int bottom_c = pipe + 2;
     for (int kt = 0; kt < ktiles; ++kt) {
@@ -1712,11 +1736,13 @@ int main(int argc, char** argv) {
               args.device, prop.name, prop.major, prop.minor, kDynamicSmemBytes);
   std::printf("mode=bf16_tcgen05_compute_sink layout=row_major_sw128 "
               "cta_tile=%dx%d stage_k=%d stages=%d pipes=%d "
-              "pipe1_phase_shift_cycles=%d grid_swizzle=%d "
+              "pipe1_phase_shift_cycles=%d pipe1_phase_shift_cycles_8k=%d "
+              "grid_swizzle=%d "
               "grid_swizzle_m=%d grid_swizzle_n=%d "
               "grid_swizzle_min_tiles=%d store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
-              kPipe1PhaseShiftCycles, GEMM_GRID_SWIZZLE,
+              kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
+              GEMM_GRID_SWIZZLE,
               GEMM_GRID_SWIZZLE_M, GEMM_GRID_SWIZZLE_N,
               GEMM_GRID_SWIZZLE_MIN_TILES, store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
