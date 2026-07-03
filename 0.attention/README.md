@@ -37,6 +37,7 @@ make run SEQLEN=8k STABLE=1        # order the V waits -> one deterministic chec
 make run SEQLEN=1k PERSIST=1       # persistent scr schedule, fastest at low seqlen
 make run SEQLEN=8k BEST=1          # per-seqlen best of {base, scr}: scr <=4k, base >=8k
 make run SEQLEN=8k CHECKSUM=1      # also print raw+masked O_CHECKSUM (works with any profile)
+make run SEQLEN=32k CAUSAL=1       # causal mask (base profile only; see CAUSAL_HANDOFF.md)
 ```
 
 Per-seqlen TFLOP/s (B200 @1965MHz):
@@ -54,6 +55,13 @@ The default matches unordered V handling (fast; the raw checksum wobbles run-to-
 
 `make validation` accepts the same `PERSIST=1`/`BEST=1`/`STABLE=1` profiles. (1k..4k use extra warmup
 so the short iters reach the GPU boost clock; otherwise they under-report.)
+
+`CAUSAL=1` applies the causal mask at runtime (same base binary, dynamic
+`<0,0,true>` dispatch). Each query tile qb of a k_tiles window walks k tiles
+`[0, qb]` only (~half the work), with an LPT launch order. Causal is base-build
+only: it is incompatible with `PERSIST=1`/`BEST=1` (the persistent schedule
+assumes a fixed trip count per tile). `make validation-suite` runs the fused
+suite including the causal cases. Design/status: `CAUSAL_HANDOFF.md`.
 
 ## Benchmark
 

@@ -780,6 +780,35 @@ __device__ __forceinline__ void store_packed4_s_cpp(uint32_t* smem,
   reinterpret_cast<uint4*>(smem + word_offset)[0] = make_uint4(p0, p1, p2, p3);
 }
 
+// Sentinel for "this tile is fully unmasked": any base >= kTileN disables the
+// causal mask, so a single large value covers both the non-causal kernel and
+// all causal tiles that sit strictly below the diagonal.
+static constexpr int kCausalNoMask = 1 << 20;
+
+// Causal masking on the per-row score registers, applied BEFORE exp2/sum so
+// that masked keys never enter the softmax denominator and produce P==0 for
+// the PV MMA. `r[j]` holds the score for (query row = `row`, key column =
+// consumer_half*64 + j) as loaded by tcgen05.ld.32x32b.x64 (contiguous
+// columns). A key column is valid iff col <= row + causal_col_limit_base; the
+// diagonal tile passes base==0 (bottom-right aligned -> col <= row), tiles
+// below the diagonal pass a multiple of kTileN (>= kTileN -> no work), and
+// non-causal callers pass the compile-time kCausalNoMask sentinel so this
+// forceinline body folds away entirely.
+__device__ __forceinline__ void causal_mask_x64(uint32_t (&r)[64],
+                                                int row,
+                                                int consumer_half,
+                                                int causal_col_limit_base) {
+  if (causal_col_limit_base >= kTileN) return;
+  const int col_limit = row + causal_col_limit_base;
+  const int col_base = consumer_half * 64;
+#pragma unroll
+  for (int j = 0; j < 64; ++j) {
+    if (col_base + j > col_limit) {
+      r[j] = 0xff800000u;  // -inf bits -> exp2 underflows to 0
+    }
+  }
+}
+
 template <bool kDoSum>
 __device__ __forceinline__ float pack_store_x64_loop(uint32_t* smem_base,
                                                      uint32_t (&r)[64],
@@ -1062,7 +1091,8 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
     int clock_trace_start,
     unsigned long long clock_trace_base,
     int trace_iter,
-    int trace_pipe) {
+    int trace_pipe,
+    int causal_col_limit_base = kCausalNoMask) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
   const int row = consumer_warp * 32 + lane;
@@ -1081,6 +1111,7 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
 #endif
   TCGEN05_LD_X64(src_taddr, r);
   tcgen05_wait_ld();
+  causal_mask_x64(r, row, consumer_half, causal_col_limit_base);
 #if ATTENTION_CLOCK_TRACE
   if (trace_lane) {
     const unsigned long long ld_end = clock64();
@@ -1145,21 +1176,33 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
   (void)clock_trace_base;
   (void)trace_iter;
   (void)trace_pipe;
+  (void)causal_col_limit_base;
   return 0.0f;
 #endif
 }
 
 __device__ __forceinline__ float tcgen05_ld_x64_wait_row_max_scaled_nvcc(
     uint32_t src_taddr,
-    float score_to_exp2_scale) {
+    float score_to_exp2_scale,
+    int consumer_warp = 0,
+    int consumer_half = 0,
+    int causal_col_limit_base = kCausalNoMask) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   uint32_t r[64];
   TCGEN05_LD_X64(src_taddr, r);
   tcgen05_wait_ld();
+  // Mask before the max so the rare-update rescale (cold path) sees only valid
+  // keys; otherwise masked columns (which the QK MMA still computed in tmem)
+  // can dominate new_row_max and corrupt the running max / O rescale.
+  causal_mask_x64(r, consumer_warp * 32 + (threadIdx.x & 31), consumer_half,
+                  causal_col_limit_base);
   return row_max_x64_scaled(r, score_to_exp2_scale);
 #else
   (void)src_taddr;
   (void)score_to_exp2_scale;
+  (void)consumer_warp;
+  (void)consumer_half;
+  (void)causal_col_limit_base;
   return -3.4028234663852886e+38f;
 #endif
 }
@@ -1179,7 +1222,8 @@ tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
     int clock_trace_start,
     unsigned long long clock_trace_base,
     int trace_iter,
-    int trace_pipe) {
+    int trace_pipe,
+    int causal_col_limit_base = kCausalNoMask) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
   const int row = consumer_warp * 32 + lane;
@@ -1198,6 +1242,7 @@ tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
 #endif
   TCGEN05_LD_X64(src_taddr, r);
   tcgen05_wait_ld();
+  causal_mask_x64(r, row, consumer_half, causal_col_limit_base);
 #if ATTENTION_CLOCK_TRACE
   if (trace_lane) {
     const unsigned long long ld_end = clock64();
@@ -1256,6 +1301,7 @@ tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
   (void)clock_trace_base;
   (void)trace_iter;
   (void)trace_pipe;
+  (void)causal_col_limit_base;
   return 0.0f;
 #endif
 }

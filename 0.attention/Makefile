@@ -80,6 +80,20 @@ ifeq ($(CHECKSUM),1)
 PROFILE_FLAGS += -DATTENTION_O_CHECKSUM=1
 PROFILE_SUFFIX := $(PROFILE_SUFFIX)_ck
 endif
+# CAUSAL=1: run the benchmark/validation with the causal mask. Runtime flag
+# (same kernel binary, dynamic <0,0,true> dispatch), but only the base build
+# supports it -- the persistent scr schedule assumes a fixed trip count.
+ifeq ($(CAUSAL),1)
+ifeq ($(PERSIST),1)
+$(error CAUSAL=1 requires the base profile; unset PERSIST)
+endif
+ifeq ($(BEST),1)
+$(error CAUSAL=1 requires the base profile; the BEST table is non-causal (scr <=4k))
+endif
+RUN_EXTRA_ARGS := --causal
+VALIDATE_EXTRA_ARGS := --causal
+PROFILE_SUFFIX := $(PROFILE_SUFFIX)_causal
+endif
 
 FASTEST_BIN := $(BUILD_DIR)/attention_custom_kernel$(PROFILE_SUFFIX)
 TRACE_BIN := $(BUILD_DIR)/attention_custom_kernel_trace
@@ -100,7 +114,7 @@ VALIDATE_CSV ?= /tmp/attention_main_validate_rank1_k4.csv
 
 .DEFAULT_GOAL := build
 
-.PHONY: build run plot validation
+.PHONY: build run plot validation validation-suite
 
 build: $(FASTEST_BIN)
 
@@ -114,11 +128,15 @@ $(VALIDATION_BIN): $(SRC) $(DEPS) | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) $(PROFILE_FLAGS) $(SRC) -o $@ -lcuda
 
 run: $(FASTEST_BIN)
-	$(PYTHON) run.py benchmark --binary $(FASTEST_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(WARMUP) --iters $(ITERS) --csv $(RUN_CSV)
+	$(PYTHON) run.py benchmark --binary $(FASTEST_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(WARMUP) --iters $(ITERS) --csv $(RUN_CSV) $(RUN_EXTRA_ARGS)
 
 plot: | $(BUILD_DIR)
 	$(NVCC) $(NVCCFLAGS) -DATTENTION_CLOCK_TRACE=1 $(SRC) -o $(TRACE_BIN) -lcuda
 	$(PYTHON) run.py plot --binary $(TRACE_BIN) --blocks $(BLOCKS) --k-tiles $(K_TILES) --warmup $(TRACE_WARMUP) --iters $(TRACE_RUN_ITERS) --clock-trace-start $(TRACE_START) --clock-trace-iters $(TRACE_ITERS) --trace-csv $(TRACE_CSV) --summary-csv $(TRACE_SUMMARY_CSV) --svg $(TRACE_SVG)
 
 validation: $(VALIDATION_BIN)
-	$(VALIDATION_BIN) --validate --pattern $(VALIDATE_PATTERN) --k-tiles $(VALIDATE_K_TILES) --checksum-repeats $(VALIDATE_CHECKSUM_REPEATS) --csv $(VALIDATE_CSV)
+	$(VALIDATION_BIN) --validate --pattern $(VALIDATE_PATTERN) --k-tiles $(VALIDATE_K_TILES) --checksum-repeats $(VALIDATE_CHECKSUM_REPEATS) --csv $(VALIDATE_CSV) $(VALIDATE_EXTRA_ARGS)
+
+# Full fused suite (includes the causal cases in base builds).
+validation-suite: $(VALIDATION_BIN)
+	$(VALIDATION_BIN) --validate-suite --checksum-repeats $(VALIDATE_CHECKSUM_REPEATS) --csv $(VALIDATE_CSV)

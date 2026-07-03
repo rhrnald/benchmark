@@ -1309,6 +1309,12 @@ struct RowSumUpdateH1Result {
   float row_max;
 };
 
+// Templated on kCausal so the non-causal instantiation stays byte-equivalent
+// to the pre-causal code (the mask calls fold away against the compile-time
+// kCausalNoMask sentinel). The causal reload MUST mask before taking the max:
+// the QK MMA still computed the masked columns into tmem, and an unmasked
+// reload could let them dominate new_row_max and corrupt the O rescale.
+template <bool kCausal>
 __device__ __noinline__ RowSumUpdateH0Result
 attention_row_sum_update_h0_cold(uint32_t row_taddr,
                                  uint32_t* s_smem,
@@ -1326,9 +1332,11 @@ attention_row_sum_update_h0_cold(uint32_t row_taddr,
                                  ClockTraceRecord* clock_trace,
                                  int clock_trace_iters,
                                  int clock_trace_start,
-                                 unsigned long long clock_trace_base) {
-  const float new_row_max =
-      tcgen05_ld_x64_wait_row_max_scaled_nvcc(row_taddr, score_to_exp2_scale);
+                                 unsigned long long clock_trace_base,
+                                 int causal_col_limit_base = kCausalNoMask) {
+  const int mask_base = kCausal ? causal_col_limit_base : kCausalNoMask;
+  const float new_row_max = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+      row_taddr, score_to_exp2_scale, consumer_warp, 0, mask_base);
   const bool update = trigger_update && new_row_max > row_max;
   if (__any_sync(0xffffffffu, update)) {
     const float accum_scale =
@@ -1341,11 +1349,12 @@ attention_row_sum_update_h0_cold(uint32_t row_taddr,
     row_sum = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr, s_smem, consumer_warp, 0, p_done_barrier, false,
         score_to_exp2_scale, row_max, clock_trace, clock_trace_iters,
-        clock_trace_start, clock_trace_base, iter, pipe);
+        clock_trace_start, clock_trace_base, iter, pipe, mask_base);
   }
   return {row_sum, row_sum_reg, row_max};
 }
 
+template <bool kCausal>
 __device__ __noinline__ RowSumUpdateH1Result
 attention_row_sum_update_h1_cold(uint32_t row_taddr,
                                  uint32_t* s_smem,
@@ -1364,9 +1373,11 @@ attention_row_sum_update_h1_cold(uint32_t row_taddr,
                                  ClockTraceRecord* clock_trace,
                                  int clock_trace_iters,
                                  int clock_trace_start,
-                                 unsigned long long clock_trace_base) {
-  const float new_row_max =
-      tcgen05_ld_x64_wait_row_max_scaled_nvcc(row_taddr, score_to_exp2_scale);
+                                 unsigned long long clock_trace_base,
+                                 int causal_col_limit_base = kCausalNoMask) {
+  const int mask_base = kCausal ? causal_col_limit_base : kCausalNoMask;
+  const float new_row_max = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+      row_taddr, score_to_exp2_scale, consumer_warp, 1, mask_base);
   const bool update = trigger_update && new_row_max > row_max;
   if (__any_sync(0xffffffffu, update)) {
     const float accum_scale =
@@ -1380,12 +1391,53 @@ attention_row_sum_update_h1_cold(uint32_t row_taddr,
     row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr, s_smem, consumer_warp, 1, p_done_barrier, false,
         score_to_exp2_scale, row_max, clock_trace, clock_trace_iters,
-        clock_trace_start, clock_trace_base, iter, pipe);
+        clock_trace_start, clock_trace_base, iter, pipe, mask_base);
   }
   return {row_sum0, row_sum1, row_sum_reg, row_max};
 }
 #endif
 
+// Per-iteration causal column-limit base for the consumer. A causal block
+// walks k tiles [0, diagonal] in order with the diagonal as the LAST local
+// tile (loop_repeats == diagonal_tile + 1), so base =
+// (loop_repeats-1 - iter) * kTileN gives the diagonal tile base==0
+// (col <= row, bottom-right aligned) and every earlier tile a positive
+// multiple of kTileN, which disables masking. Templated on kCausal so the
+// non-causal path returns the compile-time kCausalNoMask sentinel, letting
+// causal_mask_x64 (forceinline) fold its branch and drop the masking loop.
+template <bool kCausal>
+__device__ __forceinline__ int attention_causal_col_limit_base(
+    int iter, int loop_repeats) {
+  if constexpr (!kCausal) {
+    (void)iter;
+    (void)loop_repeats;
+    return kCausalNoMask;
+  } else {
+    return (loop_repeats - 1 - iter) * kTileN;
+  }
+}
+
+// The query tile this CTA computes (drives Q load, O store, row_max scratch
+// and the KV window). Non-causal: identity == blockIdx.x (templated so it
+// folds to a bare %ctaid.x read, preserving the fast path). Causal: LPT
+// remap -- reverse the query-tile index within its window so long-trip tiles
+// (large diagonal) launch first and the launch tail holds only short tiles.
+// The reversal is a within-window bijection applied consistently to the trip
+// count AND the addressing, so the output is unchanged. Recomputed at each
+// use site (cheap integer ops) rather than held live in a register.
+template <int kFixedKTiles, bool kCausal>
+__device__ __forceinline__ int attention_q_global_tile(int q_tiles) {
+  if constexpr (kFixedKTiles == 0 && kCausal) {
+    const int window = static_cast<int>(blockIdx.x) / q_tiles;
+    const int qb = q_tiles - 1 - (static_cast<int>(blockIdx.x) % q_tiles);
+    return window * q_tiles + qb;
+  } else {
+    (void)q_tiles;
+    return static_cast<int>(blockIdx.x);
+  }
+}
+
+template <bool kCausal = false>
 __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     uint32_t* const (&s_smem)[kPipeCount],
     uint64_t (&qk_done)[kPipeCount],
@@ -1428,13 +1480,16 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     mbarrier_wait(&qk_done[pipe], qk_done_carry);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+    const int causal_base =
+        attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
 #if ATTENTION_FIRST_ITER_COMPUTE_MAX
     row_max_reg = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
-        row_taddr, score_to_exp2_scale);
+        row_taddr, score_to_exp2_scale, consumer_warp, 0, causal_base);
     row_max_reg =
         fmaxf(row_max_reg,
-              tcgen05_ld_x64_wait_row_max_scaled_nvcc(row_taddr + 64u,
-                                                      score_to_exp2_scale));
+              tcgen05_ld_x64_wait_row_max_scaled_nvcc(
+                  row_taddr + 64u, score_to_exp2_scale, consumer_warp, 1,
+                  causal_base));
 #else
     row_max_reg = 0.0f;
 #endif
@@ -1442,23 +1497,23 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
-        clock_trace_start, clock_trace_base, iter, pipe);
+        clock_trace_start, clock_trace_base, iter, pipe, causal_base);
 #else
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
-        clock_trace_base, iter, pipe);
+        clock_trace_base, iter, pipe, causal_base);
 #endif
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
         score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
-        clock_trace_start, clock_trace_base, iter, pipe);
+        clock_trace_start, clock_trace_base, iter, pipe, causal_base);
 #else
     const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
-        clock_trace_base, iter, pipe);
+        clock_trace_base, iter, pipe, causal_base);
 #endif
     if (lane == 0) mbarrier_arrive(&s_h1_done[pipe]);
     if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
@@ -1474,21 +1529,25 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
       mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
       const uint32_t row_taddr =
           p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+      const int causal_base =
+          attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
       float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
           row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
           score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
-          clock_trace_start, clock_trace_base, iter, pipe);
+          clock_trace_start, clock_trace_base, iter, pipe, causal_base);
       const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h0_update)) {
         if (det_cold) {
           mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
           tcgen05_fence_after_thread_sync();
         }
-        RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
-            row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
-            consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
-            row_max_reg, score_to_exp2_scale, do_row_sum, clock_trace,
-            clock_trace_iters, clock_trace_start, clock_trace_base);
+        RowSumUpdateH0Result update_result =
+            attention_row_sum_update_h0_cold<kCausal>(
+                row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+                consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
+                row_max_reg, score_to_exp2_scale, do_row_sum, clock_trace,
+                clock_trace_iters, clock_trace_start, clock_trace_base,
+                causal_base);
         row_sum0 = update_result.row_sum;
         row_sum_reg = update_result.row_sum_reg;
         row_max_reg = update_result.row_max;
@@ -1496,19 +1555,21 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
       float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
           row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe],
           !det_cold, score_to_exp2_scale, row_max_reg, clock_trace,
-          clock_trace_iters, clock_trace_start, clock_trace_base, iter, pipe);
+          clock_trace_iters, clock_trace_start, clock_trace_base, iter, pipe,
+          causal_base);
       const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h1_update)) {
         if (det_cold) {
           mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
           tcgen05_fence_after_thread_sync();
         }
-        RowSumUpdateH1Result update_result = attention_row_sum_update_h1_cold(
-            row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
-            consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
-            row_sum_reg, row_max_reg, score_to_exp2_scale, do_row_sum,
-            clock_trace, clock_trace_iters, clock_trace_start,
-            clock_trace_base);
+        RowSumUpdateH1Result update_result =
+            attention_row_sum_update_h1_cold<kCausal>(
+                row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+                consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
+                row_sum_reg, row_max_reg, score_to_exp2_scale, do_row_sum,
+                clock_trace, clock_trace_iters, clock_trace_start,
+                clock_trace_base, causal_base);
         row_sum0 = update_result.row_sum0;
         row_sum1 = update_result.row_sum1;
         row_sum_reg = update_result.row_sum_reg;
@@ -1527,13 +1588,15 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+    const int causal_base =
+        attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     float row_sum0;
     float row_sum1;
     row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
-        clock_trace_start, clock_trace_base, iter, pipe);
+        clock_trace_start, clock_trace_base, iter, pipe, causal_base);
 #if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
     const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h0_update)) {
@@ -1541,11 +1604,13 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
         tcgen05_fence_after_thread_sync();
       }
-      RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
-          row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
-          consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
-          row_max_reg, score_to_exp2_scale, do_row_sum, clock_trace,
-          clock_trace_iters, clock_trace_start, clock_trace_base);
+      RowSumUpdateH0Result update_result =
+          attention_row_sum_update_h0_cold<kCausal>(
+              row_taddr, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+              consumer_warp, iter, trigger_h0_update, row_sum0, row_sum_reg,
+              row_max_reg, score_to_exp2_scale, do_row_sum, clock_trace,
+              clock_trace_iters, clock_trace_start, clock_trace_base,
+              causal_base);
       row_sum0 = update_result.row_sum;
       row_sum_reg = update_result.row_sum_reg;
       row_max_reg = update_result.row_max;
@@ -1555,13 +1620,13 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
-        clock_trace_base, iter, pipe);
+        clock_trace_base, iter, pipe, causal_base);
 #endif
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
         score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
-        clock_trace_start, clock_trace_base, iter, pipe);
+        clock_trace_start, clock_trace_base, iter, pipe, causal_base);
 #if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
     const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h1_update)) {
@@ -1569,11 +1634,13 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
         mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
         tcgen05_fence_after_thread_sync();
       }
-      RowSumUpdateH1Result update_result = attention_row_sum_update_h1_cold(
-          row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
-          consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
-          row_sum_reg, row_max_reg, score_to_exp2_scale, do_row_sum,
-          clock_trace, clock_trace_iters, clock_trace_start, clock_trace_base);
+      RowSumUpdateH1Result update_result =
+          attention_row_sum_update_h1_cold<kCausal>(
+              row_taddr + 64u, s_smem[pipe], &p_done[pipe], row_o_taddr, pipe,
+              consumer_warp, iter, trigger_h1_update, row_sum0, row_sum1,
+              row_sum_reg, row_max_reg, score_to_exp2_scale, do_row_sum,
+              clock_trace, clock_trace_iters, clock_trace_start,
+              clock_trace_base, causal_base);
       row_sum0 = update_result.row_sum0;
       row_sum1 = update_result.row_sum1;
       row_sum_reg = update_result.row_sum_reg;
@@ -1584,7 +1651,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
-        clock_trace_base, iter, pipe);
+        clock_trace_base, iter, pipe, causal_base);
 #endif
     if (lane == 0) mbarrier_arrive(&s_h1_done[pipe]);
     if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
@@ -1595,7 +1662,11 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+    const int causal_base =
+        attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
 #if ATTENTION_ROW_MAX_ONLY
+    static_assert(!kCausal,
+                  "causal is not wired into the ROW_MAX_ONLY probe path");
     const PackStoreX64LoopResult h0_result =
         tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
             row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
@@ -1607,7 +1678,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
-        clock_trace_base, iter, pipe);
+        clock_trace_base, iter, pipe, causal_base);
 #endif
 #if ATTENTION_ROW_MAX_ONLY
     const PackStoreX64LoopResult h1_result =
@@ -1621,7 +1692,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const float row_sum1 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr + 64u, s_smem[pipe], consumer_warp, 1, &p_done[pipe], true,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
-        clock_trace_base, iter, pipe);
+        clock_trace_base, iter, pipe, causal_base);
 #endif
     if (lane == 0) mbarrier_arrive(&s_h1_done[pipe]);
     if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
@@ -1788,7 +1859,7 @@ __device__ __forceinline__ void flat_wait_dbg(uint64_t* bar, uint32_t phase,
 }
 #endif
 
-template <int kFixedRepeats = 0, int kFixedKTiles = 0>
+template <int kFixedRepeats = 0, int kFixedKTiles = 0, bool kCausal = false>
 __global__ __launch_bounds__(kMainThreads, 1)
 void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                           const __grid_constant__ CUtensorMap k_map,
@@ -1797,6 +1868,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                           int repeats,
                           int k_tiles,
                           float score_to_exp2_scale,
+                          int q_tiles,
                           void* __restrict__ output,
                           int total_tiles
 #if ATTENTION_CLOCK_TRACE
@@ -1814,6 +1886,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)repeats;
   (void)k_tiles;
   (void)score_to_exp2_scale;
+  (void)q_tiles;
   (void)output;
   (void)total_tiles;
 #if ATTENTION_CLOCK_TRACE
@@ -1822,8 +1895,36 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   (void)clock_trace_start;
 #endif
 #else
+#if ATTENTION_PERSISTENT
+  // Causal is only wired into the base (non-persistent) build: the persistent
+  // schedules assume a fixed trip count per query tile (flat-loop indexing,
+  // cross-tile barrier-phase carry), so the host rejects --causal there and
+  // must never instantiate <.,.,true> in these builds.
+  static_assert(!kCausal, "kCausal requires the base (non-persistent) build");
   const int loop_repeats = kFixedRepeats > 0 ? kFixedRepeats : repeats;
   const int loop_k_tiles = kFixedKTiles > 0 ? kFixedKTiles : k_tiles;
+  (void)q_tiles;
+#else
+  int loop_repeats = kFixedRepeats > 0 ? kFixedRepeats : repeats;
+  int loop_k_tiles = kFixedKTiles > 0 ? kFixedKTiles : k_tiles;
+  // Causal walks only the lower-triangular k tiles. With bottom-right
+  // alignment, the query tile qb (within its q_tiles-sized window) has its
+  // diagonal at k-tile qb + (k_tiles - q_tiles); walking [0, diagonal] makes
+  // the diagonal the LAST local tile, so the consumer mask base
+  // (loop_repeats-1 - iter) holds. Setting loop_k_tiles == loop_repeats makes
+  // the existing local_k_tile_for_iter<0> mapping the identity walk. qb here
+  // is the LPT-reversed index (matches attention_q_global_tile) so the trip
+  // count and the Q/O addressing agree. Gated on the dynamic template so the
+  // fixed-shape non-causal fast paths keep compile-time trip counts.
+  if constexpr (kFixedKTiles == 0 && kCausal) {
+    const int qb = q_tiles - 1 - (static_cast<int>(blockIdx.x) % q_tiles);
+    const int diagonal_tile = qb + (k_tiles - q_tiles);
+    loop_repeats = diagonal_tile + 1;
+    loop_k_tiles = diagonal_tile + 1;
+  } else {
+    (void)q_tiles;
+  }
+#endif
   extern __shared__ uint32_t smem_raw[];
 #if !ATTENTION_PERSISTENT
   const uintptr_t smem_addr =
@@ -2518,7 +2619,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   const uint32_t tmem_base = tmem_base_shared;
   const uint32_t p_taddr[kPipeCount] = {tmem_base, tmem_base + 128u};
   const uint32_t o_taddr[kPipeCount] = {tmem_base + 256u, tmem_base + 384u};
-  const int tile = static_cast<int>(blockIdx.x);
+  const int tile = attention_q_global_tile<kFixedKTiles, kCausal>(q_tiles);
 #endif
   float* row_max_scratch =
       output != nullptr
@@ -2526,8 +2627,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
                 static_cast<size_t>(tile) * kTileWords
           : nullptr;
   const int q_contig_row = tile * kTileM;
+  // Causal: every query tile attends to keys starting at the base of its
+  // window; the per-block trip count above bounds the top. The window base
+  // must use the ORIGINAL k_tiles (loop_k_tiles was shrunk to diagonal+1).
+  // The LPT remap stays within the window, so tile/q_tiles == blockIdx.x/
+  // q_tiles and either index gives the same window.
   const int kv_tile_base =
-      kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles);
+      (kFixedKTiles == 0 && kCausal)
+          ? (tile / q_tiles) * k_tiles
+          : kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles);
 #if ATTENTION_PERSISTENT
   const int tile_local_idx =
       (tile - static_cast<int>(blockIdx.x)) / static_cast<int>(gridDim.x);
@@ -2566,7 +2674,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     const int consumer_slot =
         (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
-    attention_consumer_pipe_role(
+    attention_consumer_pipe_role<kCausal>(
         s_smem, qk_done, p_done, s_h1_done, pv_done, row_sum_partial,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
         score_to_exp2_scale,

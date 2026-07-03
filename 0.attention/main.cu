@@ -499,7 +499,20 @@ double tflops_from_flops(double flops, double ms) {
 
 using AttentionKernel = decltype(&qk_tma_mma_ld_kernel<0, 0>);
 
-AttentionKernel select_attention_kernel(int repeats, int k_tiles) {
+AttentionKernel select_attention_kernel(int repeats, int k_tiles, bool causal) {
+#if !ATTENTION_PERSISTENT
+  // Causal is a compile-time template (kCausal) so the non-causal
+  // instantiations keep all masking code out of the hot path. Causal also
+  // needs the dynamic per-block trip count, so it always uses the <0,0,true>
+  // instantiation; the fixed-shape fast paths stay non-causal only. The
+  // persistent builds never reference a kCausal=true instantiation (the
+  // kernel static_asserts against it); callers reject causal before here.
+  if (causal) {
+    return qk_tma_mma_ld_kernel<0, 0, true>;
+  }
+#else
+  (void)causal;
+#endif
 #if !ATTENTION_FORCE_DYNAMIC_DISPATCH
   if (repeats == k_tiles) {
     switch (k_tiles) {
@@ -544,7 +557,17 @@ RunResult run_kernel(const Args& args,
 #endif
                      ) {
   RunResult result{};
-  auto kernel = select_attention_kernel(args.repeats, args.k_tiles);
+#if ATTENTION_PERSISTENT
+  if (args.causal) {
+    result.error = cudaErrorInvalidValue;
+    result.status = "causal_requires_base_build";
+    return result;
+  }
+#endif
+  auto kernel = select_attention_kernel(args.repeats, args.k_tiles, args.causal);
+  // Causal benchmark windows are square (q_tiles == k_tiles): query tile qb of
+  // a window attends to k tiles [0, qb]. Non-causal ignores q_tiles.
+  const int kernel_q_tiles = args.causal ? args.k_tiles : 1;
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
@@ -565,7 +588,7 @@ RunResult run_kernel(const Args& args,
   for (int i = 0; i < args.warmup; ++i) {
     kernel<<<launch_grid, kMainThreads, kDynamicSmemBytes>>>(
         q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
-        score_to_exp2_scale, output, args.blocks
+        score_to_exp2_scale, kernel_q_tiles, output, args.blocks
 #if ATTENTION_CLOCK_TRACE
         ,
         clock_trace, clock_trace_iters, args.clock_trace_start
@@ -594,7 +617,7 @@ RunResult run_kernel(const Args& args,
   for (int i = 0; i < args.iters; ++i) {
     kernel<<<launch_grid, kMainThreads, kDynamicSmemBytes>>>(
         q_map, k_map, v_map, o_map, args.repeats, args.k_tiles,
-        score_to_exp2_scale, output, args.blocks
+        score_to_exp2_scale, kernel_q_tiles, output, args.blocks
 #if ATTENTION_CLOCK_TRACE
         ,
         clock_trace, clock_trace_iters, args.clock_trace_start
@@ -644,7 +667,20 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
                "s_store_TBps,qk_TFLOP_per_s,pv_TFLOP_per_s,total_TFLOP_per_s,"
                "status,cuda_error,notes\n");
 
-  const double groups = static_cast<double>(args.blocks) * args.repeats;
+  // Tiles actually processed across all blocks. Non-causal: every block walks
+  // repeats tiles. Causal: block qb (within its k_tiles-sized window) walks
+  // qb+1 tiles (bottom-right, benchmark uses q_tiles == k_tiles), i.e. the
+  // triangular sum -- roughly half the work.
+  double groups;
+  if (args.causal) {
+    long long causal_groups = 0;
+    for (int b = 0; b < args.blocks; ++b) {
+      causal_groups += (b % args.k_tiles) + 1;
+    }
+    groups = static_cast<double>(causal_groups);
+  } else {
+    groups = static_cast<double>(args.blocks) * args.repeats;
+  }
   const double total_mmas = groups * kMmasPerTile * 2.0;
   const double q_tma_bytes = static_cast<double>(args.blocks) * kTileBytes;
   const double k_tma_bytes = groups * kTileBytes;
@@ -697,12 +733,15 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
   );
   char output_shape[64];
   std::snprintf(output_shape, sizeof(output_shape), "O[%d,128,128]_bf16", args.blocks);
+  char mode_buf[192];
+  std::snprintf(mode_buf, sizeof(mode_buf), "%s%s", mode,
+                args.causal ? "_causal" : "");
 
   std::fprintf(csv,
                "%s,Q[%d,128,128]_bf16,K[%d,128,128]_bf16,V[%d,128,128]_bf16,%s,%d,%d,%d,%d,%d,%d,%d,"
                "%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%.6f,%.0f,%.0f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
                "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%s,%s,%s\n",
-               mode, args.blocks, kv_total_tiles, kv_total_tiles, output_shape, kTileM, kTileN, kMmaK,
+               mode_buf, args.blocks, kv_total_tiles, kv_total_tiles, output_shape, kTileM, kTileN, kMmaK,
                kMmasPerTile, args.blocks, args.repeats, args.k_tiles, args.warmup, args.iters,
                kMainThreads, active, kDynamicSmemBytes, kTmemAllocCols, kTmemUsedCols, kPTmemCols, kOTmemCols,
                "bf16_direct", result.ms, groups, total_mmas,
@@ -1557,8 +1596,11 @@ std::vector<uint32_t> pack_row_major_bf16_words(const std::vector<float>& values
 }
 
 std::vector<float> unpack_row_major_bf16_words(const std::vector<uint32_t>& words) {
-  std::vector<float> values(kTileBf16Elems, 0.0f);
-  for (int row = 0; row < kTileM; ++row) {
+  // Handles any whole number of stacked [kTileM, kTileN] output tiles; the
+  // per-tile row-major layout matches the [Sq, D] reference when D == kTileN.
+  const size_t rows = words.size() / (kTileN / 2);
+  std::vector<float> values(rows * kTileN, 0.0f);
+  for (size_t row = 0; row < rows; ++row) {
     for (int col_pair = 0; col_pair < kTileN / 2; ++col_pair) {
       const uint32_t packed = words[row * (kTileN / 2) + col_pair];
       values[row * kTileN + col_pair * 2] = bf16_to_float(static_cast<uint16_t>(packed));
@@ -1736,6 +1778,8 @@ void parse_args(int argc, char** argv, Args* args) {
           "  --blocks N --k-tiles N --warmup N --iters N\n"
           "  fixed path: contiguous Q/K 2D SW128 TMA, contiguous V k16 SW128 MN-major,\n"
           "              split S-ready, QK/PV pingpong dep, BF16 output store\n"
+          "  --causal                       causal mask (square windows, base build only);\n"
+          "                                 block qb of each k_tiles-window walks k tiles [0, qb]\n"
           "  --clock-trace --clock-trace-start N --clock-trace-iters N   write output-path clock trace CSV; requires -DATTENTION_CLOCK_TRACE=1\n"
           "\n"
           "Fused real-attention validation path:\n"
@@ -1874,8 +1918,10 @@ CompareResult run_real_attention_case(const Args& args, const std::string& label
 
 bool prepare_fused_real_attention_args(const Args& args, Args* out) {
   *out = args;
-  if (out->Sq != kTileM || out->D != kRealAttentionD) {
-    std::fprintf(stderr, "fused validation V1 requires Sq=128,D=128; got Sq=%d D=%d\n",
+  if (out->Sq < kTileM || out->Sq % kTileM != 0 || out->D != kRealAttentionD) {
+    std::fprintf(stderr,
+                 "fused validation requires Sq %% 128 == 0 (Sq >= 128), D=128; "
+                 "got Sq=%d D=%d\n",
                  out->Sq, out->D);
     return false;
   }
@@ -1906,8 +1952,19 @@ bool prepare_fused_real_attention_args(const Args& args, Args* out) {
                  out->B, out->Hq, out->Hkv);
     return false;
   }
+#if ATTENTION_PERSISTENT
   if (out->causal) {
-    std::fprintf(stderr, "fused validation V1 is non-causal only\n");
+    std::fprintf(stderr,
+                 "causal requires the base (non-persistent) build; rebuild "
+                 "without PERSIST/CONTINUOUS_FLAT flags\n");
+    return false;
+  }
+#endif
+  if (out->causal && out->k_tiles < out->Sq / kTileM) {
+    std::fprintf(stderr,
+                 "causal fused validation requires k_tiles >= q_tiles "
+                 "(Skv >= Sq); got k_tiles=%d q_tiles=%d\n",
+                 out->k_tiles, out->Sq / kTileM);
     return false;
   }
   if (out->k_tiles < 1) {
@@ -1919,24 +1976,26 @@ bool prepare_fused_real_attention_args(const Args& args, Args* out) {
 
 CompareResult run_fused_real_attention_case(const Args& args, const std::string& label) {
   const float scale = resolved_softmax_scale(args);
-  const size_t q_elems = kTileBf16Elems;
+  const int q_tiles = args.Sq / kTileM;
+  const size_t q_words = static_cast<size_t>(q_tiles) * kTileWords;
+  const size_t q_elems = static_cast<size_t>(args.Sq) * kRealAttentionD;
   const size_t kv_elems = static_cast<size_t>(args.k_tiles) * kTileBf16Elems;
 
   std::vector<uint16_t> h_q(q_elems);
   std::vector<uint16_t> h_k(kv_elems);
   std::vector<uint16_t> h_v(kv_elems);
-  fill_real_bf16_matrix(h_q, args.pattern, 'q', 1, 1, kTileM, kRealAttentionD);
+  fill_real_bf16_matrix(h_q, args.pattern, 'q', 1, 1, args.Sq, kRealAttentionD);
   fill_real_bf16_matrix(h_k, args.pattern, 'k', 1, 1, args.Skv, kRealAttentionD);
   fill_real_bf16_matrix(h_v, args.pattern, 'v', 1, 1, args.Skv, kRealAttentionD);
 
   std::vector<float> ref;
-  build_real_attention_reference(h_q, h_k, h_v, 1, 1, 1, kTileM, args.Skv,
-                                 kRealAttentionD, scale, false, &ref);
+  build_real_attention_reference(h_q, h_k, h_v, 1, 1, 1, args.Sq, args.Skv,
+                                 kRealAttentionD, scale, args.causal, &ref);
 
   std::vector<uint32_t> h_q_contiguous;
   std::vector<uint32_t> h_k_contiguous;
   std::vector<uint32_t> h_v_words;
-  pack_real_row_major_words(h_q, kTileM, &h_q_contiguous);
+  pack_real_row_major_words(h_q, args.Sq, &h_q_contiguous);
   pack_real_row_major_words(h_k, args.Skv, &h_k_contiguous);
   pack_real_row_major_words(h_v, args.Skv, &h_v_words);
 
@@ -1947,17 +2006,18 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   CUDA_CHECK(cudaMalloc(&d_q, h_q_contiguous.size() * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_k, h_k_contiguous.size() * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_v, h_v_words.size() * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_o, kTileWords * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_o, q_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemcpy(d_q, h_q_contiguous.data(), h_q_contiguous.size() * sizeof(uint32_t),
                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_k, h_k_contiguous.data(), h_k_contiguous.size() * sizeof(uint32_t),
                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_v, h_v_words.data(), h_v_words.size() * sizeof(uint32_t),
                         cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemset(d_o, 0, kTileWords * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_o, 0, q_words * sizeof(uint32_t)));
 
   CUtensorMap q_map{}, k_map{}, v_map{}, o_map{};
-  encode_qk_contiguous_sw128_tma_map(&q_map, d_q, 1);
+  encode_qk_contiguous_sw128_tma_map(&q_map, d_q,
+                                     static_cast<uint64_t>(q_tiles));
   encode_qk_contiguous_sw128_tma_map(&k_map, d_k,
                                      static_cast<uint64_t>(args.k_tiles));
 #if ATTENTION_SPLIT_V_TMA
@@ -1967,16 +2027,23 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   encode_contiguous_sw128_k16_tma_map(&v_map, d_v,
                                       static_cast<uint64_t>(args.k_tiles));
 #endif
-  encode_bf16_output_tma_map(&o_map, d_o, 1);
+  encode_bf16_output_tma_map(&o_map, d_o, static_cast<uint64_t>(q_tiles));
 
-  // validate on the literal <0,0> kernel
+  // Validate on the literal <0,0> kernels (same instantiations the causal /
+  // dynamic benchmark dispatch uses).
+#if !ATTENTION_PERSISTENT
+  auto kernel = args.causal ? qk_tma_mma_ld_kernel<0, 0, true>
+                            : qk_tma_mma_ld_kernel<0, 0, false>;
+#else
+  // prepare_fused_real_attention_args rejected causal in persistent builds.
   auto kernel = qk_tma_mma_ld_kernel<0, 0>;
+#endif
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
                                   kDynamicSmemBytes));
-  kernel<<<1, kMainThreads, kDynamicSmemBytes>>>(
+  kernel<<<q_tiles, kMainThreads, kDynamicSmemBytes>>>(
       q_map, k_map, v_map, o_map, args.k_tiles, args.k_tiles,
-      resolved_score_to_exp2_scale(args), d_o, 1
+      resolved_score_to_exp2_scale(args), q_tiles, d_o, q_tiles
 #if ATTENTION_CLOCK_TRACE
       ,
       nullptr, 0, 0
@@ -1985,8 +2052,8 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   CUDA_CHECK(cudaGetLastError());
   CUDA_CHECK(cudaDeviceSynchronize());
 
-  std::vector<uint32_t> h_o(kTileWords);
-  CUDA_CHECK(cudaMemcpy(h_o.data(), d_o, kTileWords * sizeof(uint32_t),
+  std::vector<uint32_t> h_o(q_words);
+  CUDA_CHECK(cudaMemcpy(h_o.data(), d_o, q_words * sizeof(uint32_t),
                         cudaMemcpyDeviceToHost));
   const std::vector<float> got = unpack_row_major_bf16_words(h_o);
 
@@ -1997,8 +2064,10 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
 
   char stage[256];
   std::snprintf(stage, sizeof(stage),
-                "%s_fused_B1_H1_Sq128_Skv%d_D128_noncausal_scale%.6g_pattern_%s",
-                label.c_str(), args.Skv, scale, args.pattern.c_str());
+                "%s_fused_B1_H1_Sq%d_Skv%d_D128_%s_scale%.6g_pattern_%s",
+                label.c_str(), args.Sq, args.Skv,
+                args.causal ? "causal" : "noncausal", scale,
+                args.pattern.c_str());
   CompareResult result = compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
   set_validation_checksum(&result, validation_checksum_vector(h_o));
   return result;
@@ -2008,28 +2077,45 @@ int run_fused_real_validation(const Args& args) {
   std::vector<CompareResult> results;
   if (args.validation_suite) {
     struct CaseSpec {
+      int q_tiles;
       int k_tiles;
+      bool causal;
       const char* pattern;
       const char* label;
     };
     const CaseSpec cases[] = {
-        {1, "constant", "fused_real_attention_constant_k1"},
-        {4, "rank1", "fused_real_attention_rank1_k4"},
-        {4, "random", "fused_real_attention_random_k4"},
-        {8, "random", "fused_real_attention_random_k8"},
+        {1, 1, false, "constant", "fused_real_attention_constant_k1"},
+        {1, 4, false, "rank1", "fused_real_attention_rank1_k4"},
+        {1, 4, false, "random", "fused_real_attention_random_k4"},
+        {1, 8, false, "random", "fused_real_attention_random_k8"},
+#if !ATTENTION_PERSISTENT
+        // Causal cases are base-build only (persistent schedules assume a
+        // fixed trip count; the host rejects causal there). Single query tile
+        // exercises the bottom-right mask; the sq* cases exercise the dynamic
+        // per-block trip count and the LPT remap (multi-tile grids).
+        {1, 1, true, "constant", "fused_real_attention_causal_constant_k1"},
+        {1, 4, true, "rank1", "fused_real_attention_causal_rank1_k4"},
+        {1, 4, true, "random", "fused_real_attention_causal_random_k4"},
+        {1, 8, true, "random", "fused_real_attention_causal_random_k8"},
+        {4, 4, true, "rank1", "fused_real_attention_causal_sq4_k4"},
+        {4, 4, true, "random", "fused_real_attention_causal_sq4_k4_rand"},
+        {2, 4, true, "random", "fused_real_attention_causal_sq2_k4_rand"},
+        {4, 8, true, "random", "fused_real_attention_causal_sq4_k8_rand"},
+        {4, 4, false, "random", "fused_real_attention_sq4_k4_rand_noncausal"},
+#endif
     };
     for (const CaseSpec& c : cases) {
       Args case_args = args;
       case_args.B = 1;
       case_args.Hq = 1;
       case_args.Hkv = 1;
-      case_args.Sq = kTileM;
+      case_args.Sq = c.q_tiles * kTileM;
       case_args.k_tiles = c.k_tiles;
       case_args.k_tiles_set = true;
       case_args.Skv = c.k_tiles * kTileN;
       case_args.skv_set = false;
       case_args.D = kRealAttentionD;
-      case_args.causal = false;
+      case_args.causal = c.causal;
       case_args.pattern = c.pattern;
       Args prepared;
       if (!prepare_fused_real_attention_args(case_args, &prepared)) return 2;
@@ -2118,6 +2204,14 @@ int run_benchmark(const Args& args_in) {
   if (args.clock_trace) {
     std::fprintf(stderr,
                  "--clock-trace requires compiling with -DATTENTION_CLOCK_TRACE=1.\n");
+    return 2;
+  }
+#endif
+#if ATTENTION_PERSISTENT
+  if (args.causal) {
+    std::fprintf(stderr,
+                 "--causal requires the base (non-persistent) build; rebuild "
+                 "without PERSIST/CONTINUOUS_FLAT flags.\n");
     return 2;
   }
 #endif

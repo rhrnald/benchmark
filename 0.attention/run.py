@@ -49,7 +49,7 @@ def parse_tail_csv(path: Path) -> dict[str, str]:
 def benchmark(args: argparse.Namespace) -> int:
     csv_path = resolve(args.csv)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    run_checked([
+    cmd = [
         resolve(args.binary),
         "--blocks",
         args.blocks,
@@ -61,7 +61,10 @@ def benchmark(args: argparse.Namespace) -> int:
         args.iters,
         "--csv",
         csv_path,
-    ])
+    ]
+    if args.causal:
+        cmd.append("--causal")
+    run_checked(cmd)
     parsed = parse_tail_csv(csv_path)
     print(
         "total_TFLOP_per_s={total_tflops} elapsed_ms={elapsed_ms} "
@@ -142,6 +145,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     bench = sub.add_parser("benchmark", help="run the fastest benchmark path")
+    bench.add_argument("--causal", action="store_true")
     add_common_run_args(bench)
     bench.add_argument("--csv", default="log/best.csv")
     bench.set_defaults(func=benchmark)
