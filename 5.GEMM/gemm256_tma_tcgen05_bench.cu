@@ -16,6 +16,10 @@
 #define GEMM_CLOCK_TRACE 0
 #endif
 
+#ifndef GEMM_SINGLE_PIPELINE
+#define GEMM_SINGLE_PIPELINE 0
+#endif
+
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
 #define GEMM_PIPE1_PHASE_SHIFT_CYCLES 512
 #endif
@@ -230,6 +234,7 @@ static constexpr int kDynamicSmemBytes =
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
+static constexpr int kSinglePipeline = GEMM_SINGLE_PIPELINE;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles =
     GEMM_PIPE1_PHASE_SHIFT_CYCLES;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles8K =
@@ -978,6 +983,7 @@ template <int GridSwizzle,
           int Pipe1TmaPhaseCycles,
           int Pipe1MmaPhaseCycles,
           int CStoreSwizzle128B,
+          int SinglePipeline,
           int TuningTag>
 __global__ __launch_bounds__(kThreads, 1)
 void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
@@ -1105,6 +1111,11 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
       issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                              kt, 0, nullptr, 0, 0, trace_base_shared, 0, 0);
+      if constexpr (SinglePipeline != 0) {
+        uint32_t* b1_smem = b_smem + kBPipeWords;
+        issue_b_pipe_stage_tma(&b_map, b1_smem, &b_ready[1][stage], tile_n,
+                               kt, 1, nullptr, 0, 0, trace_base_shared, 1, 0);
+      }
       const unsigned long long trace_end =
           clock_trace != nullptr ? clock64() : 0ull;
       write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
@@ -1113,76 +1124,138 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     }
   }
 
-  if (warp_id == 1 && lane0) {
-    wait_pipe1_phase_shift_tuned<Pipe1TmaPhaseCycles>();
-    for (int kt = 0; kt < ktiles; ++kt) {
-      const int stage = kt % kStages;
-      uint32_t* stage_smem = smem + stage * kStageWords;
-      uint32_t* b_smem = stage_smem + kAStageWords + kBPipeWords;
-      if (kt >= kStages) {
-        mbarrier_wait(&mma_done[1], static_cast<uint32_t>((kt - kStages) & 1));
+  if constexpr (SinglePipeline == 0) {
+    if (warp_id == 1 && lane0) {
+      wait_pipe1_phase_shift_tuned<Pipe1TmaPhaseCycles>();
+      for (int kt = 0; kt < ktiles; ++kt) {
+        const int stage = kt % kStages;
+        uint32_t* stage_smem = smem + stage * kStageWords;
+        uint32_t* b_smem = stage_smem + kAStageWords + kBPipeWords;
+        if (kt >= kStages) {
+          mbarrier_wait(&mma_done[1],
+                        static_cast<uint32_t>((kt - kStages) & 1));
+        }
+        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
+                               kt, 1, clock_trace, clock_trace_start,
+                               clock_trace_iters, trace_base_shared, 1, 1);
       }
-      issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
-                             kt, 1, clock_trace, clock_trace_start,
-                             clock_trace_iters, trace_base_shared, 1, 1);
     }
   }
 
-  if ((warp_id == 2 || warp_id == 3) && lane0) {
-    const int pipe = warp_id - 2;
-    if (pipe == 1) wait_pipe1_phase_shift_tuned<Pipe1MmaPhaseCycles>();
-    const int top_c = pipe;
-    const int bottom_c = pipe + 2;
-    for (int kt = 0; kt < ktiles; ++kt) {
-      const int stage = kt % kStages;
-      const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
-      uint32_t* stage_smem = smem + stage * kStageWords;
-      uint32_t* a_smem = stage_smem;
-      uint32_t* b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
-
-      const unsigned long long tma_wait_start =
-          clock_trace != nullptr ? clock64() : 0ull;
-      mbarrier_wait(&a_ready[stage], tma_phase);
-      mbarrier_wait(&b_ready[pipe][stage], tma_phase);
-      const unsigned long long tma_wait_end =
-          clock_trace != nullptr ? clock64() : 0ull;
-      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                         trace_base_shared, kTraceTmaWait, kt, 2 + pipe,
-                         warp_id,
-                         tma_wait_start, tma_wait_end);
-
-      const unsigned long long mma_issue_start =
-          clock_trace != nullptr ? clock64() : 0ull;
+  if constexpr (SinglePipeline != 0) {
+    if (warp_id == 2 && lane0) {
+      for (int kt = 0; kt < ktiles; ++kt) {
+        const int stage = kt % kStages;
+        const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
+        uint32_t* stage_smem = smem + stage * kStageWords;
+        uint32_t* a_smem = stage_smem;
 #pragma unroll
-      for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-        const uint32_t a0 = smem_ptr_u32(a_smem);
-        const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
-        const uint32_t b0 = smem_ptr_u32(b_smem);
-        const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
-        const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
-        const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
-        const bool input_d = (kt != 0) || (kk != 0);
+        for (int pipe = 0; pipe < kPipes; ++pipe) {
+          uint32_t* b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
+          const int top_c = pipe;
+          const int bottom_c = pipe + 2;
 
-        tcgen05_mma_bf16_ss(c_taddr[top_c], a0_desc, b0_desc, idesc, input_d);
-        tcgen05_mma_bf16_ss(c_taddr[bottom_c], a1_desc, b0_desc, idesc, input_d);
+          const unsigned long long tma_wait_start =
+              clock_trace != nullptr ? clock64() : 0ull;
+          mbarrier_wait(&a_ready[stage], tma_phase);
+          mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+          const unsigned long long tma_wait_end =
+              clock_trace != nullptr ? clock64() : 0ull;
+          write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                             trace_base_shared, kTraceTmaWait, kt, 2 + pipe,
+                             warp_id, tma_wait_start, tma_wait_end);
+
+          const unsigned long long mma_issue_start =
+              clock_trace != nullptr ? clock64() : 0ull;
+#pragma unroll
+          for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
+            const uint32_t a0 = smem_ptr_u32(a_smem);
+            const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
+            const uint32_t b0 = smem_ptr_u32(b_smem);
+            const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
+            const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
+            const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
+            const bool input_d = (kt != 0) || (kk != 0);
+
+            tcgen05_mma_bf16_ss(c_taddr[top_c], a0_desc, b0_desc, idesc,
+                                input_d);
+            tcgen05_mma_bf16_ss(c_taddr[bottom_c], a1_desc, b0_desc, idesc,
+                                input_d);
+          }
+          tcgen05_commit(&mma_done[pipe]);
+          const unsigned long long mma_issue_end =
+              clock_trace != nullptr ? clock64() : 0ull;
+          write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                             trace_base_shared, kTraceMmaIssue, kt, 4 + pipe,
+                             warp_id, mma_issue_start, mma_issue_end);
+
+          const unsigned long long mma_wait_start =
+              clock_trace != nullptr ? clock64() : 0ull;
+          mbarrier_wait(&mma_done[pipe], static_cast<uint32_t>(kt & 1));
+          const unsigned long long mma_wait_end =
+              clock_trace != nullptr ? clock64() : 0ull;
+          write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                             trace_base_shared, kTraceMmaWait, kt, 6 + pipe,
+                             warp_id, mma_wait_start, mma_wait_end);
+        }
       }
-      tcgen05_commit(&mma_done[pipe]);
-      const unsigned long long mma_issue_end =
-          clock_trace != nullptr ? clock64() : 0ull;
-      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                         trace_base_shared, kTraceMmaIssue, kt, 4 + pipe,
-                         warp_id,
-                         mma_issue_start, mma_issue_end);
+    }
+  } else {
+    if ((warp_id == 2 || warp_id == 3) && lane0) {
+      const int pipe = warp_id - 2;
+      if (pipe == 1) wait_pipe1_phase_shift_tuned<Pipe1MmaPhaseCycles>();
+      const int top_c = pipe;
+      const int bottom_c = pipe + 2;
+      for (int kt = 0; kt < ktiles; ++kt) {
+        const int stage = kt % kStages;
+        const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
+        uint32_t* stage_smem = smem + stage * kStageWords;
+        uint32_t* a_smem = stage_smem;
+        uint32_t* b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
 
-      const unsigned long long mma_wait_start =
-          clock_trace != nullptr ? clock64() : 0ull;
-      mbarrier_wait(&mma_done[pipe], static_cast<uint32_t>(kt & 1));
-      const unsigned long long mma_wait_end =
-          clock_trace != nullptr ? clock64() : 0ull;
-      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                         trace_base_shared, kTraceMmaWait, kt, 6 + pipe,
-                         warp_id,
-                         mma_wait_start, mma_wait_end);
+        const unsigned long long tma_wait_start =
+            clock_trace != nullptr ? clock64() : 0ull;
+        mbarrier_wait(&a_ready[stage], tma_phase);
+        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+        const unsigned long long tma_wait_end =
+            clock_trace != nullptr ? clock64() : 0ull;
+        write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                           trace_base_shared, kTraceTmaWait, kt, 2 + pipe,
+                           warp_id, tma_wait_start, tma_wait_end);
+
+        const unsigned long long mma_issue_start =
+            clock_trace != nullptr ? clock64() : 0ull;
+#pragma unroll
+        for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
+          const uint32_t a0 = smem_ptr_u32(a_smem);
+          const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
+          const uint32_t b0 = smem_ptr_u32(b_smem);
+          const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
+          const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
+          const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
+          const bool input_d = (kt != 0) || (kk != 0);
+
+          tcgen05_mma_bf16_ss(c_taddr[top_c], a0_desc, b0_desc, idesc,
+                              input_d);
+          tcgen05_mma_bf16_ss(c_taddr[bottom_c], a1_desc, b0_desc, idesc,
+                              input_d);
+        }
+        tcgen05_commit(&mma_done[pipe]);
+        const unsigned long long mma_issue_end =
+            clock_trace != nullptr ? clock64() : 0ull;
+        write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                           trace_base_shared, kTraceMmaIssue, kt, 4 + pipe,
+                           warp_id, mma_issue_start, mma_issue_end);
+
+        const unsigned long long mma_wait_start =
+            clock_trace != nullptr ? clock64() : 0ull;
+        mbarrier_wait(&mma_done[pipe], static_cast<uint32_t>(kt & 1));
+        const unsigned long long mma_wait_end =
+            clock_trace != nullptr ? clock64() : 0ull;
+        write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                           trace_base_shared, kTraceMmaWait, kt, 6 + pipe,
+                           warp_id, mma_wait_start, mma_wait_end);
+      }
     }
   }
   __syncthreads();
@@ -1554,6 +1627,7 @@ template <int GridSwizzle,
           int Pipe1TmaPhaseCycles,
           int Pipe1MmaPhaseCycles,
           int CStoreSwizzle128B,
+          int SinglePipeline,
           int TuningTag>
 void set_one_gemm_kernel_attribute() {
   CUDA_CHECK(cudaFuncSetAttribute(
@@ -1563,6 +1637,7 @@ void set_one_gemm_kernel_attribute() {
                                  Pipe1TmaPhaseCycles,
                                  Pipe1MmaPhaseCycles,
                                  CStoreSwizzle128B,
+                                 SinglePipeline,
                                  TuningTag>,
       cudaFuncAttributeMaxDynamicSharedMemorySize,
       kDynamicSmemBytes));
@@ -1575,6 +1650,7 @@ void set_gemm_kernel_attributes() {
                                 GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                                 GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                                 GEMM_CSTORE_SWIZZLE_128B,
+                                kSinglePipeline,
                                 kTuningTagGeneric>();
 #if GEMM_GRID_SWIZZLE > 0
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
@@ -1583,6 +1659,7 @@ void set_gemm_kernel_attributes() {
                                 GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                                 GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                                 GEMM_CSTORE_SWIZZLE_128B,
+                                kSinglePipeline,
                                 kTuningTagGeneric>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned8KGroupM,
@@ -1590,6 +1667,7 @@ void set_gemm_kernel_attributes() {
                                 kTuned8KTmaPhaseCycles,
                                 kTuned8KMmaPhaseCycles,
                                 kTuned8KCStoreSwizzle128B,
+                                kSinglePipeline,
                                 kTuningTag8K>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned16KGroupM,
@@ -1597,6 +1675,7 @@ void set_gemm_kernel_attributes() {
                                 kTuned16KTmaPhaseCycles,
                                 kTuned16KMmaPhaseCycles,
                                 kTuned16KCStoreSwizzle128B,
+                                kSinglePipeline,
                                 kTuningTag16K>();
   set_one_gemm_kernel_attribute<GEMM_GRID_SWIZZLE,
                                 kTuned32KGroupM,
@@ -1604,6 +1683,7 @@ void set_gemm_kernel_attributes() {
                                 kTuned32KTmaPhaseCycles,
                                 kTuned32KMmaPhaseCycles,
                                 kTuned32KCStoreSwizzle128B,
+                                kSinglePipeline,
                                 kTuningTag32K>();
 #endif
 }
@@ -1633,6 +1713,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                  kTuned8KTmaPhaseCycles,
                                  kTuned8KMmaPhaseCycles,
                                  kTuned8KCStoreSwizzle128B,
+                                 kSinglePipeline,
                                  kTuningTag8K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1646,6 +1727,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                  kTuned16KTmaPhaseCycles,
                                  kTuned16KMmaPhaseCycles,
                                  kTuned16KCStoreSwizzle128B,
+                                 kSinglePipeline,
                                  kTuningTag16K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1659,6 +1741,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                  kTuned32KTmaPhaseCycles,
                                  kTuned32KMmaPhaseCycles,
                                  kTuned32KCStoreSwizzle128B,
+                                 kSinglePipeline,
                                  kTuningTag32K>
           <<<grid, block, kDynamicSmemBytes>>>(
               a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1671,6 +1754,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                                GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                                GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                                GEMM_CSTORE_SWIZZLE_128B,
+                               kSinglePipeline,
                                kTuningTagGeneric>
         <<<grid, block, kDynamicSmemBytes>>>(
             a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -1684,6 +1768,7 @@ void launch_gemm_kernel(const GemmTuning& tuning,
                              GEMM_PIPE1_TMA_PHASE_SHIFT_CYCLES,
                              GEMM_PIPE1_MMA_PHASE_SHIFT_CYCLES,
                              GEMM_CSTORE_SWIZZLE_128B,
+                             kSinglePipeline,
                              kTuningTagGeneric>
       <<<grid, block, kDynamicSmemBytes>>>(
           a_map, b_map, c_map, d_sink, d_c, out_ld, store_mode, ktiles,
@@ -2187,7 +2272,7 @@ int main(int argc, char** argv) {
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
                "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
                "pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,"
-               "cstore_swizzle_128b,"
+               "cstore_swizzle_128b,single_pipeline,"
                "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
                "store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
@@ -2208,7 +2293,7 @@ int main(int argc, char** argv) {
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
               "tma_l2_promotion_c=%d tuned8k_tma_l2=%d/%d/%d "
               "cstore_swizzle_128b=%d cstore_vectorize_smem=%d "
-              "store_mode=%s c_type=%s\n",
+              "single_pipeline=%d store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
               kPipe1TmaPhaseShiftCycles, kPipe1MmaPhaseShiftCycles,
@@ -2230,6 +2315,7 @@ int main(int argc, char** argv) {
               static_cast<int>(GEMM_TUNED_8K_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_C_L2_PROMOTION),
               GEMM_CSTORE_SWIZZLE_128B, GEMM_CSTORE_VECTORIZE_SMEM,
+              kSinglePipeline,
               store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
 
@@ -2238,26 +2324,26 @@ int main(int argc, char** argv) {
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
                 "pipe1_tma_phase=%d pipe1_mma_phase=%d "
-                "cstore_swizzle_128b=%d "
+                "cstore_swizzle_128b=%d single_pipeline=%d "
                 "tma_l2=%d/%d/%d "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
                 r.group_m, r.group_n, r.pipe1_phase_cycles,
                 r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
-                r.cstore_swizzle_128b,
+                r.cstore_swizzle_128b, kSinglePipeline,
                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                 r.tma_c_l2_promotion,
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
                  r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
-                 r.cstore_swizzle_128b,
+                 r.cstore_swizzle_128b, kSinglePipeline,
                  r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                  r.tma_c_l2_promotion,
                  store_mode_name(r.store_mode),
