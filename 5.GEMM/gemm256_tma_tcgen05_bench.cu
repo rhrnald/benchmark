@@ -20,6 +20,10 @@
 #define GEMM_SINGLE_PIPELINE 0
 #endif
 
+#ifndef GEMM_SINGLE_PIPELINE_NTILE_128
+#define GEMM_SINGLE_PIPELINE_NTILE_128 0
+#endif
+
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
 #define GEMM_PIPE1_PHASE_SHIFT_CYCLES 512
 #endif
@@ -196,14 +200,17 @@ namespace {
 static constexpr int kThreadsPerWarp = 32;
 static constexpr int kWarps = 4;
 static constexpr int kThreads = kWarps * kThreadsPerWarp;
+static constexpr int kSinglePipeline = GEMM_SINGLE_PIPELINE;
+static constexpr int kSinglePipelineNtile128 = GEMM_SINGLE_PIPELINE_NTILE_128;
 static constexpr int kCtaM = 256;
-static constexpr int kCtaN = 256;
 static constexpr int kStageK = 64;
 static constexpr int kMmaM = 128;
 static constexpr int kMmaN = 128;
 static constexpr int kMmaK = 16;
+static constexpr int kCtaN =
+    (kSinglePipeline && kSinglePipelineNtile128) ? kMmaN : 256;
 static constexpr int kStages = 3;
-static constexpr int kPipes = 2;
+static constexpr int kPipes = kCtaN / kMmaN;
 static constexpr int kAStageWords = kCtaM * kStageK / 2;
 static constexpr int kBStageWords = kStageK * kCtaN / 2;
 static constexpr int kBPipeWords = kStageK * kMmaN / 2;
@@ -234,7 +241,6 @@ static constexpr int kDynamicSmemBytes =
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
-static constexpr int kSinglePipeline = GEMM_SINGLE_PIPELINE;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles =
     GEMM_PIPE1_PHASE_SHIFT_CYCLES;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles8K =
@@ -1111,7 +1117,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
       issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                              kt, 0, nullptr, 0, 0, trace_base_shared, 0, 0);
-      if constexpr (SinglePipeline != 0) {
+      if constexpr (SinglePipeline != 0 && kPipes > 1) {
         uint32_t* b1_smem = b_smem + kBPipeWords;
         issue_b_pipe_stage_tma(&b_map, b1_smem, &b_ready[1][stage], tile_n,
                                kt, 1, nullptr, 0, 0, trace_base_shared, 1, 0);
@@ -1188,7 +1194,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
           write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
                              trace_base_shared, kTraceMmaIssue, kt, 4 + pipe,
                              warp_id, mma_issue_start, mma_issue_end);
+        }
 
+#pragma unroll
+        for (int pipe = 0; pipe < kPipes; ++pipe) {
           const unsigned long long mma_wait_start =
               clock_trace != nullptr ? clock64() : 0ull;
           mbarrier_wait(&mma_done[pipe], static_cast<uint32_t>(kt & 1));
@@ -1265,7 +1274,12 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     if (store_mode == kStoreNone) {
       const unsigned long long drain_start =
           lane0 && clock_trace != nullptr ? clock64() : 0ull;
-      acc ^= consume_128x128(c_taddr[warp_id]);
+      if constexpr (kPipes > 1) {
+        acc ^= consume_128x128(c_taddr[warp_id]);
+      } else {
+        if (warp_id == 0) acc ^= consume_128x128(c_taddr[0]);
+        if (warp_id == 2) acc ^= consume_128x128(c_taddr[2]);
+      }
       const unsigned long long drain_end =
           lane0 && clock_trace != nullptr ? clock64() : 0ull;
       if (lane0) {
@@ -1283,12 +1297,14 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     const int global_col_base = tile_n * kCtaN;
     store_128x128_float_tile(c_taddr[0], out, out_ld, global_row_base,
                              global_col_base);
-    store_128x128_float_tile(c_taddr[1], out, out_ld, global_row_base,
-                             global_col_base + 128);
     store_128x128_float_tile(c_taddr[2], out, out_ld, global_row_base + 128,
                              global_col_base);
-    store_128x128_float_tile(c_taddr[3], out, out_ld, global_row_base + 128,
-                             global_col_base + 128);
+    if constexpr (kPipes > 1) {
+      store_128x128_float_tile(c_taddr[1], out, out_ld, global_row_base,
+                               global_col_base + 128);
+      store_128x128_float_tile(c_taddr[3], out, out_ld, global_row_base + 128,
+                               global_col_base + 128);
+    }
   } else if (out != nullptr && store_mode == kStoreTma) {
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
@@ -2272,7 +2288,7 @@ int main(int argc, char** argv) {
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
                "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
                "pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,"
-               "cstore_swizzle_128b,single_pipeline,"
+               "cstore_swizzle_128b,single_pipeline,single_pipeline_ntile_128,"
                "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
                "store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
@@ -2293,7 +2309,8 @@ int main(int argc, char** argv) {
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
               "tma_l2_promotion_c=%d tuned8k_tma_l2=%d/%d/%d "
               "cstore_swizzle_128b=%d cstore_vectorize_smem=%d "
-              "single_pipeline=%d store_mode=%s c_type=%s\n",
+              "single_pipeline=%d single_pipeline_ntile_128=%d "
+              "store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
               kPipe1TmaPhaseShiftCycles, kPipe1MmaPhaseShiftCycles,
@@ -2315,7 +2332,7 @@ int main(int argc, char** argv) {
               static_cast<int>(GEMM_TUNED_8K_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_C_L2_PROMOTION),
               GEMM_CSTORE_SWIZZLE_128B, GEMM_CSTORE_VECTORIZE_SMEM,
-              kSinglePipeline,
+              kSinglePipeline, kSinglePipelineNtile128,
               store_mode_name(args.store_mode),
               args.store_mode == kStoreNone ? "none" : "fp32");
 
@@ -2325,6 +2342,7 @@ int main(int argc, char** argv) {
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
                 "pipe1_tma_phase=%d pipe1_mma_phase=%d "
                 "cstore_swizzle_128b=%d single_pipeline=%d "
+                "single_pipeline_ntile_128=%d "
                 "tma_l2=%d/%d/%d "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
@@ -2332,18 +2350,20 @@ int main(int argc, char** argv) {
                 r.group_m, r.group_n, r.pipe1_phase_cycles,
                 r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                 r.cstore_swizzle_128b, kSinglePipeline,
+                kSinglePipelineNtile128,
                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                 r.tma_c_l2_promotion,
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
                  r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                  r.cstore_swizzle_128b, kSinglePipeline,
+                 kSinglePipelineNtile128,
                  r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                  r.tma_c_l2_promotion,
                  store_mode_name(r.store_mode),
