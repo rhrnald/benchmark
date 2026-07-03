@@ -81,14 +81,12 @@ PROFILE_FLAGS += -DATTENTION_O_CHECKSUM=1
 PROFILE_SUFFIX := $(PROFILE_SUFFIX)_ck
 endif
 # CAUSAL=1: run the benchmark/validation with the causal mask. Runtime flag
-# (same kernel binary, dynamic <0,0,true> dispatch), but only the base build
-# supports it -- the persistent scr schedule assumes a fixed trip count.
+# (same kernel binary, dynamic <0,0,true> dispatch). Supported by the base
+# profile and by PERSIST=1 (flat-causal schedule); the causal BEST table is
+# not measured yet, so CAUSAL=1 BEST=1 is rejected.
 ifeq ($(CAUSAL),1)
-ifeq ($(PERSIST),1)
-$(error CAUSAL=1 requires the base profile; unset PERSIST)
-endif
 ifeq ($(BEST),1)
-$(error CAUSAL=1 requires the base profile; the BEST table is non-causal (scr <=4k))
+$(error CAUSAL=1 BEST=1: the BEST table is non-causal; pick base or PERSIST=1 explicitly)
 endif
 RUN_EXTRA_ARGS := --causal
 VALIDATE_EXTRA_ARGS := --causal

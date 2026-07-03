@@ -500,13 +500,14 @@ double tflops_from_flops(double flops, double ms) {
 using AttentionKernel = decltype(&qk_tma_mma_ld_kernel<0, 0>);
 
 AttentionKernel select_attention_kernel(int repeats, int k_tiles, bool causal) {
-#if !ATTENTION_PERSISTENT
+#if !ATTENTION_PERSISTENT || ATTENTION_CONTINUOUS_FLAT
   // Causal is a compile-time template (kCausal) so the non-causal
   // instantiations keep all masking code out of the hot path. Causal also
-  // needs the dynamic per-block trip count, so it always uses the <0,0,true>
-  // instantiation; the fixed-shape fast paths stay non-causal only. The
-  // persistent builds never reference a kCausal=true instantiation (the
-  // kernel static_asserts against it); callers reject causal before here.
+  // needs the dynamic per-tile trip count, so it always uses the <0,0,true>
+  // instantiation; the fixed-shape fast paths stay non-causal only. Supported
+  // in the base build and the CONTINUOUS_FLAT (scr) build; the QK-peel
+  // persistent variant never references a kCausal=true instantiation (the
+  // kernel static_asserts against it) and callers reject causal before here.
   if (causal) {
     return qk_tma_mma_ld_kernel<0, 0, true>;
   }
@@ -557,10 +558,18 @@ RunResult run_kernel(const Args& args,
 #endif
                      ) {
   RunResult result{};
-#if ATTENTION_PERSISTENT
+#if ATTENTION_PERSISTENT && !ATTENTION_CONTINUOUS_FLAT
   if (args.causal) {
     result.error = cudaErrorInvalidValue;
-    result.status = "causal_requires_base_build";
+    result.status = "causal_requires_base_or_flat_build";
+    return result;
+  }
+#endif
+#if ATTENTION_CONTINUOUS_FLAT
+  // FlatCausalSched needs whole windows (W = blocks / k_tiles exact).
+  if (args.causal && args.blocks % args.k_tiles != 0) {
+    result.error = cudaErrorInvalidValue;
+    result.status = "causal_flat_requires_blocks_multiple_of_k_tiles";
     return result;
   }
 #endif
@@ -1778,8 +1787,9 @@ void parse_args(int argc, char** argv, Args* args) {
           "  --blocks N --k-tiles N --warmup N --iters N\n"
           "  fixed path: contiguous Q/K 2D SW128 TMA, contiguous V k16 SW128 MN-major,\n"
           "              split S-ready, QK/PV pingpong dep, BF16 output store\n"
-          "  --causal                       causal mask (square windows, base build only);\n"
-          "                                 block qb of each k_tiles-window walks k tiles [0, qb]\n"
+          "  --causal                       causal mask (square windows; base build or\n"
+          "                                 CONTINUOUS_FLAT build); query tile qb of each\n"
+          "                                 k_tiles-window walks k tiles [0, qb]\n"
           "  --clock-trace --clock-trace-start N --clock-trace-iters N   write output-path clock trace CSV; requires -DATTENTION_CLOCK_TRACE=1\n"
           "\n"
           "Fused real-attention validation path:\n"
@@ -1952,11 +1962,11 @@ bool prepare_fused_real_attention_args(const Args& args, Args* out) {
                  out->B, out->Hq, out->Hkv);
     return false;
   }
-#if ATTENTION_PERSISTENT
+#if ATTENTION_PERSISTENT && !ATTENTION_CONTINUOUS_FLAT
   if (out->causal) {
     std::fprintf(stderr,
-                 "causal requires the base (non-persistent) build; rebuild "
-                 "without PERSIST/CONTINUOUS_FLAT flags\n");
+                 "causal requires the base or CONTINUOUS_FLAT build; the "
+                 "QK-peel persistent variant does not support it\n");
     return false;
   }
 #endif
@@ -2031,11 +2041,11 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
 
   // Validate on the literal <0,0> kernels (same instantiations the causal /
   // dynamic benchmark dispatch uses).
-#if !ATTENTION_PERSISTENT
+#if !ATTENTION_PERSISTENT || ATTENTION_CONTINUOUS_FLAT
   auto kernel = args.causal ? qk_tma_mma_ld_kernel<0, 0, true>
                             : qk_tma_mma_ld_kernel<0, 0, false>;
 #else
-  // prepare_fused_real_attention_args rejected causal in persistent builds.
+  // prepare_fused_real_attention_args rejected causal in QK-peel builds.
   auto kernel = qk_tma_mma_ld_kernel<0, 0>;
 #endif
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
@@ -2070,6 +2080,27 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
                 args.pattern.c_str());
   CompareResult result = compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
   set_validation_checksum(&result, validation_checksum_vector(h_o));
+#if ATTENTION_VALIDATE_DUMP
+  // Autopsy aid: dump got/ref of every run so wrong runs can be diffed
+  // element-wise offline (which rows/halves broke -> which warp/pipe/iter).
+  {
+    static int dump_idx = 0;
+    char path[160];
+    std::snprintf(path, sizeof(path), "out/vdump_%02d_got.bin", dump_idx);
+    if (FILE* f = std::fopen(path, "wb")) {
+      std::fwrite(h_o.data(), sizeof(uint32_t), h_o.size(), f);
+      std::fclose(f);
+    }
+    std::snprintf(path, sizeof(path), "out/vdump_%02d_ref.bin", dump_idx);
+    if (FILE* f = std::fopen(path, "wb")) {
+      std::fwrite(ref.data(), sizeof(float), ref.size(), f);
+      std::fclose(f);
+    }
+    std::printf("VDUMP idx=%02d ok=%d words=%zu\n", dump_idx,
+                result.ok ? 1 : 0, h_o.size());
+    ++dump_idx;
+  }
+#endif
   return result;
 }
 
@@ -2088,11 +2119,11 @@ int run_fused_real_validation(const Args& args) {
         {1, 4, false, "rank1", "fused_real_attention_rank1_k4"},
         {1, 4, false, "random", "fused_real_attention_random_k4"},
         {1, 8, false, "random", "fused_real_attention_random_k8"},
-#if !ATTENTION_PERSISTENT
-        // Causal cases are base-build only (persistent schedules assume a
-        // fixed trip count; the host rejects causal there). Single query tile
+#if !ATTENTION_PERSISTENT || ATTENTION_CONTINUOUS_FLAT
+        // Causal cases run in the base build and the CONTINUOUS_FLAT (scr)
+        // build (the QK-peel variant rejects causal). Single query tile
         // exercises the bottom-right mask; the sq* cases exercise the dynamic
-        // per-block trip count and the LPT remap (multi-tile grids).
+        // per-tile trip count and the LPT remap (multi-tile grids).
         {1, 1, true, "constant", "fused_real_attention_causal_constant_k1"},
         {1, 4, true, "rank1", "fused_real_attention_causal_rank1_k4"},
         {1, 4, true, "random", "fused_real_attention_causal_random_k4"},
@@ -2207,11 +2238,11 @@ int run_benchmark(const Args& args_in) {
     return 2;
   }
 #endif
-#if ATTENTION_PERSISTENT
+#if ATTENTION_PERSISTENT && !ATTENTION_CONTINUOUS_FLAT
   if (args.causal) {
     std::fprintf(stderr,
-                 "--causal requires the base (non-persistent) build; rebuild "
-                 "without PERSIST/CONTINUOUS_FLAT flags.\n");
+                 "--causal requires the base or CONTINUOUS_FLAT build; the "
+                 "QK-peel persistent variant does not support it.\n");
     return 2;
   }
 #endif

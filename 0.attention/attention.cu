@@ -1397,23 +1397,27 @@ attention_row_sum_update_h1_cold(uint32_t row_taddr,
 }
 #endif
 
-// Per-iteration causal column-limit base for the consumer. A causal block
-// walks k tiles [0, diagonal] in order with the diagonal as the LAST local
-// tile (loop_repeats == diagonal_tile + 1), so base =
-// (loop_repeats-1 - iter) * kTileN gives the diagonal tile base==0
+// Per-iteration causal column-limit base for the consumer. A causal tile
+// walks k tiles [0, diagonal] in order with the diagonal as the LAST unpadded
+// tile (mask_repeats == diagonal_tile + 1), so base =
+// (mask_repeats-1 - iter) * kTileN gives the diagonal tile base==0
 // (col <= row, bottom-right aligned) and every earlier tile a positive
-// multiple of kTileN, which disables masking. Templated on kCausal so the
+// multiple of kTileN, which disables masking. Iterations beyond
+// mask_repeats-1 (the flat-causal padding, which revisits the diagonal
+// k-tile) clamp back to the diagonal base. In the base path loop_repeats ==
+// mask_repeats and the clamp is a no-op. Templated on kCausal so the
 // non-causal path returns the compile-time kCausalNoMask sentinel, letting
 // causal_mask_x64 (forceinline) fold its branch and drop the masking loop.
 template <bool kCausal>
 __device__ __forceinline__ int attention_causal_col_limit_base(
-    int iter, int loop_repeats) {
+    int iter, int mask_repeats) {
   if constexpr (!kCausal) {
     (void)iter;
-    (void)loop_repeats;
+    (void)mask_repeats;
     return kCausalNoMask;
   } else {
-    return (loop_repeats - 1 - iter) * kTileN;
+    const int t = iter < mask_repeats - 1 ? iter : mask_repeats - 1;
+    return (mask_repeats - 1 - t) * kTileN;
   }
 }
 
@@ -1437,6 +1441,52 @@ __device__ __forceinline__ int attention_q_global_tile(int q_tiles) {
   }
 }
 
+// Work schedule for the CONTINUOUS_FLAT causal path. Ranks are LPT-ordered
+// (trips descending): rank r covers level r/W (qb = q_tiles-1-level) of
+// window r%W, so a CTA's strided ranks {bx + j*gx} sample every trip level
+// evenly (static load balance) and the launch tail holds only short tiles.
+// Trips are bottom-right aligned: R = qb + (k_tiles - q_tiles) + 1. Tiles
+// with R == 1 are padded to two iterations that BOTH visit the diagonal
+// k-tile under the same mask; the softmax merge divides the duplication out
+// exactly (2a/(2b) == a/b in binary FP), so padding is bit-neutral and every
+// pipe gets >= 1 iteration per tile, which the flat barrier protocol
+// (qk_all_done / pv_tile_done arrive counts, per-pipe phase parity) needs.
+// Requires total_tiles % q_tiles == 0 (host-checked).
+struct FlatCausalSched {
+  int W;  // number of windows = total_tiles / q_tiles
+  int q_tiles;
+  int k_tiles;
+  int bx;
+  int gx;
+  __device__ __forceinline__ int rank(int j) const { return bx + j * gx; }
+  __device__ __forceinline__ int tile_of(int j) const {
+    const int r = rank(j);
+    const int level = r / W;
+    return (r - level * W) * q_tiles + (q_tiles - 1 - level);
+  }
+  __device__ __forceinline__ int trips_of(int j) const {
+    const int level = rank(j) / W;
+    return (q_tiles - 1 - level) + (k_tiles - q_tiles) + 1;
+  }
+  __device__ __forceinline__ int kv_base_of(int j) const {
+    return (rank(j) % W) * k_tiles;
+  }
+  // Padded per-tile iteration count (>= 2).
+  static __device__ __forceinline__ int padded(int trips) {
+    return trips < 2 ? 2 : trips;
+  }
+  // Iterations pipe `pipe` runs for a tile with `padded_trips` iterations.
+  static __device__ __forceinline__ int np_of(int padded_trips, int pipe) {
+    return (padded_trips - pipe + kActivePipeStride - 1) / kActivePipeStride;
+  }
+  // K-tile visited by iteration `iter` of tile j; the padded iteration
+  // (iter == trips when trips was 1) revisits the diagonal.
+  __device__ __forceinline__ int k_tile_of(int j, int iter) const {
+    const int trips = trips_of(j);
+    return iter < trips ? iter : trips - 1;
+  }
+};
+
 template <bool kCausal = false>
 __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     uint32_t* const (&s_smem)[kPipeCount],
@@ -1451,6 +1501,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     int pipe,
     int consumer_warp,
     int loop_repeats,
+    int mask_repeats,
     float score_to_exp2_scale,
     bool do_row_sum,
     bool det_cold,
@@ -1481,7 +1532,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
     const int causal_base =
-        attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
+        attention_causal_col_limit_base<kCausal>(iter, mask_repeats);
 #if ATTENTION_FIRST_ITER_COMPUTE_MAX
     row_max_reg = tcgen05_ld_x64_wait_row_max_scaled_nvcc(
         row_taddr, score_to_exp2_scale, consumer_warp, 0, causal_base);
@@ -1530,7 +1581,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
       const uint32_t row_taddr =
           p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
       const int causal_base =
-          attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
+          attention_causal_col_limit_base<kCausal>(iter, mask_repeats);
       float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
           row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
           score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
@@ -1538,7 +1589,12 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
       const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h0_update)) {
         if (det_cold) {
-          mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+          // pv_done flips once per pipe-iteration, so its cumulative parity
+          // carries across tiles exactly like qk_done's (flat-causal tiles
+          // can have odd per-tile counts; non-causal passes carry 0).
+          mbarrier_wait(&pv_done[pipe],
+                        static_cast<uint32_t>((local - 1) & 1) ^
+                            (kCausal ? qk_done_carry : 0u));
           tcgen05_fence_after_thread_sync();
         }
         RowSumUpdateH0Result update_result =
@@ -1560,7 +1616,12 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
       const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h1_update)) {
         if (det_cold) {
-          mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+          // pv_done flips once per pipe-iteration, so its cumulative parity
+          // carries across tiles exactly like qk_done's (flat-causal tiles
+          // can have odd per-tile counts; non-causal passes carry 0).
+          mbarrier_wait(&pv_done[pipe],
+                        static_cast<uint32_t>((local - 1) & 1) ^
+                            (kCausal ? qk_done_carry : 0u));
           tcgen05_fence_after_thread_sync();
         }
         RowSumUpdateH1Result update_result =
@@ -1589,7 +1650,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
     const int causal_base =
-        attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
+        attention_causal_col_limit_base<kCausal>(iter, mask_repeats);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     float row_sum0;
     float row_sum1;
@@ -1601,7 +1662,9 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h0_update)) {
       if (det_cold) {
-        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+        mbarrier_wait(&pv_done[pipe],
+                      static_cast<uint32_t>((local - 1) & 1) ^
+                            (kCausal ? qk_done_carry : 0u));
         tcgen05_fence_after_thread_sync();
       }
       RowSumUpdateH0Result update_result =
@@ -1631,7 +1694,9 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const bool trigger_h1_update = !(row_sum1 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h1_update)) {
       if (det_cold) {
-        mbarrier_wait(&pv_done[pipe], static_cast<uint32_t>((local - 1) & 1));
+        mbarrier_wait(&pv_done[pipe],
+                      static_cast<uint32_t>((local - 1) & 1) ^
+                            (kCausal ? qk_done_carry : 0u));
         tcgen05_fence_after_thread_sync();
       }
       RowSumUpdateH1Result update_result =
@@ -1663,7 +1728,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
     const int causal_base =
-        attention_causal_col_limit_base<kCausal>(iter, loop_repeats);
+        attention_causal_col_limit_base<kCausal>(iter, mask_repeats);
 #if ATTENTION_ROW_MAX_ONLY
     static_assert(!kCausal,
                   "causal is not wired into the ROW_MAX_ONLY probe path");
@@ -1896,11 +1961,13 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
 #endif
 #else
 #if ATTENTION_PERSISTENT
-  // Causal is only wired into the base (non-persistent) build: the persistent
-  // schedules assume a fixed trip count per query tile (flat-loop indexing,
-  // cross-tile barrier-phase carry), so the host rejects --causal there and
-  // must never instantiate <.,.,true> in these builds.
-  static_assert(!kCausal, "kCausal requires the base (non-persistent) build");
+#if !ATTENTION_CONTINUOUS_FLAT
+  // Causal is wired into the base build and the CONTINUOUS_FLAT schedule
+  // (FlatCausalSched). The remaining persistent variant (QK peel) assumes a
+  // fixed trip count per query tile, so the host rejects --causal there and
+  // must never instantiate <.,.,true> in those builds.
+  static_assert(!kCausal, "kCausal requires the base or CONTINUOUS_FLAT build");
+#endif
   const int loop_repeats = kFixedRepeats > 0 ? kFixedRepeats : repeats;
   const int loop_k_tiles = kFixedKTiles > 0 ? kFixedKTiles : k_tiles;
   (void)q_tiles;
@@ -2086,6 +2153,183 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
         tcgen05_commit(&qk_done[pipe]);
       }
+      if constexpr (kCausal) {
+      // Flat-causal: same protocol as the fixed-R loop below, but the tile
+      // boundary positions come from per-tile trip counts (FlatCausalSched)
+      // tracked incrementally instead of gl%/n_p. Per-pipe barrier phases stay
+      // `gl & 1` because every barrier still flips exactly once per pipe
+      // iteration; only tile-indexed phases (q_ready, pv_tile_done,
+      // qk_seam_done, o_drained) use the per-CTA tile counter j, which is
+      // common to every warp. A tile whose pipe count np is 1 routes its ONLY
+      // PV through the seam block, so unlike the fixed-R seam the PV here may
+      // have to initialize O (accum=false) and take the o_drained wait.
+      const FlatCausalSched sc{total_tiles / q_tiles, q_tiles, k_tiles, bx, gx};
+      int j = 0;
+      int L = 0;
+      int np = FlatCausalSched::np_of(FlatCausalSched::padded(sc.trips_of(0)),
+                                      pipe);
+      int gl = 0;
+      int prevL = 0;
+      int prevj = 0;
+      for (;;) {
+        prevL = L;
+        prevj = j;
+        ++gl;
+        ++L;
+        if (L == np) {
+          L = 0;
+          ++j;
+          if (j < J) {
+            np = FlatCausalSched::np_of(
+                FlatCausalSched::padded(sc.trips_of(j)), pipe);
+          }
+        }
+        if (j >= J) break;
+#if ATTENTION_FLAT_DEBUG
+        g_dbg_gl[warp_id] = gl;
+#endif
+        const uint32_t ph = static_cast<uint32_t>(gl & 1);
+        const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
+        if (L == 0) {
+          // Tile boundary: finish the previous tile's LAST PV, then issue the
+          // seam QK of tile j (committed to qk_seam_done; the consumer
+          // replays it into qk_done after draining O).
+          mbarrier_wait(&qk_done[pipe], pph);
+          if (lane0) mbarrier_arrive(&qk_all_done);
+          const bool pv_accum = (prevL != 0);
+          mbarrier_wait(&v_ready[pipe], pph);
+#if ATTENTION_FLAT_SEAM_PVH0_AFTER_SH1
+          mbarrier_wait(&s_h1_done[pipe], pph);
+#endif
+          if (lane0) {
+            if (!pv_accum && prevj > 0 && has_output) {
+#if ATTENTION_FLAT_O_LD_DONE
+              mbarrier_wait(&o_ld_done, o_wait & 1u);
+#else
+              mbarrier_wait(&o_drained, o_wait & 1u);
+#endif
+              ++o_wait;
+            }
+#pragma unroll
+            for (int mma = 0; mma < kMmasPerTile / 2; ++mma)
+              tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                  pv_idesc, pv_accum || mma != 0);
+          }
+          mbarrier_wait(&s_h1_done[pipe], pph);
+          mbarrier_wait(&v_h1_ready[pipe], pph);
+          if (lane0) {
+#pragma unroll
+            for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
+              tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                  pv_idesc, true);
+            tcgen05_commit(&pv_done[pipe]);
+          }
+          mbarrier_wait(&pv_done[pipe], pph);
+          if (lane0) mbarrier_arrive(&pv_tile_done);
+          mbarrier_wait(&q_ready, static_cast<uint32_t>(j & 1));
+          mbarrier_wait(&k_ready[pipe], ph);
+          mbarrier_wait(&p_done[pipe], pph);
+          if (lane0) {
+#pragma unroll
+            for (int mma = 0; mma < kMmasPerTile; ++mma)
+              tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc,
+                                  mma != 0);
+            // np==1 tiles: this seam QK is also the tile's LAST QK. Routing
+            // its qk_done flip through the consumer replay (which only runs
+            // after THIS tile's O drain) closes a dependency cycle:
+            // drain <- pv_tile_done <- this tile's PV <- v_ready <- TMA V
+            // issue <- TMA K-lookahead qk_done wait <- replay <- drain.
+            // Commit it directly instead; the consumer replay skips these
+            // tiles (matching np>=2 test + its own seam parity counter).
+            if (has_output && np >= 2) {
+              tcgen05_commit(&qk_seam_done[pipe * 16]);
+            } else {
+              tcgen05_commit(&qk_done[pipe]);
+            }
+          }
+          continue;
+        }
+        mbarrier_wait(&k_ready[pipe], ph);
+        mbarrier_wait(&p_done[pipe], pph);
+        if (lane0) {
+#pragma unroll
+          for (int mma = 0; mma < kMmasPerTile; ++mma)
+            tcgen05_mma_bf16_ss(p_taddr[pipe], q_desc[mma], k_desc[mma], idesc, mma != 0);
+        }
+        const bool pv_accum = (prevL != 0);
+        mbarrier_wait(&v_ready[pipe], pph);
+        if (lane0) {
+          if (!pv_accum && prevj > 0 && has_output) {
+#if ATTENTION_FLAT_O_LD_DONE
+            mbarrier_wait(&o_ld_done, o_wait & 1u);
+#else
+            mbarrier_wait(&o_drained, o_wait & 1u);
+#endif
+            ++o_wait;
+          }
+#pragma unroll
+          for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);
+          tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+          for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);
+        }
+        mbarrier_wait(&s_h1_done[pipe], pph);
+        mbarrier_wait(&v_h1_ready[pipe], pph);
+        if (lane0) {
+#pragma unroll
+          for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+          tcgen05_commit(&pv_done[pipe]);
+        }
+      }
+      {
+        // Tail: PV of the final iteration + final handshakes.
+        const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
+        const bool pv_accum = (prevL != 0);
+        if (lane0) mbarrier_arrive(&qk_all_done);
+        mbarrier_wait(&v_ready[pipe], pph);
+        // h0-pack visibility: the base tail waits p_done before PV h0 (the
+        // consumer packs S h0 into s_smem before its p_done arrive); the
+        // fixed-R flat tail omits it and relies on the consumer being far
+        // ahead, which short causal tiles (np as low as 1) do NOT guarantee.
+        // Without this, PV h0 read a fresh-smem zero P (k1/k8 first-run
+        // corruption: O collapsed to the h1-only contribution).
+        mbarrier_wait(&p_done[pipe], pph);
+        if (lane0) {
+          if (!pv_accum && prevj > 0 && has_output) {
+#if ATTENTION_FLAT_O_LD_DONE
+            mbarrier_wait(&o_ld_done, o_wait & 1u);
+#else
+            mbarrier_wait(&o_drained, o_wait & 1u);
+#endif
+            ++o_wait;
+          }
+#pragma unroll
+          for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);
+          tcgen05_commit(&qk_done[pipe]);
+#pragma unroll
+          for (int mma = ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8; mma < kMmasPerTile / 2; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                                pv_idesc, pv_accum || mma != 0);
+        }
+        mbarrier_wait(&s_h1_done[pipe], pph);
+        mbarrier_wait(&v_h1_ready[pipe], pph);
+        if (lane0) {
+#pragma unroll
+          for (int mma = kMmasPerTile / 2; mma < kMmasPerTile; ++mma)
+            tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma], pv_idesc, true);
+          tcgen05_commit(&pv_done[pipe]);
+        }
+        mbarrier_wait(&pv_done[pipe], pph);
+        if (lane0) mbarrier_arrive(&pv_tile_done);
+      }
+      } else {
       for (int gl = 1; gl < G; ++gl) {
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = gl;
@@ -2223,12 +2467,111 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         mbarrier_wait(&pv_done[pipe], pph);
         if (lane0) mbarrier_arrive(&pv_tile_done);
       }
+      }
     } else if (J > 0 && (warp_id == 2 || warp_id == 3)) {
       const int pipe = warp_id - 2;
       const int n_p = (R - pipe + kActivePipeStride - 1) / kActivePipeStride;
       const int G = J * n_p;
       unsigned int store_wait = 0u;
       unsigned int qa_wait = 0u;
+      if constexpr (kCausal) {
+      // Flat-causal TMA: identical protocol, but tile boundaries / K-V tile
+      // indices come from FlatCausalSched counters, the next-iteration
+      // lookahead is a simulated counter increment, and Q/O addressing uses
+      // the LPT-mapped tile. Padded iterations (trips==1 tiles) reload the
+      // diagonal K/V tile.
+      const FlatCausalSched sc{total_tiles / q_tiles, q_tiles, k_tiles, bx, gx};
+      if (warp_id == 2) {
+        mbarrier_expect_tx(&q_ready, kTileBytes);
+        if (lane0) {
+          const uint32_t q_addr = smem_ptr_u32(q_smem);
+          const int q_row = sc.tile_of(0) * kTileM;
+          tma_load_2d(&q_map, q_addr, &q_ready, 0, q_row);
+          tma_load_2d(&q_map, q_addr + kTileBytes / 2, &q_ready, 32, q_row);
+        }
+      }
+      {
+        const int gkt = sc.kv_base_of(0) + sc.k_tile_of(0, pipe);
+        issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], gkt, lane0);
+        issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0, lane0);
+        issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1, lane0);
+      }
+      int j = 0;
+      int L = 0;
+      int np = FlatCausalSched::np_of(FlatCausalSched::padded(sc.trips_of(0)),
+                                      pipe);
+      int gl = 0;
+      for (;;) {
+#if ATTENTION_FLAT_DEBUG
+        g_dbg_gl[warp_id] = gl;
+#endif
+        const uint32_t ph = static_cast<uint32_t>(gl & 1);
+        const uint32_t pph = static_cast<uint32_t>((gl - 1) & 1);
+        int nj = j;
+        int nL = L + 1;
+        if (nL == np) {
+          nL = 0;
+          ++nj;
+        }
+        const bool has_next = nj < J;
+        if (L == 0 && j > 0 && warp_id == 2) {
+          mbarrier_wait(&qk_all_done, qa_wait & 1u);
+          ++qa_wait;
+          mbarrier_expect_tx(&q_ready, kTileBytes);
+          if (lane0) {
+            const uint32_t q_addr = smem_ptr_u32(q_smem);
+            const int q_row = sc.tile_of(j) * kTileM;
+            tma_load_2d(&q_map, q_addr, &q_ready, 0, q_row);
+            tma_load_2d(&q_map, q_addr + kTileBytes / 2, &q_ready, 32, q_row);
+          }
+        }
+        if (has_next) {
+          const int niter = nL * kActivePipeStride + pipe;
+          const int ngkt = sc.kv_base_of(nj) + sc.k_tile_of(nj, niter);
+          mbarrier_wait(&qk_done[pipe], ph);
+          issue_k_tma_tile(&k_map, k_smem[pipe], &k_ready[pipe], ngkt, lane0);
+        }
+        if (L == 0 && j > 0 && warp_id == 2 && has_output && lane0) {
+          mbarrier_wait(&o_drained, store_wait & 1u);
+          ++store_wait;
+          tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, sc.tile_of(j - 1), 0);
+          tma_store_commit_group();
+          tma_store_wait_group_read();
+        }
+        if (gl > 0) {
+          const int iter = L * kActivePipeStride + pipe;
+          const int gkt = sc.kv_base_of(j) + sc.k_tile_of(j, iter);
+          if (has_next) {
+            issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0,
+                                  lane0);
+          }
+          mbarrier_wait(&pv_done[pipe], pph);
+          if (!has_next)
+            issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_ready[pipe], gkt, 0,
+                                  lane0);
+          issue_v_tma_half_tile(&v_map, v_smem[pipe], &v_h1_ready[pipe], gkt, 1,
+                                lane0);
+        }
+        ++gl;
+        L = nL;
+        if (nj != j) {
+          j = nj;
+          if (j < J) {
+            np = FlatCausalSched::np_of(
+                FlatCausalSched::padded(sc.trips_of(j)), pipe);
+          }
+        }
+        if (j >= J) break;
+      }
+      if (warp_id == 2 && has_output) {
+        mbarrier_wait(&o_drained, store_wait & 1u);
+        if (lane0) {
+          tma_store_4d(&o_map, smem_ptr_u32(v_smem[0]), 0, 0, sc.tile_of(J - 1), 0);
+          tma_store_commit_group();
+          tma_store_wait_group_read();
+        }
+      }
+      } else {
       if (warp_id == 2) {
         mbarrier_expect_tx(&q_ready, kTileBytes);
         if (lane0) {
@@ -2344,6 +2687,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
           tma_store_wait_group_read();
         }
       }
+      }
     } else if (J > 0 && warp_id >= kConsumerBaseWarp &&
                warp_id < kConsumerBaseWarp + kPipeCount * kConsumerWarpsPerPipe) {
       const int pipe = (warp_id - kConsumerBaseWarp) / kConsumerWarpsPerPipe;
@@ -2351,18 +2695,40 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       const int n_p0 = (R + 1) / 2;
       const int n_p1 = R / 2;
       unsigned int pvph0 = 0u, pvph1 = 0u;
+      // Flat-causal: per-tile trip counts make the cumulative qk_done arrive
+      // parity tile-dependent; qk_carry tracks it (non-causal n_p is even for
+      // every benchmark shape, so the fixed-R path passes 0).
+      const FlatCausalSched csc{total_tiles / q_tiles, q_tiles, k_tiles, bx, gx};
+      unsigned int qk_carry = 0u;
+      unsigned int seam_cnt = 0u;
       for (int j = 0; j < J; ++j) {
 #if ATTENTION_FLAT_DEBUG
         g_dbg_gl[warp_id] = j;
 #endif
-        const int tile = bx + j * gx;
+        int tile;
+        int tile_repeats;
+        int tile_mask_repeats;
+        if constexpr (kCausal) {
+          tile = csc.tile_of(j);
+          tile_mask_repeats = csc.trips_of(j);
+          tile_repeats = FlatCausalSched::padded(tile_mask_repeats);
+        } else {
+          tile = bx + j * gx;
+          tile_repeats = R;
+          tile_mask_repeats = R;
+        }
         float* row_max_scratch =
             out_f32 != nullptr ? out_f32 + static_cast<size_t>(tile) * kTileWords : nullptr;
-        attention_consumer_pipe_role(
+        attention_consumer_pipe_role<kCausal>(
             s_smem, qk_done, p_done, s_h1_done, pv_done, row_sum_partial,
-            row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, R,
+            row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, tile_repeats,
+            tile_mask_repeats,
             score_to_exp2_scale, has_output, true, nullptr, 0, 0,
-            0ull, 0u, lane);
+            0ull, qk_carry, lane);
+        if constexpr (kCausal) {
+          qk_carry ^= static_cast<unsigned int>(
+              FlatCausalSched::np_of(tile_repeats, pipe) & 1);
+        }
         if (!has_output) continue;
         asm volatile("bar.sync 1, 256;" ::: "memory");
         mbarrier_wait(&pv_tile_done, static_cast<uint32_t>(j & 1));
@@ -2435,9 +2801,25 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         if (lane0) mbarrier_arrive(&o_drained);
         asm volatile("bar.sync 1, 256;" ::: "memory");
 #if ATTENTION_CONTINUOUS_FLAT
-        if (j + 1 < J && consumer_warp == 0) {
-          mbarrier_wait(&qk_seam_done[pipe * 16], static_cast<uint32_t>(j & 1));
-          if (lane0) mbarrier_arrive(&qk_done[pipe]);
+        if constexpr (kCausal) {
+          // Replay only the seams that were committed to qk_seam_done (tiles
+          // whose pipe count np >= 2; np==1 seam QKs commit qk_done directly
+          // to avoid the drain cycle). qk_seam_done therefore flips once per
+          // replayed tile, tracked by seam_cnt instead of j.
+          if (j + 1 < J && consumer_warp == 0) {
+            const int nnp = FlatCausalSched::np_of(
+                FlatCausalSched::padded(csc.trips_of(j + 1)), pipe);
+            if (nnp >= 2) {
+              mbarrier_wait(&qk_seam_done[pipe * 16], seam_cnt & 1u);
+              ++seam_cnt;
+              if (lane0) mbarrier_arrive(&qk_done[pipe]);
+            }
+          }
+        } else {
+          if (j + 1 < J && consumer_warp == 0) {
+            mbarrier_wait(&qk_seam_done[pipe * 16], static_cast<uint32_t>(j & 1));
+            if (lane0) mbarrier_arrive(&qk_done[pipe]);
+          }
         }
 #endif
       }
@@ -2677,6 +3059,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
     attention_consumer_pipe_role<kCausal>(
         s_smem, qk_done, p_done, s_h1_done, pv_done, row_sum_partial,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
+        loop_repeats,
         score_to_exp2_scale,
         output != nullptr,
         /*det_cold=*/ ATTENTION_PERSISTENT != 0 ||
