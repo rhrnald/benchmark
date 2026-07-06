@@ -11,6 +11,42 @@
 
 #define ATTENTION_PIPE_ROLE_INLINE __forceinline__
 
+// Probe: force the compiler to unroll the outer trip (ping-pong) loops. The
+// static <T,T> instances pipeline these loops far better than the dynamic
+// <0,.> ones; an explicit unroll may recover some of that for the dynamic
+// (causal) path. Off by default -- semantics-neutral, correctness via validate.
+#ifndef ATTENTION_TRIP_UNROLL
+#define ATTENTION_TRIP_UNROLL 0
+#endif
+// Independent factors per role family (default to the global factor).
+#ifndef ATTENTION_TRIP_UNROLL_QKPV
+#define ATTENTION_TRIP_UNROLL_QKPV ATTENTION_TRIP_UNROLL
+#endif
+#ifndef ATTENTION_TRIP_UNROLL_CONS
+#define ATTENTION_TRIP_UNROLL_CONS ATTENTION_TRIP_UNROLL
+#endif
+#define ATTN_STR2(x) #x
+#define ATTN_STR(x) ATTN_STR2(x)
+#define ATTN_DOPRAGMA(x) _Pragma(x)
+#if ATTENTION_TRIP_UNROLL_QKPV
+#define TRIP_UNROLL_QKPV ATTN_DOPRAGMA(ATTN_STR(unroll ATTENTION_TRIP_UNROLL_QKPV))
+#else
+#define TRIP_UNROLL_QKPV
+#endif
+#if ATTENTION_TRIP_UNROLL_CONS
+#define TRIP_UNROLL_CONS ATTN_DOPRAGMA(ATTN_STR(unroll ATTENTION_TRIP_UNROLL_CONS))
+#else
+#define TRIP_UNROLL_CONS
+#endif
+
+// Causal LPT launch order. 0 = window-major reverse (qb descending within each
+// window). 1 = level-major (qb descending across ALL windows first) so the
+// first grid waves are the longest trip of every window -> tighter global
+// longest-processing-time schedule. Requires gridDim.x % q_tiles == 0.
+#ifndef ATTENTION_CAUSAL_GLOBAL_LPT
+#define ATTENTION_CAUSAL_GLOBAL_LPT 0
+#endif
+
 #ifndef ATTENTION_CONTINUOUS_FLAT
 #define ATTENTION_CONTINUOUS_FLAT 0
 #endif
@@ -538,6 +574,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_pv_pipe_role(
     }
 #endif
   }
+  TRIP_UNROLL_QKPV
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     const int next_iter = iter + kActivePipeStride;
@@ -1029,6 +1066,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_qk_pipe_role(
     iter += kActivePipeStride;
     ++local;
   }
+  TRIP_UNROLL_QKPV
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
@@ -1429,12 +1467,32 @@ __device__ __forceinline__ int attention_causal_col_limit_base(
 // The reversal is a within-window bijection applied consistently to the trip
 // count AND the addressing, so the output is unchanged. Recomputed at each
 // use site (cheap integer ops) rather than held live in a register.
+// LPT qb / window for a causal CTA (shared by the trip count and Q/O
+// addressing so they always agree). Both derivations produce the same multiset
+// of (window, qb) pairs; only the blockIdx->pair assignment (launch order)
+// differs.
+__device__ __forceinline__ int attention_causal_qb(int q_tiles) {
+#if ATTENTION_CAUSAL_GLOBAL_LPT
+  const int W = static_cast<int>(gridDim.x) / q_tiles;
+  return q_tiles - 1 - (static_cast<int>(blockIdx.x) / W);
+#else
+  return q_tiles - 1 - (static_cast<int>(blockIdx.x) % q_tiles);
+#endif
+}
+__device__ __forceinline__ int attention_causal_window(int q_tiles) {
+#if ATTENTION_CAUSAL_GLOBAL_LPT
+  const int W = static_cast<int>(gridDim.x) / q_tiles;
+  return static_cast<int>(blockIdx.x) % W;
+#else
+  return static_cast<int>(blockIdx.x) / q_tiles;
+#endif
+}
+
 template <int kFixedKTiles, bool kCausal>
 __device__ __forceinline__ int attention_q_global_tile(int q_tiles) {
-  if constexpr (kFixedKTiles == 0 && kCausal) {
-    const int window = static_cast<int>(blockIdx.x) / q_tiles;
-    const int qb = q_tiles - 1 - (static_cast<int>(blockIdx.x) % q_tiles);
-    return window * q_tiles + qb;
+  if constexpr (kCausal) {
+    return attention_causal_window(q_tiles) * q_tiles +
+           attention_causal_qb(q_tiles);
   } else {
     (void)q_tiles;
     return static_cast<int>(blockIdx.x);
@@ -1644,6 +1702,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     }
   }
 #endif
+  TRIP_UNROLL_CONS
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
@@ -1722,6 +1781,7 @@ __device__ ATTENTION_PIPE_ROLE_INLINE void attention_consumer_pipe_role(
     if (do_row_sum) row_sum_reg += row_sum0 + row_sum1;
   }
 #else
+  TRIP_UNROLL_CONS
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
     mbarrier_wait(&qk_done[pipe], phase ^ qk_done_carry);
@@ -1983,11 +2043,15 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   // is the LPT-reversed index (matches attention_q_global_tile) so the trip
   // count and the Q/O addressing agree. Gated on the dynamic template so the
   // fixed-shape non-causal fast paths keep compile-time trip counts.
-  if constexpr (kFixedKTiles == 0 && kCausal) {
-    const int qb = q_tiles - 1 - (static_cast<int>(blockIdx.x) % q_tiles);
+  if constexpr (kCausal) {
+    const int qb = attention_causal_qb(q_tiles);
     const int diagonal_tile = qb + (k_tiles - q_tiles);
     loop_repeats = diagonal_tile + 1;
-    loop_k_tiles = diagonal_tile + 1;
+    // Static-window causal (kFixedKTiles>0): local_k_tile_for_iter<kt> is the
+    // identity iter (iter <= diagonal < kt) and kv_tile_base<kt> is a compile
+    // -time mask, so the addressing needs no runtime loop_k_tiles -- keep the
+    // compile-time kFixedKTiles. Only the dynamic <0,...> path shrinks it.
+    if constexpr (kFixedKTiles == 0) loop_k_tiles = diagonal_tile + 1;
   } else {
     (void)q_tiles;
   }
@@ -3015,7 +3079,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   // The LPT remap stays within the window, so tile/q_tiles == blockIdx.x/
   // q_tiles and either index gives the same window.
   const int kv_tile_base =
-      (kFixedKTiles == 0 && kCausal)
+      kCausal
           ? (tile / q_tiles) * k_tiles
           : kv_tile_base_for_block<kFixedKTiles>(tile, loop_k_tiles);
 #if ATTENTION_PERSISTENT

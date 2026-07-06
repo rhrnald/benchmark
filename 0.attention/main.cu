@@ -100,6 +100,13 @@ static constexpr int kFixedBenchmarkKTiles = 256;
 #ifndef ATTENTION_SMALL_KTILES_DISPATCH
 #define ATTENTION_SMALL_KTILES_DISPATCH 1
 #endif
+// Causal dispatches to a static-window instance <0,k_tiles,true>: the identity
+// k-tile walk lets the compile-time k_tiles fold the per-iteration runtime
+// modulo that is exposed in causal's short tiles (+3-5% vs <0,0,true>). Trip
+// count stays dynamic. Default on; set 0 to force the dynamic <0,0,true>.
+#ifndef ATTENTION_CAUSAL_STATIC_KTILES
+#define ATTENTION_CAUSAL_STATIC_KTILES 1
+#endif
 #ifndef ATTENTION_O_CHECKSUM
 #define ATTENTION_O_CHECKSUM 0
 #endif
@@ -509,10 +516,35 @@ AttentionKernel select_attention_kernel(int repeats, int k_tiles, bool causal) {
   // persistent variant never references a kCausal=true instantiation (the
   // kernel static_asserts against it) and callers reject causal before here.
   if (causal) {
+#if ATTENTION_CAUSAL_STATIC_KTILES
+    // Static-window causal: the identity walk (iter == local k-tile, iter <=
+    // diagonal < k_tiles) lets a compile-time k_tiles fold the runtime div/mod
+    // and shorten the TMA address dependency chain. Trip count stays dynamic.
+    switch (k_tiles) {
+      case 8:   return qk_tma_mma_ld_kernel<0, 8, true>;
+      case 16:  return qk_tma_mma_ld_kernel<0, 16, true>;
+      case 32:  return qk_tma_mma_ld_kernel<0, 32, true>;
+      case 64:  return qk_tma_mma_ld_kernel<0, 64, true>;
+      case 128: return qk_tma_mma_ld_kernel<0, 128, true>;
+      case 256: return qk_tma_mma_ld_kernel<0, 256, true>;
+      default: break;
+    }
+#endif
     return qk_tma_mma_ld_kernel<0, 0, true>;
   }
 #else
   (void)causal;
+#endif
+#if ATTENTION_PROBE_NC_STATIC_KT
+  // Probe: non-causal with static k_tiles but DYNAMIC trip (kFixedRepeats=0),
+  // isolating the addressing-div/mod tax from the compile-time-trip tax.
+  (void)repeats;
+  switch (k_tiles) {
+    case 64:  return qk_tma_mma_ld_kernel<0, 64, false>;
+    case 128: return qk_tma_mma_ld_kernel<0, 128, false>;
+    case 256: return qk_tma_mma_ld_kernel<0, 256, false>;
+    default:  return qk_tma_mma_ld_kernel<0, 0, false>;
+  }
 #endif
 #if !ATTENTION_FORCE_DYNAMIC_DISPATCH
   if (repeats == k_tiles) {
