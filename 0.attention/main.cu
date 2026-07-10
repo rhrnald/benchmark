@@ -100,10 +100,6 @@ static constexpr int kFixedBenchmarkKTiles = 256;
 #ifndef ATTENTION_SMALL_KTILES_DISPATCH
 #define ATTENTION_SMALL_KTILES_DISPATCH 1
 #endif
-// Causal dispatches to a static-window instance <0,k_tiles,true>: the identity
-// k-tile walk lets the compile-time k_tiles fold the per-iteration runtime
-// modulo that is exposed in causal's short tiles (+3-5% vs <0,0,true>). Trip
-// count stays dynamic. Default on; set 0 to force the dynamic <0,0,true>.
 #ifndef ATTENTION_CAUSAL_STATIC_KTILES
 #define ATTENTION_CAUSAL_STATIC_KTILES 1
 #endif
@@ -508,18 +504,8 @@ using AttentionKernel = decltype(&qk_tma_mma_ld_kernel<0, 0>);
 
 AttentionKernel select_attention_kernel(int repeats, int k_tiles, bool causal) {
 #if !ATTENTION_PERSISTENT || ATTENTION_CONTINUOUS_FLAT
-  // Causal is a compile-time template (kCausal) so the non-causal
-  // instantiations keep all masking code out of the hot path. Causal also
-  // needs the dynamic per-tile trip count, so it always uses the <0,0,true>
-  // instantiation; the fixed-shape fast paths stay non-causal only. Supported
-  // in the base build and the CONTINUOUS_FLAT (scr) build; the QK-peel
-  // persistent variant never references a kCausal=true instantiation (the
-  // kernel static_asserts against it) and callers reject causal before here.
   if (causal) {
 #if ATTENTION_CAUSAL_STATIC_KTILES
-    // Static-window causal: the identity walk (iter == local k-tile, iter <=
-    // diagonal < k_tiles) lets a compile-time k_tiles fold the runtime div/mod
-    // and shorten the TMA address dependency chain. Trip count stays dynamic.
     switch (k_tiles) {
       case 8:   return qk_tma_mma_ld_kernel<0, 8, true>;
       case 16:  return qk_tma_mma_ld_kernel<0, 16, true>;
@@ -536,8 +522,6 @@ AttentionKernel select_attention_kernel(int repeats, int k_tiles, bool causal) {
   (void)causal;
 #endif
 #if ATTENTION_PROBE_NC_STATIC_KT
-  // Probe: non-causal with static k_tiles but DYNAMIC trip (kFixedRepeats=0),
-  // isolating the addressing-div/mod tax from the compile-time-trip tax.
   (void)repeats;
   switch (k_tiles) {
     case 64:  return qk_tma_mma_ld_kernel<0, 64, false>;
@@ -598,7 +582,6 @@ RunResult run_kernel(const Args& args,
   }
 #endif
 #if ATTENTION_CONTINUOUS_FLAT
-  // FlatCausalSched needs whole windows (W = blocks / k_tiles exact).
   if (args.causal && args.blocks % args.k_tiles != 0) {
     result.error = cudaErrorInvalidValue;
     result.status = "causal_flat_requires_blocks_multiple_of_k_tiles";
@@ -606,8 +589,6 @@ RunResult run_kernel(const Args& args,
   }
 #endif
   auto kernel = select_attention_kernel(args.repeats, args.k_tiles, args.causal);
-  // Causal benchmark windows are square (q_tiles == k_tiles): query tile qb of
-  // a window attends to k tiles [0, qb]. Non-causal ignores q_tiles.
   const int kernel_q_tiles = args.causal ? args.k_tiles : 1;
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
@@ -708,10 +689,6 @@ void write_benchmark_csv(const Args& args, int active, const RunResult& result) 
                "s_store_TBps,qk_TFLOP_per_s,pv_TFLOP_per_s,total_TFLOP_per_s,"
                "status,cuda_error,notes\n");
 
-  // Tiles actually processed across all blocks. Non-causal: every block walks
-  // repeats tiles. Causal: block qb (within its k_tiles-sized window) walks
-  // qb+1 tiles (bottom-right, benchmark uses q_tiles == k_tiles), i.e. the
-  // triangular sum -- roughly half the work.
   double groups;
   if (args.causal) {
     long long causal_groups = 0;
@@ -1637,8 +1614,6 @@ std::vector<uint32_t> pack_row_major_bf16_words(const std::vector<float>& values
 }
 
 std::vector<float> unpack_row_major_bf16_words(const std::vector<uint32_t>& words) {
-  // Handles any whole number of stacked [kTileM, kTileN] output tiles; the
-  // per-tile row-major layout matches the [Sq, D] reference when D == kTileN.
   const size_t rows = words.size() / (kTileN / 2);
   std::vector<float> values(rows * kTileN, 0.0f);
   for (size_t row = 0; row < rows; ++row) {
@@ -2071,13 +2046,10 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
 #endif
   encode_bf16_output_tma_map(&o_map, d_o, static_cast<uint64_t>(q_tiles));
 
-  // Validate on the literal <0,0> kernels (same instantiations the causal /
-  // dynamic benchmark dispatch uses).
 #if !ATTENTION_PERSISTENT || ATTENTION_CONTINUOUS_FLAT
   auto kernel = args.causal ? qk_tma_mma_ld_kernel<0, 0, true>
                             : qk_tma_mma_ld_kernel<0, 0, false>;
 #else
-  // prepare_fused_real_attention_args rejected causal in QK-peel builds.
   auto kernel = qk_tma_mma_ld_kernel<0, 0>;
 #endif
   CUDA_CHECK(cudaFuncSetAttribute(kernel,
@@ -2113,8 +2085,6 @@ CompareResult run_fused_real_attention_case(const Args& args, const std::string&
   CompareResult result = compare_float(stage, got, ref, 6.0e-2f, 8.0e-2f);
   set_validation_checksum(&result, validation_checksum_vector(h_o));
 #if ATTENTION_VALIDATE_DUMP
-  // Autopsy aid: dump got/ref of every run so wrong runs can be diffed
-  // element-wise offline (which rows/halves broke -> which warp/pipe/iter).
   {
     static int dump_idx = 0;
     char path[160];
@@ -2152,10 +2122,6 @@ int run_fused_real_validation(const Args& args) {
         {1, 4, false, "random", "fused_real_attention_random_k4"},
         {1, 8, false, "random", "fused_real_attention_random_k8"},
 #if !ATTENTION_PERSISTENT || ATTENTION_CONTINUOUS_FLAT
-        // Causal cases run in the base build and the CONTINUOUS_FLAT (scr)
-        // build (the QK-peel variant rejects causal). Single query tile
-        // exercises the bottom-right mask; the sq* cases exercise the dynamic
-        // per-tile trip count and the LPT remap (multi-tile grids).
         {1, 1, true, "constant", "fused_real_attention_causal_constant_k1"},
         {1, 4, true, "rank1", "fused_real_attention_causal_rank1_k4"},
         {1, 4, true, "random", "fused_real_attention_causal_random_k4"},

@@ -50,9 +50,6 @@ Per-seqlen TFLOP/s (B200 @1965MHz):
 
 The default matches unordered V handling (fast; the raw checksum wobbles run-to-run). `STABLE=1` orders the V waits so every shape gives one deterministic checksum, bit-identical. `BEST=1` picks scr `<=4k` / base `>=8k`.
 
-- `PERSIST=1` (scr) targets bit-stable checksums (~1012 at 1k); if you only require `make validation`
-  to pass and give up run-to-run checksum stability entirely, the same schedule reaches **~1071 at 1k**.
-
 `make validation` accepts the same `PERSIST=1`/`BEST=1`/`STABLE=1` profiles. (1k..4k use extra warmup
 so the short iters reach the GPU boost clock; otherwise they under-report.)
 
@@ -65,13 +62,19 @@ draft); `BEST=1` is rejected until the causal crossover is measured.
 
 Measured causal (base profile, B200 @1965MHz, causal-aware TFLOP/s / ms):
 
-| SEQLEN | 1k | 2k | 4k | 8k | 16k | 32k |
-|---|---|---|---|---|---|---|
-| base CAUSAL=1 TFLOP/s | 458 | 652 | 905 | 1190 | 1436 | 1572 |
-| base CAUSAL=1 ms | 0.338 | 0.448 | 0.626 | 0.938 | 1.543 | 2.808 |
-| vs non-causal time | 1.00x | 1.22x | 1.41x | 1.64x | 1.85x | 1.74x |
+// TODO
 
-Design/status/experiment plan: `CAUSAL_HANDOFF.md`.
+## Current Status (Determinism & Causal)
+
+// TODO
+
+- **Persistent + non-causal race**:
+1k/2k/4k/16k/32k are raw-bit-stable. 8k has a
+  residual ~1-in-200-500 case, unresolved. Unchecked: FA4's reference kernel, and whether base
+  (non-persistent) and causal have the same structural window (masked by timing so far, not fixed).
+- **Speed up**
+- **Needs re-measurement**
+- **Unstable GEMM**
 
 ## Benchmark
 

@@ -780,20 +780,8 @@ __device__ __forceinline__ void store_packed4_s_cpp(uint32_t* smem,
   reinterpret_cast<uint4*>(smem + word_offset)[0] = make_uint4(p0, p1, p2, p3);
 }
 
-// Sentinel for "this tile is fully unmasked": any base >= kTileN disables the
-// causal mask, so a single large value covers both the non-causal kernel and
-// all causal tiles that sit strictly below the diagonal.
 static constexpr int kCausalNoMask = 1 << 20;
 
-// Causal masking on the per-row score registers, applied BEFORE exp2/sum so
-// that masked keys never enter the softmax denominator and produce P==0 for
-// the PV MMA. `r[j]` holds the score for (query row = `row`, key column =
-// consumer_half*64 + j) as loaded by tcgen05.ld.32x32b.x64 (contiguous
-// columns). A key column is valid iff col <= row + causal_col_limit_base; the
-// diagonal tile passes base==0 (bottom-right aligned -> col <= row), tiles
-// below the diagonal pass a multiple of kTileN (>= kTileN -> no work), and
-// non-causal callers pass the compile-time kCausalNoMask sentinel so this
-// forceinline body folds away entirely.
 __device__ __forceinline__ void causal_mask_x64(uint32_t (&r)[64],
                                                 int row,
                                                 int consumer_half,
@@ -804,7 +792,7 @@ __device__ __forceinline__ void causal_mask_x64(uint32_t (&r)[64],
 #pragma unroll
   for (int j = 0; j < 64; ++j) {
     if (col_base + j > col_limit) {
-      r[j] = 0xff800000u;  // -inf bits -> exp2 underflows to 0
+      r[j] = 0xff800000u;
     }
   }
 }
@@ -1122,6 +1110,9 @@ tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
                              consumer_half, ld_start, ld_end, clock_trace_base);
   }
 #endif
+#if (defined(ATTENTION_CONTINUOUS_FLAT) && ATTENTION_CONTINUOUS_FLAT) ||     (defined(ATTENTION_PERSISTENT_OVERLAP_QK_PEEL) && ATTENTION_PERSISTENT_OVERLAP_QK_PEEL)
+  if (arrive_p_done) tma_store_fence();
+#endif
   if (arrive_p_done && lane == 0) {
     mbarrier_arrive(p_done_barrier);
   }
@@ -1191,9 +1182,6 @@ __device__ __forceinline__ float tcgen05_ld_x64_wait_row_max_scaled_nvcc(
   uint32_t r[64];
   TCGEN05_LD_X64(src_taddr, r);
   tcgen05_wait_ld();
-  // Mask before the max so the rare-update rescale (cold path) sees only valid
-  // keys; otherwise masked columns (which the QK MMA still computed in tmem)
-  // can dominate new_row_max and corrupt the running max / O rescale.
   causal_mask_x64(r, consumer_warp * 32 + (threadIdx.x & 31), consumer_half,
                   causal_col_limit_base);
   return row_max_x64_scaled(r, score_to_exp2_scale);
@@ -1252,6 +1240,9 @@ tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
                              trace_pipe, threadIdx.x >> 5, consumer_warp,
                              consumer_half, ld_start, ld_end, clock_trace_base);
   }
+#endif
+#if (defined(ATTENTION_CONTINUOUS_FLAT) && ATTENTION_CONTINUOUS_FLAT) ||     (defined(ATTENTION_PERSISTENT_OVERLAP_QK_PEEL) && ATTENTION_PERSISTENT_OVERLAP_QK_PEEL)
+  if (arrive_p_done) tma_store_fence();
 #endif
   if (arrive_p_done && lane == 0) {
     mbarrier_arrive(p_done_barrier);
@@ -1348,6 +1339,9 @@ tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
                              trace_pipe, threadIdx.x >> 5, consumer_warp,
                              consumer_half, ld_start, ld_end, clock_trace_base);
   }
+#endif
+#if (defined(ATTENTION_CONTINUOUS_FLAT) && ATTENTION_CONTINUOUS_FLAT) ||     (defined(ATTENTION_PERSISTENT_OVERLAP_QK_PEEL) && ATTENTION_PERSISTENT_OVERLAP_QK_PEEL)
+  if (arrive_p_done) tma_store_fence();
 #endif
   if (arrive_p_done && lane == 0) {
     mbarrier_arrive(p_done_barrier);
