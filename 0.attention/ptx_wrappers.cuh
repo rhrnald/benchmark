@@ -1235,6 +1235,107 @@ tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
 #endif
 }
 
+__device__ __forceinline__ float
+tcgen05_ld_x64_wait_pv_h0_pack_store_sum_shift_half_nvcc(
+    uint32_t src_taddr,
+    uint32_t* s_smem,
+    int consumer_warp,
+    int consumer_half,
+    uint64_t* p_done_barrier,
+    bool arrive_p_done,
+    float score_to_exp2_scale,
+    float row_max_shift,
+    uint64_t* pv_h0_done_barrier,
+    uint32_t pv_h0_done_phase,
+    ClockTraceRecord* clock_trace,
+    int clock_trace_iters,
+    int clock_trace_start,
+    unsigned long long clock_trace_base,
+    int trace_iter,
+    int trace_pipe) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int row = consumer_warp * 32 + lane;
+  const int col_pair_base = consumer_half * 32;
+  uint32_t* smem_base = s_smem + s_store_word_offset(row, col_pair_base);
+  uint32_t r[64];
+
+#if ATTENTION_CLOCK_TRACE
+  const int trace_idx = trace_iter - clock_trace_start;
+  const bool trace_window =
+      clock_trace != nullptr && blockIdx.x == 0 && trace_idx >= 0 &&
+      trace_idx < clock_trace_iters;
+  const int trace_slot_base = trace_idx * kClockTraceSlotsPerIter;
+  const bool trace_lane = trace_window && lane == 0;
+  const unsigned long long ld_start = trace_lane ? clock64() : 0ull;
+#endif
+  TCGEN05_LD_X64(src_taddr, r);
+  mbarrier_wait(pv_h0_done_barrier, pv_h0_done_phase);
+  tcgen05_wait_ld();
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long ld_end = clock64();
+    const int slot =
+        trace_slot_base + kClockTraceLdBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, slot, kClockTraceLd, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, ld_start, ld_end, clock_trace_base);
+  }
+#endif
+  if (arrive_p_done && lane == 0) {
+    mbarrier_arrive(p_done_barrier);
+  }
+
+#if ATTENTION_CLOCK_TRACE
+  const unsigned long long pack_start = trace_lane ? clock64() : 0ull;
+#endif
+  const float row_sum = pack_store_x64_loop_shifted<true>(
+      smem_base, r, score_to_exp2_scale, row_max_shift);
+#if ATTENTION_CLOCK_TRACE
+  if (trace_lane) {
+    const unsigned long long pack_end = clock64();
+    const int pack_slot = trace_slot_base + kClockTracePackStoreBase +
+                          consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, pack_slot, kClockTracePack, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int store_slot =
+        trace_slot_base + kClockTraceStoreBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, store_slot, kClockTraceStore, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+    const int sum_slot =
+        trace_slot_base + kClockTraceRowSumBase + consumer_warp * 2 + consumer_half;
+    write_clock_trace_record(clock_trace, sum_slot, kClockTraceRowSum, trace_iter,
+                             trace_pipe, threadIdx.x >> 5, consumer_warp,
+                             consumer_half, pack_start, pack_end,
+                             clock_trace_base);
+  }
+#endif
+  return row_sum;
+#else
+  (void)src_taddr;
+  (void)s_smem;
+  (void)consumer_warp;
+  (void)consumer_half;
+  (void)p_done_barrier;
+  (void)arrive_p_done;
+  (void)score_to_exp2_scale;
+  (void)row_max_shift;
+  (void)pv_h0_done_barrier;
+  (void)pv_h0_done_phase;
+  (void)clock_trace;
+  (void)clock_trace_iters;
+  (void)clock_trace_start;
+  (void)clock_trace_base;
+  (void)trace_iter;
+  (void)trace_pipe;
+  return 0.0f;
+#endif
+}
+
 __device__ __forceinline__ PackStoreX64LoopResult
 tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
     uint32_t src_taddr,

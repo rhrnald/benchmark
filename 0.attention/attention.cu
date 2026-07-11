@@ -97,6 +97,10 @@
 #define ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER 9
 #endif
 
+#ifndef ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+#define ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT 0
+#endif
+
 #if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER != 0 && \
     (ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER <= 8 || \
      ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER >= 12)
@@ -783,6 +787,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
     uint64_t (&p_done)[kPipeCount],
     uint64_t (&s_h1_done)[kPipeCount],
     uint64_t (&pv_done)[kPipeCount],
+    uint64_t (&pv_h0_done)[kPipeCount],
     uint32_t (&qk_issue_gen)[kPipeCount],
     uint32_t* const (&s_smem)[kPipeCount],
     uint32_t* const (&v_smem)[kPipeCount],
@@ -990,6 +995,9 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                           static_cast<uint32_t>(local + 1));
       }
 #endif
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+      tcgen05_commit(&qk_done[pipe]);
+#endif
     }
 #if !(ATTENTION_SPLIT_V_TMA && ATTENTION_SKIP_V_H0_READY_WAIT_STEADY)
     mbarrier_wait(&v_ready[pipe], prev_phase);
@@ -1001,6 +1009,14 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
 #endif
     if (lane0) {
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+#pragma unroll
+      for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+        tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                            pv_idesc, local != 1 || mma != 0);
+      }
+      tcgen05_commit(&pv_h0_done[pipe]);
+#else
 #if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER
 #pragma unroll
       for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
@@ -1022,6 +1038,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                             pv_idesc, local != 1 || mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#endif
 #endif
 #if ATTENTION_CLOCK_TRACE
       if (trace_iter) {
@@ -1111,6 +1128,14 @@ __device__ __forceinline__ void attention_qk_pipe_role(
 #endif
 #endif
     if (lane0) {
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+#pragma unroll
+      for (int mma = 0; mma < kMmasPerTile / 2; ++mma) {
+        tcgen05_mma_bf16_ss(o_taddr[pipe], pv_s_desc[mma], pv_v_desc[mma],
+                            pv_idesc, local != 1 || mma != 0);
+      }
+      tcgen05_commit(&pv_h0_done[pipe]);
+#else
 #if ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER
 #pragma unroll
       for (int mma = 0; mma < ATTENTION_QK_PVH0_EARLY_COMMIT_AFTER - 8;
@@ -1132,6 +1157,7 @@ __device__ __forceinline__ void attention_qk_pipe_role(
                             pv_idesc, local != 1 || mma != 0);
       }
       tcgen05_commit(&qk_done[pipe]);
+#endif
 #endif
     }
     mbarrier_wait(&s_h1_done[pipe], tail_phase);
@@ -1271,6 +1297,7 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     uint64_t (&qk_done)[kPipeCount],
     uint64_t (&p_done)[kPipeCount],
     uint64_t (&s_h1_done)[kPipeCount],
+    uint64_t (&pv_h0_done)[kPipeCount],
     float (&row_sum_partial)[kPipeCount][kTileM],
     float* row_max_scratch,
     const uint32_t (&p_taddr)[kPipeCount],
@@ -1348,13 +1375,22 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
        prefix_check < ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS; ++prefix_check) {
     if (iter < loop_repeats) {
       const uint32_t phase = static_cast<uint32_t>(local & 1);
+      const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
       mbarrier_wait(&qk_done[pipe], phase);
       const uint32_t row_taddr =
           p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+      float row_sum0 = tcgen05_ld_x64_wait_pv_h0_pack_store_sum_shift_half_nvcc(
+          row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+          score_to_exp2_scale, row_max_reg, &pv_h0_done[pipe], prev_phase,
+          clock_trace, clock_trace_iters, clock_trace_start, clock_trace_base,
+          iter, pipe);
+#else
       float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
           row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
           score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
           clock_trace_start, clock_trace_base, iter, pipe);
+#endif
       const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
       if (__any_sync(0xffffffffu, trigger_h0_update)) {
         RowSumUpdateH0Result update_result = attention_row_sum_update_h0_cold(
@@ -1392,16 +1428,25 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
 #endif
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
+    const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
     mbarrier_wait(&qk_done[pipe], phase);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
 #if ATTENTION_FIRST_ITER_APPLY_SHIFT
     float row_sum0;
     float row_sum1;
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+    row_sum0 = tcgen05_ld_x64_wait_pv_h0_pack_store_sum_shift_half_nvcc(
+        row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
+        score_to_exp2_scale, row_max_reg, &pv_h0_done[pipe], prev_phase,
+        clock_trace, clock_trace_iters, clock_trace_start, clock_trace_base,
+        iter, pipe);
+#else
     row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_shift_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, row_max_reg, clock_trace, clock_trace_iters,
         clock_trace_start, clock_trace_base, iter, pipe);
+#endif
 #if ATTENTION_ROW_SUM_RARE_UPDATE && ATTENTION_ROW_SUM_PREFIX_UPDATE_CHECKS == 0
     const bool trigger_h0_update = !(row_sum0 <= row_sum_update_limit);
     if (__any_sync(0xffffffffu, trigger_h0_update)) {
@@ -1416,6 +1461,9 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
     }
 #endif
 #else
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+    mbarrier_wait(&pv_h0_done[pipe], prev_phase);
+#endif
     const float row_sum0 = tcgen05_ld_x64_wait_pack_store_sum_half_nvcc(
         row_taddr, s_smem[pipe], consumer_warp, 0, &p_done[pipe], false,
         score_to_exp2_scale, clock_trace, clock_trace_iters, clock_trace_start,
@@ -1452,9 +1500,15 @@ __device__ __forceinline__ void attention_consumer_pipe_role(
 #else
   for (; iter < loop_repeats; iter += kActivePipeStride, ++local) {
     const uint32_t phase = static_cast<uint32_t>(local & 1);
+    const uint32_t prev_phase = static_cast<uint32_t>((local - 1) & 1);
     mbarrier_wait(&qk_done[pipe], phase);
     const uint32_t row_taddr =
         p_taddr[pipe] + (static_cast<uint32_t>(consumer_warp * 32) << 16);
+#if ATTENTION_QK_COMMIT_THEN_PV_H0_WAIT
+    if (local > 0) {
+      mbarrier_wait(&pv_h0_done[pipe], prev_phase);
+    }
+#endif
 #if ATTENTION_ROW_MAX_ONLY
     const PackStoreX64LoopResult h0_result =
         tcgen05_ld_x64_wait_pack_store_sum_max_half_nvcc(
@@ -1562,6 +1616,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
   __shared__ uint64_t v_ready[kPipeCount];
   __shared__ uint64_t v_h1_ready[kPipeCount];
   __shared__ uint64_t pv_done[kPipeCount];
+  __shared__ uint64_t pv_h0_done[kPipeCount];
   __shared__ uint32_t k_issue_gen[kPipeCount];
   __shared__ uint32_t v_issue_gen[kPipeCount];
   __shared__ uint32_t qk_issue_gen[kPipeCount];
@@ -1610,6 +1665,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
       mbarrier_init(&v_ready[p], 1);
       mbarrier_init(&v_h1_ready[p], 1);
       mbarrier_init(&pv_done[p], 1);
+      mbarrier_init(&pv_h0_done[p], 1);
 #if ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_K_ISSUE || \
       ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_V_ISSUE || \
       ATTENTION_CROSS_PIPE_PHASE == ATTENTION_CROSS_PHASE_TMA_KV_ISSUE || \
@@ -1676,7 +1732,7 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         (warp_id - kConsumerBaseWarp) - pipe * kConsumerWarpsPerPipe;
     const int consumer_warp = consumer_slot;
     attention_consumer_pipe_role(
-        s_smem, qk_done, p_done, s_h1_done, row_sum_partial,
+        s_smem, qk_done, p_done, s_h1_done, pv_h0_done, row_sum_partial,
         row_max_scratch, p_taddr, o_taddr, pipe, consumer_warp, loop_repeats,
         score_to_exp2_scale,
         output != nullptr, clock_trace, clock_trace_iters, clock_trace_start,
@@ -1693,12 +1749,12 @@ void qk_tma_mma_ld_kernel(const __grid_constant__ CUtensorMap q_map,
         clock_trace_iters, clock_trace_start, clock_trace_base, lane);
   }
 
-	  if (warp_id == 0 || warp_id == 1) {
-	    const int pipe = warp_id;
-	    attention_qk_pipe_role<kFixedKTiles>(
-	        q_smem, k_smem, &q_ready, k_ready, qk_done, p_done, s_h1_done, pv_done,
-		        qk_issue_gen,
-	        s_smem, v_smem, v_ready, v_h1_ready, p_taddr, o_taddr, pipe,
+  if (warp_id == 0 || warp_id == 1) {
+    const int pipe = warp_id;
+    attention_qk_pipe_role<kFixedKTiles>(
+        q_smem, k_smem, &q_ready, k_ready, qk_done, p_done, s_h1_done, pv_done,
+        pv_h0_done, qk_issue_gen,
+        s_smem, v_smem, v_ready, v_h1_ready, p_taddr, o_taddr, pipe,
         loop_repeats, clock_trace,
         clock_trace_iters, clock_trace_start, clock_trace_base,
         q_tma_start_shared, k_tma_start_shared, lane);
