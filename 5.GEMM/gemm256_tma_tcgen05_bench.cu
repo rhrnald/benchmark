@@ -215,11 +215,23 @@
 #endif
 
 #ifndef GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES 128
+#define GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES 768
 #endif
 
 #ifndef GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES 640
+#define GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES 1536
+#endif
+
+#ifndef GEMM_TUNED_32K_TMA_A_L2_PROMOTION
+#define GEMM_TUNED_32K_TMA_A_L2_PROMOTION GEMM_TMA_A_L2_PROMOTION
+#endif
+
+#ifndef GEMM_TUNED_32K_TMA_B_L2_PROMOTION
+#define GEMM_TUNED_32K_TMA_B_L2_PROMOTION GEMM_TMA_B_L2_PROMOTION
+#endif
+
+#ifndef GEMM_TUNED_32K_TMA_C_L2_PROMOTION
+#define GEMM_TUNED_32K_TMA_C_L2_PROMOTION GEMM_TMA_C_L2_PROMOTION
 #endif
 
 #ifndef GEMM_TUNED_32K_CSTORE_SWIZZLE_128B
@@ -399,7 +411,7 @@ struct Args {
   int iters = 5;
   std::vector<int> sizes = {4096, 8192, 16384, 32768};
   const char* csv = "gemm256_tma_tcgen05_bench.csv";
-  int store_mode = kStoreNone;
+  int store_mode = kStoreTma;
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
@@ -1703,18 +1715,21 @@ void encode_c_row_major_float_tma_map(CUtensorMap* map,
 CUtensorMapL2promotion tma_a_l2_promotion_for_size(int size) {
   if (size == 4096) return GEMM_TUNED_4K_TMA_A_L2_PROMOTION;
   if (size == 8192) return GEMM_TUNED_8K_TMA_A_L2_PROMOTION;
+  if (size == 32768) return GEMM_TUNED_32K_TMA_A_L2_PROMOTION;
   return GEMM_TMA_A_L2_PROMOTION;
 }
 
 CUtensorMapL2promotion tma_b_l2_promotion_for_size(int size) {
   if (size == 4096) return GEMM_TUNED_4K_TMA_B_L2_PROMOTION;
   if (size == 8192) return GEMM_TUNED_8K_TMA_B_L2_PROMOTION;
+  if (size == 32768) return GEMM_TUNED_32K_TMA_B_L2_PROMOTION;
   return GEMM_TMA_B_L2_PROMOTION;
 }
 
 CUtensorMapL2promotion tma_c_l2_promotion_for_size(int size) {
   if (size == 4096) return GEMM_TUNED_4K_TMA_C_L2_PROMOTION;
   if (size == 8192) return GEMM_TUNED_8K_TMA_C_L2_PROMOTION;
+  if (size == 32768) return GEMM_TUNED_32K_TMA_C_L2_PROMOTION;
   return GEMM_TMA_C_L2_PROMOTION;
 }
 
@@ -1751,7 +1766,7 @@ std::vector<int> parse_sizes(const char* s) {
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
               "[--warmup W] [--iters I] [--csv PATH] "
-              "[--store-c|--store-c-tma] "
+              "[--no-store-c|--store-c|--store-c-tma] "
               "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
               "[--clock-trace] [--clock-trace-start N] "
               "[--clock-trace-iters N] [--trace-csv PATH]\n",
@@ -1779,6 +1794,8 @@ Args parse_args(int argc, char** argv) {
       args.iters = std::atoi(need_arg("--iters"));
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
+    } else if (std::strcmp(argv[i], "--no-store-c") == 0) {
+      args.store_mode = kStoreNone;
     } else if (std::strcmp(argv[i], "--store-c") == 0) {
       args.store_mode = kStoreScalar;
     } else if (std::strcmp(argv[i], "--store-c-tma") == 0) {
@@ -2624,6 +2641,7 @@ int main(int argc, char** argv) {
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
               "tma_l2_promotion_c=%d tuned4k_tma_l2=%d/%d/%d "
               "tuned8k_tma_l2=%d/%d/%d "
+              "tuned32k_tma_l2=%d/%d/%d "
               "cstore_swizzle_128b=%d cstore_vectorize_smem=%d "
               "single_pipeline=%d single_pipeline_ntile_128=%d "
               "single_pipeline_wide_mma=%d "
@@ -2655,6 +2673,9 @@ int main(int argc, char** argv) {
               static_cast<int>(GEMM_TUNED_8K_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_8K_TMA_C_L2_PROMOTION),
+              static_cast<int>(GEMM_TUNED_32K_TMA_A_L2_PROMOTION),
+              static_cast<int>(GEMM_TUNED_32K_TMA_B_L2_PROMOTION),
+              static_cast<int>(GEMM_TUNED_32K_TMA_C_L2_PROMOTION),
               GEMM_CSTORE_SWIZZLE_128B, GEMM_CSTORE_VECTORIZE_SMEM,
               kSinglePipeline, kSinglePipelineNtile128,
               kSinglePipelineWideMma, kSinglePipelineSplitTma,
