@@ -411,7 +411,6 @@ struct Args {
   int iters = 5;
   std::vector<int> sizes = {4096, 8192, 16384, 32768};
   const char* csv = "gemm256_tma_tcgen05_bench.csv";
-  int store_mode = kStoreTma;
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
@@ -1766,7 +1765,6 @@ std::vector<int> parse_sizes(const char* s) {
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
               "[--warmup W] [--iters I] [--csv PATH] "
-              "[--no-store-c|--store-c|--store-c-tma] "
               "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
               "[--clock-trace] [--clock-trace-start N] "
               "[--clock-trace-iters N] [--trace-csv PATH]\n",
@@ -1794,12 +1792,6 @@ Args parse_args(int argc, char** argv) {
       args.iters = std::atoi(need_arg("--iters"));
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
-    } else if (std::strcmp(argv[i], "--no-store-c") == 0) {
-      args.store_mode = kStoreNone;
-    } else if (std::strcmp(argv[i], "--store-c") == 0) {
-      args.store_mode = kStoreScalar;
-    } else if (std::strcmp(argv[i], "--store-c-tma") == 0) {
-      args.store_mode = kStoreTma;
     } else if (std::strcmp(argv[i], "--validate") == 0) {
       args.validate = true;
     } else if (std::strcmp(argv[i], "--validate-size") == 0) {
@@ -2591,15 +2583,13 @@ int main(int argc, char** argv) {
   }
 
   if (args.validate) {
-    const int validation_store_mode =
-        args.store_mode == kStoreTma ? kStoreTma : kStoreScalar;
     ValidateResult r =
         run_validation(args.validate_size, args.validate_pattern,
-                       validation_store_mode);
+                       kStoreTma);
     std::printf("validation size=%d pattern=%s store_mode=%s status=%s "
                 "max_abs=%g max_rel=%g bad=%zu\n",
                 args.validate_size, args.validate_pattern,
-                store_mode_name(validation_store_mode), r.ok ? "ok" : "fail",
+                store_mode_name(kStoreTma), r.ok ? "ok" : "fail",
                 r.max_abs, r.max_rel, r.bad_count);
     if (!r.ok) {
       std::printf("first_bad row=%d col=%d got=%g ref=%g\n", r.first_bad_row,
@@ -2680,11 +2670,11 @@ int main(int argc, char** argv) {
               kSinglePipeline, kSinglePipelineNtile128,
               kSinglePipelineWideMma, kSinglePipelineSplitTma,
               kSinglePipelineInterleavePipes,
-              store_mode_name(args.store_mode),
-              args.store_mode == kStoreNone ? "none" : "fp32");
+              store_mode_name(kStoreTma),
+              "fp32");
 
   for (int size : args.sizes) {
-    CaseResult r = run_case(size, args.warmup, args.iters, args.store_mode);
+    CaseResult r = run_case(size, args.warmup, args.iters, kStoreTma);
     std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
                 "pipe1_tma_phase=%d pipe1_mma_phase=%d "
