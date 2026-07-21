@@ -1,0 +1,2 @@
+validation size=512 pattern=pattern store_mode=tma status=fail max_abs=6.44897 max_rel=270.923 bad=193696
+first_bad row=32 col=0 got=-3.36621 ref=2.84106

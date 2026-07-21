@@ -16,6 +16,71 @@
 #define GEMM_CLOCK_TRACE 0
 #endif
 
+#ifndef GEMM_REPEAT_INPUT
+#define GEMM_REPEAT_INPUT 0
+#endif
+
+// Keep address selection independent from the pipeline/epilogue tuning.  This
+// lets the dense-address kernel use the settings established by the
+// same-address ceiling experiment.
+#ifndef GEMM_REPEAT_TUNING
+#define GEMM_REPEAT_TUNING GEMM_REPEAT_INPUT
+#endif
+
+#ifndef GEMM_PERSISTENT_CTA
+#define GEMM_PERSISTENT_CTA 0
+#endif
+
+// Optional persistent/epilogue ablations.  Keep these independent so each
+// fixed-cost optimization can be measured against the recovered baseline.
+#ifndef GEMM_PERSISTENT_STATIC_SCHEDULER
+#define GEMM_PERSISTENT_STATIC_SCHEDULER 0
+#endif
+
+#ifndef GEMM_FUSED_CSTORE_STAGING
+#define GEMM_FUSED_CSTORE_STAGING 0
+#endif
+
+#ifndef GEMM_ELIDE_DENSE_SINK
+#define GEMM_ELIDE_DENSE_SINK 0
+#endif
+
+#ifndef GEMM_DENSE_L2_TUNING
+#define GEMM_DENSE_L2_TUNING 0
+#endif
+
+#ifndef GEMM_PERSISTENT_MACRO_M
+#define GEMM_PERSISTENT_MACRO_M 16
+#endif
+
+#ifndef GEMM_PERSISTENT_MACRO_N
+#define GEMM_PERSISTENT_MACRO_N 16
+#endif
+
+#ifndef GEMM_PERSISTENT_32K_MACRO_M
+#define GEMM_PERSISTENT_32K_MACRO_M 8
+#endif
+
+#ifndef GEMM_PERSISTENT_32K_MACRO_N
+#define GEMM_PERSISTENT_32K_MACRO_N 18
+#endif
+
+#ifndef GEMM_PERSISTENT_8K_MACRO_M
+#define GEMM_PERSISTENT_8K_MACRO_M 16
+#endif
+
+#ifndef GEMM_PERSISTENT_8K_MACRO_N
+#define GEMM_PERSISTENT_8K_MACRO_N 16
+#endif
+
+#ifndef GEMM_PERSISTENT_LOCAL_M_FAST
+#define GEMM_PERSISTENT_LOCAL_M_FAST 1
+#endif
+
+#ifndef GEMM_PERSISTENT_MACRO_N_FAST
+#define GEMM_PERSISTENT_MACRO_N_FAST 1
+#endif
+
 #ifndef GEMM_SINGLE_PIPELINE
 #define GEMM_SINGLE_PIPELINE 0
 #endif
@@ -36,8 +101,32 @@
 #define GEMM_SINGLE_PIPELINE_INTERLEAVE_PIPES 1
 #endif
 
+#ifndef GEMM_WIDE_B_TMA
+#define GEMM_WIDE_B_TMA 0
+#endif
+
 #ifndef GEMM_CTA_M
 #define GEMM_CTA_M 256
+#endif
+
+#ifndef GEMM_STAGE_K
+#define GEMM_STAGE_K 64
+#endif
+
+#ifndef GEMM_STAGES
+#define GEMM_STAGES 3
+#endif
+
+// Epilogue ablation:
+//   0 = existing serialized SMEM -> TMA store
+//   1 = serialized TMEM -> global direct store
+//   2 = persistent TMEM double buffer with dedicated direct-store warp(s)
+#ifndef GEMM_EPILOGUE_MODE
+#define GEMM_EPILOGUE_MODE 0
+#endif
+
+#ifndef GEMM_EPILOGUE_WARPS
+#define GEMM_EPILOGUE_WARPS 2
 #endif
 
 #ifndef GEMM_PIPE1_PHASE_SHIFT_CYCLES
@@ -85,7 +174,7 @@
 #endif
 
 #ifndef GEMM_CSTORE_SWIZZLE_128B
-#define GEMM_CSTORE_SWIZZLE_128B 0
+#define GEMM_CSTORE_SWIZZLE_128B (GEMM_REPEAT_TUNING ? 1 : 0)
 #endif
 
 #ifndef GEMM_TMA_A_L2_PROMOTION
@@ -143,7 +232,7 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_GRID_SWIZZLE_M
-#define GEMM_TUNED_8K_GRID_SWIZZLE_M 16
+#define GEMM_TUNED_8K_GRID_SWIZZLE_M (GEMM_DENSE_L2_TUNING ? 12 : 16)
 #endif
 
 #ifndef GEMM_TUNED_8K_GRID_SWIZZLE_N
@@ -155,7 +244,8 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES 128
+#define GEMM_TUNED_8K_PIPE1_TMA_PHASE_SHIFT_CYCLES \
+  (GEMM_DENSE_L2_TUNING ? 0 : (GEMM_REPEAT_TUNING ? 96 : 128))
 #endif
 
 #ifndef GEMM_TUNED_8K_PIPE1_MMA_PHASE_SHIFT_CYCLES
@@ -163,11 +253,15 @@
 #endif
 
 #ifndef GEMM_TUNED_8K_TMA_A_L2_PROMOTION
-#define GEMM_TUNED_8K_TMA_A_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_L2_256B
+#define GEMM_TUNED_8K_TMA_A_L2_PROMOTION \
+  (GEMM_DENSE_L2_TUNING ? CU_TENSOR_MAP_L2_PROMOTION_NONE \
+                        : CU_TENSOR_MAP_L2_PROMOTION_L2_256B)
 #endif
 
 #ifndef GEMM_TUNED_8K_TMA_B_L2_PROMOTION
-#define GEMM_TUNED_8K_TMA_B_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_L2_256B
+#define GEMM_TUNED_8K_TMA_B_L2_PROMOTION \
+  (GEMM_DENSE_L2_TUNING ? CU_TENSOR_MAP_L2_PROMOTION_NONE \
+                        : CU_TENSOR_MAP_L2_PROMOTION_L2_256B)
 #endif
 
 #ifndef GEMM_TUNED_8K_TMA_C_L2_PROMOTION
@@ -179,7 +273,7 @@
 #endif
 
 #ifndef GEMM_TUNED_16K_GRID_SWIZZLE_M
-#define GEMM_TUNED_16K_GRID_SWIZZLE_M 16
+#define GEMM_TUNED_16K_GRID_SWIZZLE_M (GEMM_DENSE_L2_TUNING ? 10 : 16)
 #endif
 
 #ifndef GEMM_TUNED_16K_GRID_SWIZZLE_N
@@ -191,7 +285,8 @@
 #endif
 
 #ifndef GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES 128
+#define GEMM_TUNED_16K_PIPE1_TMA_PHASE_SHIFT_CYCLES \
+  (GEMM_DENSE_L2_TUNING ? 0 : 128)
 #endif
 
 #ifndef GEMM_TUNED_16K_PIPE1_MMA_PHASE_SHIFT_CYCLES
@@ -203,7 +298,7 @@
 #endif
 
 #ifndef GEMM_TUNED_32K_GRID_SWIZZLE_M
-#define GEMM_TUNED_32K_GRID_SWIZZLE_M 12
+#define GEMM_TUNED_32K_GRID_SWIZZLE_M (GEMM_DENSE_L2_TUNING ? 3 : 12)
 #endif
 
 #ifndef GEMM_TUNED_32K_GRID_SWIZZLE_N
@@ -215,11 +310,13 @@
 #endif
 
 #ifndef GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES 768
+#define GEMM_TUNED_32K_PIPE1_TMA_PHASE_SHIFT_CYCLES \
+  (GEMM_DENSE_L2_TUNING ? 0 : (GEMM_REPEAT_TUNING ? 128 : 768))
 #endif
 
 #ifndef GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES
-#define GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES 1536
+#define GEMM_TUNED_32K_PIPE1_MMA_PHASE_SHIFT_CYCLES \
+  (GEMM_REPEAT_TUNING ? 0 : 1536)
 #endif
 
 #ifndef GEMM_TUNED_32K_TMA_A_L2_PROMOTION
@@ -263,7 +360,10 @@ void driver_check(CUresult result, const char* what) {
 namespace {
 
 static constexpr int kThreadsPerWarp = 32;
-static constexpr int kWarps = 4;
+static constexpr int kCoreWarps = 4;
+static constexpr int kEpilogueWarps =
+    GEMM_EPILOGUE_MODE == 2 ? GEMM_EPILOGUE_WARPS : 0;
+static constexpr int kWarps = kCoreWarps + kEpilogueWarps;
 static constexpr int kThreads = kWarps * kThreadsPerWarp;
 static constexpr int kSinglePipeline = GEMM_SINGLE_PIPELINE;
 static constexpr int kSinglePipelineNtile128 = GEMM_SINGLE_PIPELINE_NTILE_128;
@@ -274,7 +374,7 @@ static constexpr int kSinglePipelineSplitTma = GEMM_SINGLE_PIPELINE_SPLIT_TMA;
 static constexpr int kSinglePipelineInterleavePipes =
     GEMM_SINGLE_PIPELINE_INTERLEAVE_PIPES;
 static constexpr int kCtaM = GEMM_CTA_M;
-static constexpr int kStageK = 64;
+static constexpr int kStageK = GEMM_STAGE_K;
 static constexpr int kMmaM = 128;
 static constexpr int kMmaN = 128;
 static constexpr int kMmaK = 16;
@@ -282,11 +382,21 @@ static constexpr int kCtaN =
     (kSinglePipeline && kSinglePipelineNtile128) ? kMmaN : 256;
 static constexpr int kSingleWideMmaM = kMmaM;
 static constexpr int kSingleWideMmaN = kCtaN;
-static constexpr int kBTmaN = kSinglePipelineWideMma ? kCtaN : kMmaN;
+static constexpr int kBTmaN =
+    (kSinglePipelineWideMma || GEMM_WIDE_B_TMA) ? kCtaN : kMmaN;
 static constexpr int kBTmaNSubtiles = kBTmaN / 64;
-static constexpr int kStages = 3;
+static constexpr int kStages = GEMM_STAGES;
 static constexpr int kPipes = kCtaN / kMmaN;
 static constexpr int kMBlocks = kCtaM / kMmaM;
+static_assert(GEMM_EPILOGUE_MODE >= 0 && GEMM_EPILOGUE_MODE <= 2,
+              "GEMM_EPILOGUE_MODE must be 0, 1, or 2");
+static_assert(GEMM_EPILOGUE_MODE != 2 || GEMM_EPILOGUE_WARPS == 4,
+              "A dedicated TMEM epilogue needs one full 4-warp warpgroup: "
+              "warpgroup-local warp IDs 0..3 access TMEM lanes 0..127");
+static_assert(GEMM_EPILOGUE_MODE != 2 || kCtaM == 128,
+              "TMEM double-buffer epilogue currently requires CTA_M=128");
+static_assert(GEMM_EPILOGUE_MODE != 2 || GEMM_PERSISTENT_CTA,
+              "TMEM double-buffer epilogue requires persistent CTAs");
 static constexpr int kAStageWords = kCtaM * kStageK / 2;
 static constexpr int kBStageWords = kStageK * kCtaN / 2;
 static constexpr int kBPipeWords = kStageK * kMmaN / 2;
@@ -316,6 +426,7 @@ static constexpr int kDynamicSmemPayloadBytes =
 static constexpr int kDynamicSmemBytes =
     kDynamicSmemPayloadBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
+static constexpr int kAK64TileWords = kMmaM * 64 / 2;
 static constexpr int kTmemTileStride = 128;
 [[maybe_unused]] static constexpr int kTraceSlotsPerIter = 8;
 [[maybe_unused]] static constexpr int kPipe1PhaseShiftCycles =
@@ -405,12 +516,23 @@ enum StoreMode : int {
   kStoreTma = 2,
 };
 
+enum InputInitMode : int {
+  kInputInitMemset = 0,
+  kInputInitFormula = 1,
+  kInputInitRandom = 2,
+  kInputInitRandomSigned8 = 3,
+};
+
 struct Args {
   int device = 0;
-  int warmup = 2;
+  int warmup = 1;
   int iters = 5;
   std::vector<int> sizes = {4096, 8192, 16384, 32768};
   const char* csv = "gemm256_tma_tcgen05_bench.csv";
+  int input_init_mode = kInputInitMemset;
+  // 0 launches one CTA per output tile.  A positive value launches at most
+  // this many CTAs and lets each CTA process a strided tile stream.
+  int persistent_ctas = 0;
   bool validate = false;
   int validate_size = 256;
   const char* validate_pattern = "pattern";
@@ -529,6 +651,25 @@ __host__ __device__ __forceinline__ uint64_t make_sw128_major_k_smem_desc(
   return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
 }
 
+__device__ __forceinline__ uint64_t make_stage_a_smem_desc(
+    uint32_t* a_smem,
+    int mblock,
+    int mma) {
+  uint32_t* matrix = a_smem + mblock * kHalfTileWords;
+  if constexpr (kStageK <= 64) {
+    return make_sw128_major_k_smem_desc(smem_ptr_u32(matrix), mma);
+  } else {
+    // Wider stages are stored as independent 128x64 SW128 matrices.  Keeping
+    // the K64 chunks planar preserves the 128-byte row stride encoded by the
+    // normal major-K descriptor.
+    constexpr int kMmasPerK64 = 64 / kMmaK;
+    const int chunk = mma / kMmasPerK64;
+    const int mma_in_chunk = mma - chunk * kMmasPerK64;
+    matrix += chunk * kAK64TileWords;
+    return make_sw128_major_k_smem_desc(smem_ptr_u32(matrix), mma_in_chunk);
+  }
+}
+
 template <int MmaN>
 __host__ __device__ __forceinline__ uint64_t
 make_sw128_major_mn_smem_desc_shape(uint32_t matrix_start_addr, int mma) {
@@ -630,6 +771,30 @@ __device__ __forceinline__ void tma_load_2d(const CUtensorMap* map,
   (void)barrier;
   (void)c;
   (void)r;
+#endif
+}
+
+__device__ __forceinline__ void tma_load_3d(const CUtensorMap* map,
+                                            uint32_t dst_smem,
+                                            uint64_t* barrier,
+                                            int c0,
+                                            int c1,
+                                            int c2) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t bar = smem_ptr_u32(barrier);
+  asm volatile(
+      "cp.async.bulk.tensor.3d.shared::cta.global.tile.mbarrier::complete_tx::bytes"
+      " [%0], [%1, {%3, %4, %5}], [%2];"
+      :
+      : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2)
+      : "memory");
+#else
+  (void)map;
+  (void)dst_smem;
+  (void)barrier;
+  (void)c0;
+  (void)c1;
+  (void)c2;
 #endif
 }
 
@@ -766,6 +931,12 @@ __device__ __forceinline__ void tcgen05_commit(uint64_t* barrier) {
 __device__ __forceinline__ void tcgen05_fence_after_thread_sync() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile("tcgen05.fence::after_thread_sync;" ::: "memory");
+#endif
+}
+
+__device__ __forceinline__ void tcgen05_fence_before_thread_sync() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  asm volatile("tcgen05.fence::before_thread_sync;" ::: "memory");
 #endif
 }
 
@@ -935,6 +1106,74 @@ __device__ __forceinline__ void store_128x128_float_tile(uint32_t src_taddr,
 #endif
 }
 
+// Each warp can access only the corresponding 32-lane TMEM partition within
+// its warpgroup.  A complete 128-row drain therefore requires four epilogue
+// warps (one full warpgroup), even though the register-to-global part of each
+// 32-row fragment is otherwise independent.
+__device__ __forceinline__ void store_128x128_float_tile_epilogue_warp(
+    uint32_t src_taddr,
+    float* out,
+    int out_ld,
+    int row_offset,
+    int col_offset,
+    int row_group) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int row = row_offset + row_group * 32 + lane;
+#pragma unroll
+  for (int half = 0; half < 2; ++half) {
+    uint32_t r[64];
+    const uint32_t row_taddr =
+        src_taddr + (static_cast<uint32_t>(row_group * 32) << 16) +
+        static_cast<uint32_t>(half * 64);
+    tcgen05_ld_32x32b_x64(r, row_taddr);
+    tcgen05_wait_ld();
+    uint32_t* dst = reinterpret_cast<uint32_t*>(
+        out + static_cast<size_t>(row) * out_ld + col_offset + half * 64);
+#pragma unroll
+    for (int i = 0; i < 64; i += 4) {
+      reinterpret_cast<uint4*>(dst + i)[0] =
+          make_uint4(r[i + 0], r[i + 1], r[i + 2], r[i + 3]);
+    }
+  }
+#else
+  (void)src_taddr;
+  (void)out;
+  (void)out_ld;
+  (void)row_offset;
+  (void)col_offset;
+  (void)row_group;
+#endif
+}
+
+__device__ __forceinline__ void store_128x256_float_tile_epilogue_warps(
+    const uint32_t (&c_taddr)[2],
+    float* out,
+    int out_ld,
+    int row_offset,
+    int col_offset,
+    int warp_id) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int epilogue_warp = warp_id - kCoreWarps;
+  if (epilogue_warp >= 0 && epilogue_warp < 4) {
+    tcgen05_fence_after_thread_sync();
+    store_128x128_float_tile_epilogue_warp(
+        c_taddr[0], out, out_ld, row_offset, col_offset, epilogue_warp);
+    store_128x128_float_tile_epilogue_warp(
+        c_taddr[1], out, out_ld, row_offset, col_offset + 128,
+        epilogue_warp);
+    tcgen05_fence_before_thread_sync();
+  }
+#else
+  (void)c_taddr;
+  (void)out;
+  (void)out_ld;
+  (void)row_offset;
+  (void)col_offset;
+  (void)warp_id;
+#endif
+}
+
 template <bool CStoreSwizzle128B, bool SingleWideMma>
 __device__ __forceinline__ void stage_float_c_chunk(
     const uint32_t (&c_taddr)[4],
@@ -1046,16 +1285,51 @@ __device__ __forceinline__ void store_256x256_float_tile_tma(
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
 #pragma unroll
   for (int group = 0; group < kCStoreChunkCount; group += kCStoreBuffers) {
+    if constexpr (GEMM_FUSED_CSTORE_STAGING != 0) {
+      // Both buffers are independent.  Fill them first, then publish all
+      // shared writes with one CTA synchronization/fence pair before issuing
+      // the two TMA stores as one group.
 #pragma unroll
-    for (int i = 0; i < kCStoreBuffers; ++i) {
-      const int chunk = group + i;
-      uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
-      const int chunk_m = chunk / kCStoreChunksN;
-      const int chunk_n = chunk - chunk_m * kCStoreChunksN;
-      const int tile_row = row_offset + chunk_m * kCStoreChunkM;
-      const int tile_col = col_offset + chunk_n * kCStoreChunkN;
-      issue_float_c_chunk_tma<CStoreSwizzle128B, SingleWideMma>(
-          c_taddr, c_map, tile_smem, chunk_m, chunk_n, tile_row, tile_col);
+      for (int i = 0; i < kCStoreBuffers; ++i) {
+        const int chunk = group + i;
+        uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
+        const int chunk_m = chunk / kCStoreChunksN;
+        const int chunk_n = chunk - chunk_m * kCStoreChunksN;
+        stage_float_c_chunk<CStoreSwizzle128B, SingleWideMma>(
+            c_taddr, tile_smem, chunk_m, chunk_n);
+      }
+      __syncthreads();
+      tma_store_fence_shared();
+      __syncthreads();
+      if (threadIdx.x == 0) {
+#pragma unroll
+        for (int i = 0; i < kCStoreBuffers; ++i) {
+          const int chunk = group + i;
+          uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
+          const int chunk_m = chunk / kCStoreChunksN;
+          const int chunk_n = chunk - chunk_m * kCStoreChunksN;
+          const int tile_row = row_offset + chunk_m * kCStoreChunkM;
+          const int tile_col = col_offset + chunk_n * kCStoreChunkN;
+          if constexpr (CStoreSwizzle128B) {
+            tma_store_4d(c_map, smem_ptr_u32(tile_smem), 0, tile_row,
+                         tile_col / 32, 0);
+          } else {
+            tma_store_2d(c_map, smem_ptr_u32(tile_smem), tile_col, tile_row);
+          }
+        }
+      }
+    } else {
+#pragma unroll
+      for (int i = 0; i < kCStoreBuffers; ++i) {
+        const int chunk = group + i;
+        uint32_t* tile_smem = c_smem + i * kCStoreStageWords;
+        const int chunk_m = chunk / kCStoreChunksN;
+        const int chunk_n = chunk - chunk_m * kCStoreChunksN;
+        const int tile_row = row_offset + chunk_m * kCStoreChunkM;
+        const int tile_col = col_offset + chunk_n * kCStoreChunkN;
+        issue_float_c_chunk_tma<CStoreSwizzle128B, SingleWideMma>(
+            c_taddr, c_map, tile_smem, chunk_m, chunk_n, tile_row, tile_col);
+      }
     }
     if (threadIdx.x == 0) {
       tma_store_commit_group();
@@ -1078,9 +1352,16 @@ __device__ __forceinline__ void issue_a_stage_tma(const CUtensorMap* a_map,
                                                   int tile_m,
                                                   int ktile) {
   mbarrier_expect_tx(ready, kAStageBytes);
-  const int a_col_words = ktile * (kStageK / 2);
   const int a_row = tile_m * kCtaM;
-  tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
+  if constexpr (kStageK <= 64) {
+    const int a_col_words = ktile * (kStageK / 2);
+    tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
+  } else {
+    // A 128B-swizzled tensor map may expose at most 32 uint32 words in its
+    // contiguous dimension.  Represent wider K stages as 64-BF16 subtiles.
+    const int a_k64 = ktile * (kStageK / 64);
+    tma_load_3d(a_map, smem_ptr_u32(a_smem), ready, 0, a_row, a_k64);
+  }
 }
 
 __device__ __forceinline__ void issue_b_pipe_stage_tma(
@@ -1180,11 +1461,12 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 
   __shared__ uint64_t a_ready[kStages];
   __shared__ uint64_t b_ready[kPipes][kStages];
-  __shared__ uint64_t mma_done[kPipes];
+  __shared__ uint64_t mma_done[kPipes][kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
   __shared__ unsigned long long trace_base_shared;
+  __shared__ int persistent_task_shared;
 
   if (threadIdx.x == 0) {
 #pragma unroll
@@ -1197,7 +1479,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     }
 #pragma unroll
     for (int p = 0; p < kPipes; ++p) {
-      mbarrier_init(&mma_done[p], 1);
+#pragma unroll
+      for (int s = 0; s < kStages; ++s) {
+        mbarrier_init(&mma_done[p][s], 1);
+      }
     }
     trace_base_shared = clock64();
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
@@ -1207,34 +1492,6 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const int lane = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
   const bool lane0 = lane == 0;
-  int tile_m = 0;
-  int tile_n = 0;
-  int ntile = ntile_count;
-  if constexpr (GridSwizzle > 0) {
-    const int group_m = GroupM;
-    const int group_n = GroupN;
-    const int groups_n = (ntile_count + group_n - 1) / group_n;
-    const int group_tiles = group_m * group_n;
-    const int linear_cta = static_cast<int>(blockIdx.x);
-    const int group_id = linear_cta / group_tiles;
-    const int local = linear_cta - group_id * group_tiles;
-    const int group_tile_n = group_id % groups_n;
-    const int group_tile_m = group_id / groups_n;
-    tile_n = group_tile_n * group_n + local % group_n;
-    tile_m = group_tile_m * group_m + local / group_n;
-    if (tile_m >= mtile_count || tile_n >= ntile_count) return;
-  } else {
-#if GEMM_GRID_B_REUSE
-    tile_m = static_cast<int>(blockIdx.x);
-    tile_n = static_cast<int>(blockIdx.y);
-    ntile = static_cast<int>(gridDim.y);
-#else
-    tile_n = static_cast<int>(blockIdx.x);
-    tile_m = static_cast<int>(blockIdx.y);
-    ntile = static_cast<int>(gridDim.x);
-#endif
-  }
-
   if (warp_id == 0) {
     const uint32_t taddr = tcgen05_alloc_512cols(&tmem_smem);
     if (lane0) tmem_base_shared = taddr;
@@ -1242,7 +1499,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   __syncthreads();
 
   const uint32_t tmem_base = tmem_base_shared;
-  const uint32_t c_taddr[4] = {
+  const uint32_t tmem_tile_addr[4] = {
       tmem_base + 0u * kTmemTileStride,
       tmem_base + 1u * kTmemTileStride,
       tmem_base + 2u * kTmemTileStride,
@@ -1252,35 +1509,187 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const uint32_t single_wide_idesc =
       make_bf16_idesc_shape<kSingleWideMmaM, kSingleWideMmaN>() | (1u << 16);
 
+  // Ordinary mode maps one output tile per CTA.  Persistent mode instead uses
+  // sink[total_tiles] as a launch-local work counter.  Work is handed out in
+  // 16x16 macroblocks, with M varying fastest so consecutive workers share B.
+  // This preserves locality even when persistent CTAs progress at different
+  // rates; the former blockIdx + iteration * gridDim schedule did not.
+  const int total_tiles = mtile_count * ntile_count;
+  const int linear_block = static_cast<int>(blockIdx.y) *
+                               static_cast<int>(gridDim.x) +
+                           static_cast<int>(blockIdx.x);
+  const bool persistent_8k =
+      GEMM_DENSE_L2_TUNING && mtile_count == 8192 / kCtaM &&
+      ntile_count == 8192 / kCtaN;
+  const bool persistent_32k =
+      GEMM_DENSE_L2_TUNING && mtile_count == 32768 / kCtaM &&
+      ntile_count == 32768 / kCtaN;
+  const int selected_macro_m =
+      persistent_8k    ? GEMM_PERSISTENT_8K_MACRO_M
+      : persistent_32k ? GEMM_PERSISTENT_32K_MACRO_M
+                       : GEMM_PERSISTENT_MACRO_M;
+  const int selected_macro_n =
+      persistent_8k    ? GEMM_PERSISTENT_8K_MACRO_N
+      : persistent_32k ? GEMM_PERSISTENT_32K_MACRO_N
+                       : GEMM_PERSISTENT_MACRO_N;
+  const int persistent_macro_m =
+      mtile_count < selected_macro_m ? mtile_count : selected_macro_m;
+  const int persistent_macro_n =
+      ntile_count < selected_macro_n ? ntile_count : selected_macro_n;
+  const int persistent_groups_m =
+      (mtile_count + persistent_macro_m - 1) / persistent_macro_m;
+  const int persistent_groups_n =
+      (ntile_count + persistent_macro_n - 1) / persistent_macro_n;
+  const int persistent_macro_tiles = persistent_macro_m * persistent_macro_n;
+  const int persistent_task_count =
+      persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
+  int tile_iter = 0;
+  int task_iter = 0;
+  int previous_tile_m = 0;
+  int previous_tile_n = 0;
+  bool have_previous_tile = false;
+  while (true) {
+    int linear_tile = linear_block;
+    if constexpr (GEMM_PERSISTENT_CTA) {
+      if constexpr (GEMM_PERSISTENT_STATIC_SCHEDULER != 0) {
+        // Dense square GEMM tiles have identical K and therefore identical
+        // work.  A fixed grid-stride assignment removes the per-tile global
+        // atomic and CTA-wide handoff barrier.  task_iter counts padded
+        // macroblock positions; tile_iter counts only valid barrier epochs.
+        linear_tile = linear_block +
+                      task_iter * static_cast<int>(gridDim.x * gridDim.y);
+        ++task_iter;
+      } else {
+        if (threadIdx.x == 0) {
+          persistent_task_shared =
+              static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+        }
+        __syncthreads();
+        linear_tile = persistent_task_shared;
+      }
+      if (linear_tile >= persistent_task_count) break;
+    } else if (tile_iter != 0) {
+      break;
+    }
+
+    int tile_m = 0;
+    int tile_n = 0;
+    if constexpr (GEMM_PERSISTENT_CTA) {
+      const int macro_id = linear_tile / persistent_macro_tiles;
+      const int local = linear_tile - macro_id * persistent_macro_tiles;
+      const int macro_n = GEMM_PERSISTENT_MACRO_N_FAST
+                              ? macro_id % persistent_groups_n
+                              : macro_id / persistent_groups_m;
+      const int macro_m = GEMM_PERSISTENT_MACRO_N_FAST
+                              ? macro_id / persistent_groups_n
+                              : macro_id % persistent_groups_m;
+      const int local_m = GEMM_PERSISTENT_LOCAL_M_FAST
+                              ? local % persistent_macro_m
+                              : local / persistent_macro_n;
+      const int local_n = GEMM_PERSISTENT_LOCAL_M_FAST
+                              ? local / persistent_macro_m
+                              : local % persistent_macro_n;
+      tile_m = macro_m * persistent_macro_m + local_m;
+      tile_n = macro_n * persistent_macro_n + local_n;
+      // Only edge macroblocks can contain padded tasks.  They consume no
+      // barrier epochs, so the next valid tile keeps the expected parity.
+      if (tile_m >= mtile_count || tile_n >= ntile_count) {
+        __syncthreads();
+        continue;
+      }
+    } else if constexpr (GridSwizzle > 0) {
+      const int groups_n = (ntile_count + GroupN - 1) / GroupN;
+      const int group_tiles = GroupM * GroupN;
+      const int group_id = linear_block / group_tiles;
+      const int local = linear_block - group_id * group_tiles;
+      const int group_tile_n = group_id % groups_n;
+      const int group_tile_m = group_id / groups_n;
+      tile_n = group_tile_n * GroupN + local % GroupN;
+      tile_m = group_tile_m * GroupM + local / GroupN;
+      if (tile_m >= mtile_count || tile_n >= ntile_count) break;
+    } else {
+#if GEMM_GRID_B_REUSE
+      tile_m = static_cast<int>(blockIdx.x);
+      tile_n = static_cast<int>(blockIdx.y);
+#else
+      tile_n = static_cast<int>(blockIdx.x);
+      tile_m = static_cast<int>(blockIdx.y);
+#endif
+    }
+    const int ntile = ntile_count;
+    const int stage_epoch_base = GEMM_PERSISTENT_CTA ? tile_iter * ktiles : 0;
+    const uint32_t tmem_bank_offset =
+        GEMM_EPILOGUE_MODE == 2
+            ? static_cast<uint32_t>((tile_iter & 1) * 2) * kTmemTileStride
+            : 0u;
+    const uint32_t c_taddr[4] = {
+        tmem_tile_addr[0] + tmem_bank_offset,
+        tmem_tile_addr[1] + tmem_bank_offset,
+        tmem_tile_addr[2] + tmem_bank_offset,
+        tmem_tile_addr[3] + tmem_bank_offset,
+    };
+
+    // Tile N drains while tile N+1 computes into the other 256-column TMEM
+    // bank.  The iteration-end CTA rendezvous below prevents bank reuse until
+    // both paths have finished.
+    if constexpr (GEMM_EPILOGUE_MODE == 2) {
+      if (have_previous_tile && out != nullptr) {
+        const uint32_t previous_bank_offset =
+            static_cast<uint32_t>(((tile_iter - 1) & 1) * 2) *
+            kTmemTileStride;
+        const uint32_t previous_c_taddr[2] = {
+            tmem_tile_addr[0] + previous_bank_offset,
+            tmem_tile_addr[1] + previous_bank_offset,
+        };
+        store_128x256_float_tile_epilogue_warps(
+            previous_c_taddr, out, out_ld, previous_tile_m * kCtaM,
+            previous_tile_n * kCtaN, warp_id);
+      }
+      if (warp_id == 2 || warp_id == 3) {
+        // Orders this bank's MMA operations after the epilogue warp's prior
+        // tcgen05.ld + wait + before_thread_sync sequence at the CTA barrier.
+        tcgen05_fence_after_thread_sync();
+      }
+    }
+
   if (warp_id == 0 && lane0) {
     for (int kt = 0; kt < ktiles; ++kt) {
-      const int stage = kt % kStages;
+      const int stage_epoch = stage_epoch_base + kt;
+      const int stage = stage_epoch % kStages;
       uint32_t* stage_smem = smem + stage * kStageWords;
       uint32_t* a_smem = stage_smem;
       uint32_t* b_smem = stage_smem + kAStageWords;
-      if (kt >= kStages) {
-        const uint32_t reuse_phase = static_cast<uint32_t>((kt - kStages) & 1);
+      if (stage_epoch >= kStages) {
+        const uint32_t reuse_phase = static_cast<uint32_t>(
+            ((stage_epoch - kStages) / kStages) & 1);
 #pragma unroll
         for (int p = 0; p < kPipes; ++p) {
-          mbarrier_wait(&mma_done[p], reuse_phase);
+          mbarrier_wait(&mma_done[p][stage], reuse_phase);
         }
       }
       const unsigned long long trace_start =
           clock_trace != nullptr ? clock64() : 0ull;
-      issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
-      if constexpr (SinglePipeline != 0 && kSinglePipelineWideMma != 0) {
-        issue_b_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n, kt,
+      const int source_m = GEMM_REPEAT_INPUT ? 0 : tile_m;
+      const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
+      const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
+      issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], source_m, source_kt);
+      if constexpr ((SinglePipeline != 0 && kSinglePipelineWideMma != 0) ||
+                    GEMM_WIDE_B_TMA != 0) {
+        issue_b_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
+                          source_kt,
                           nullptr, 0, 0, trace_base_shared, 0, 0);
       } else {
-        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
-                               kt, 0, nullptr, 0, 0, trace_base_shared, 0, 0);
+        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
+                               source_kt, 0, nullptr, 0, 0,
+                               trace_base_shared, 0, 0);
       }
       if constexpr (SinglePipeline != 0 && kPipes > 1 &&
                     kSinglePipelineSplitTma == 0 &&
                     kSinglePipelineWideMma == 0) {
         uint32_t* b1_smem = b_smem + kBPipeWords;
-        issue_b_pipe_stage_tma(&b_map, b1_smem, &b_ready[1][stage], tile_n,
-                               kt, 1, nullptr, 0, 0, trace_base_shared, 1, 0);
+        issue_b_pipe_stage_tma(&b_map, b1_smem, &b_ready[1][stage], source_n,
+                               source_kt, 1, nullptr, 0, 0,
+                               trace_base_shared, 1, 0);
       }
       const unsigned long long trace_end =
           clock_trace != nullptr ? clock64() : 0ull;
@@ -1293,21 +1702,27 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   if constexpr (kPipes > 1 &&
                 (SinglePipeline == 0 ||
                  (kSinglePipelineSplitTma != 0 &&
-                  kSinglePipelineWideMma == 0))) {
+                  kSinglePipelineWideMma == 0)) &&
+                GEMM_WIDE_B_TMA == 0) {
     if (warp_id == 1 && lane0) {
       if constexpr (SinglePipeline == 0) {
         wait_pipe1_phase_shift_tuned<Pipe1TmaPhaseCycles>();
       }
       for (int kt = 0; kt < ktiles; ++kt) {
-        const int stage = kt % kStages;
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
         uint32_t* stage_smem = smem + stage * kStageWords;
         uint32_t* b_smem = stage_smem + kAStageWords + kBPipeWords;
-        if (kt >= kStages) {
-          mbarrier_wait(&mma_done[1],
-                        static_cast<uint32_t>((kt - kStages) & 1));
+        if (stage_epoch >= kStages) {
+          mbarrier_wait(&mma_done[1][stage], static_cast<uint32_t>(
+                                                    ((stage_epoch - kStages) /
+                                                     kStages) &
+                                                    1));
         }
-        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
-                               kt, 1, clock_trace, clock_trace_start,
+        const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
+        const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
+        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], source_n,
+                               source_kt, 1, clock_trace, clock_trace_start,
                                clock_trace_iters, trace_base_shared, 1, 1);
       }
     }
@@ -1316,8 +1731,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   if constexpr (SinglePipeline != 0) {
     if (warp_id == 2 && lane0) {
       for (int kt = 0; kt < ktiles; ++kt) {
-        const int stage = kt % kStages;
-        const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
+        const uint32_t tma_phase =
+            static_cast<uint32_t>((stage_epoch / kStages) & 1);
         uint32_t* stage_smem = smem + stage * kStageWords;
         uint32_t* a_smem = stage_smem;
         mbarrier_wait(&a_ready[stage], tma_phase);
@@ -1336,11 +1753,9 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
               clock_trace != nullptr ? clock64() : 0ull;
 #pragma unroll
           for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-            const uint32_t a0 = smem_ptr_u32(a_smem);
-            const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
             const uint32_t b0 = smem_ptr_u32(b_smem);
-            const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
-            const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
+            const uint64_t a0_desc = make_stage_a_smem_desc(a_smem, 0, kk);
+            const uint64_t a1_desc = make_stage_a_smem_desc(a_smem, 1, kk);
             const uint64_t b0_desc =
                 make_sw128_major_mn_smem_desc_shape<kSingleWideMmaN>(b0, kk);
             const bool input_d = (kt != 0) || (kk != 0);
@@ -1351,7 +1766,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
           }
 #pragma unroll
           for (int pipe = 0; pipe < kPipes; ++pipe) {
-            tcgen05_commit(&mma_done[pipe]);
+            tcgen05_commit(&mma_done[pipe][stage]);
           }
           const unsigned long long mma_issue_end =
               clock_trace != nullptr ? clock64() : 0ull;
@@ -1378,10 +1793,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
               clock_trace != nullptr ? clock64() : 0ull;
 #pragma unroll
           for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-            const uint32_t a0 = smem_ptr_u32(a_smem);
-            const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
-            const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
-            const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
+            const uint64_t a0_desc = make_stage_a_smem_desc(a_smem, 0, kk);
+            const uint64_t a1_desc = make_stage_a_smem_desc(a_smem, 1, kk);
             const bool input_d = (kt != 0) || (kk != 0);
 #pragma unroll
             for (int pipe = 0; pipe < kPipes; ++pipe) {
@@ -1397,7 +1810,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
           }
 #pragma unroll
           for (int pipe = 0; pipe < kPipes; ++pipe) {
-            tcgen05_commit(&mma_done[pipe]);
+            tcgen05_commit(&mma_done[pipe][stage]);
           }
           const unsigned long long mma_issue_end =
               clock_trace != nullptr ? clock64() : 0ull;
@@ -1429,11 +1842,9 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                 clock_trace != nullptr ? clock64() : 0ull;
 #pragma unroll
             for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-              const uint32_t a0 = smem_ptr_u32(a_smem);
-              const uint32_t a1 = smem_ptr_u32(a_smem + kHalfTileWords);
               const uint32_t b0 = smem_ptr_u32(b_smem);
-              const uint64_t a0_desc = make_sw128_major_k_smem_desc(a0, kk);
-              const uint64_t a1_desc = make_sw128_major_k_smem_desc(a1, kk);
+              const uint64_t a0_desc = make_stage_a_smem_desc(a_smem, 0, kk);
+              const uint64_t a1_desc = make_stage_a_smem_desc(a_smem, 1, kk);
               const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
               const bool input_d = (kt != 0) || (kk != 0);
 
@@ -1442,7 +1853,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
               tcgen05_mma_bf16_ss(c_taddr[bottom_c], a1_desc, b0_desc, idesc,
                                   input_d);
             }
-            tcgen05_commit(&mma_done[pipe]);
+            tcgen05_commit(&mma_done[pipe][stage]);
             const unsigned long long mma_issue_end =
                 clock_trace != nullptr ? clock64() : 0ull;
             write_trace_record(clock_trace, clock_trace_start,
@@ -1456,7 +1867,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         for (int pipe = 0; pipe < kPipes; ++pipe) {
           const unsigned long long mma_wait_start =
               clock_trace != nullptr ? clock64() : 0ull;
-          mbarrier_wait(&mma_done[pipe], static_cast<uint32_t>(kt & 1));
+          mbarrier_wait(&mma_done[pipe][stage], tma_phase);
           const unsigned long long mma_wait_end =
               clock_trace != nullptr ? clock64() : 0ull;
           write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
@@ -1470,8 +1881,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       const int pipe = warp_id - 2;
       if (pipe == 1) wait_pipe1_phase_shift_tuned<Pipe1MmaPhaseCycles>();
       for (int kt = 0; kt < ktiles; ++kt) {
-        const int stage = kt % kStages;
-        const uint32_t tma_phase = static_cast<uint32_t>((kt / kStages) & 1);
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
+        const uint32_t tma_phase =
+            static_cast<uint32_t>((stage_epoch / kStages) & 1);
         uint32_t* stage_smem = smem + stage * kStageWords;
         uint32_t* a_smem = stage_smem;
         uint32_t* b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
@@ -1479,7 +1892,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         const unsigned long long tma_wait_start =
             clock_trace != nullptr ? clock64() : 0ull;
         mbarrier_wait(&a_ready[stage], tma_phase);
-        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+        mbarrier_wait(&b_ready[GEMM_WIDE_B_TMA ? 0 : pipe][stage], tma_phase);
         const unsigned long long tma_wait_end =
             clock_trace != nullptr ? clock64() : 0ull;
         write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
@@ -1490,35 +1903,52 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
             clock_trace != nullptr ? clock64() : 0ull;
 #pragma unroll
         for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-          const uint32_t b0 = smem_ptr_u32(b_smem);
-          const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
+          uint64_t b0_desc = 0;
+          if constexpr (GEMM_WIDE_B_TMA != 0) {
+            // A 64x256 TMA interleaves both N pipes inside each K=16 slice:
+            // [K16 pipe0][K16 pipe1], repeated four times.  Point each
+            // 128-wide MMA descriptor at its half of the wide slice.
+            constexpr int kWideBSliceWords = kMmaK * kCtaN / 2;
+            constexpr int kPipeBSliceWords = kMmaK * kMmaN / 2;
+            uint32_t* wide_b_smem = stage_smem + kAStageWords;
+            const uint32_t b0 = smem_ptr_u32(
+                wide_b_smem + kk * kWideBSliceWords +
+                pipe * kPipeBSliceWords);
+            b0_desc = make_sw128_major_mn_smem_desc(b0, 0);
+          } else {
+            const uint32_t b0 = smem_ptr_u32(b_smem);
+            b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
+          }
           const bool input_d = (kt != 0) || (kk != 0);
 #pragma unroll
           for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            const uint32_t a =
-                smem_ptr_u32(a_smem + mblock * kHalfTileWords);
-            const uint64_t a_desc = make_sw128_major_k_smem_desc(a, kk);
+            const uint64_t a_desc =
+                make_stage_a_smem_desc(a_smem, mblock, kk);
             const int c_tile = mblock * 2 + pipe;
             tcgen05_mma_bf16_ss(c_taddr[c_tile], a_desc, b0_desc, idesc,
                                 input_d);
           }
         }
-        tcgen05_commit(&mma_done[pipe]);
+        tcgen05_commit(&mma_done[pipe][stage]);
         const unsigned long long mma_issue_end =
             clock_trace != nullptr ? clock64() : 0ull;
         write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
                            trace_base_shared, kTraceMmaIssue, kt, 4 + pipe,
                            warp_id, mma_issue_start, mma_issue_end);
 
-        const unsigned long long mma_wait_start =
-            clock_trace != nullptr ? clock64() : 0ull;
-        mbarrier_wait(&mma_done[pipe], static_cast<uint32_t>(kt & 1));
-        const unsigned long long mma_wait_end =
-            clock_trace != nullptr ? clock64() : 0ull;
-        write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
-                           trace_base_shared, kTraceMmaWait, kt, 6 + pipe,
-                           warp_id, mma_wait_start, mma_wait_end);
       }
+      const int last_stage_epoch = stage_epoch_base + ktiles - 1;
+      const int last_stage = last_stage_epoch % kStages;
+      const uint32_t last_phase =
+          static_cast<uint32_t>((last_stage_epoch / kStages) & 1);
+      const unsigned long long mma_wait_start =
+          clock_trace != nullptr ? clock64() : 0ull;
+      mbarrier_wait(&mma_done[pipe][last_stage], last_phase);
+      const unsigned long long mma_wait_end =
+          clock_trace != nullptr ? clock64() : 0ull;
+      write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
+                         trace_base_shared, kTraceMmaWait, ktiles - 1,
+                         6 + pipe, warp_id, mma_wait_start, mma_wait_end);
     }
   }
   __syncthreads();
@@ -1555,51 +1985,106 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   }
   __syncthreads();
 
-  if (out != nullptr && store_mode == kStoreScalar && warp_id < kWarps) {
-    const int global_row_base = tile_m * kCtaM;
-    const int global_col_base = tile_n * kCtaN;
-    if constexpr (SinglePipeline != 0 && kSinglePipelineWideMma != 0) {
-      store_128x128_float_tile(c_taddr[0], out, out_ld, global_row_base,
-                               global_col_base);
-      store_128x128_float_tile(c_taddr[0] + 128u, out, out_ld,
-                               global_row_base, global_col_base + 128);
-      store_128x128_float_tile(c_taddr[2], out, out_ld,
-                               global_row_base + 128, global_col_base);
-      store_128x128_float_tile(c_taddr[2] + 128u, out, out_ld,
-                               global_row_base + 128,
-                               global_col_base + 128);
-    } else {
+  if constexpr (GEMM_EPILOGUE_MODE != 2) {
+    if (out != nullptr &&
+        (store_mode == kStoreScalar || GEMM_EPILOGUE_MODE == 1) &&
+        warp_id < kCoreWarps) {
+      const int global_row_base = tile_m * kCtaM;
+      const int global_col_base = tile_n * kCtaN;
+      if constexpr (SinglePipeline != 0 && kSinglePipelineWideMma != 0) {
+        store_128x128_float_tile(c_taddr[0], out, out_ld, global_row_base,
+                                 global_col_base);
+        store_128x128_float_tile(c_taddr[0] + 128u, out, out_ld,
+                                 global_row_base, global_col_base + 128);
+        store_128x128_float_tile(c_taddr[2], out, out_ld,
+                                 global_row_base + 128, global_col_base);
+        store_128x128_float_tile(c_taddr[2] + 128u, out, out_ld,
+                                 global_row_base + 128,
+                                 global_col_base + 128);
+      } else {
 #pragma unroll
-      for (int mblock = 0; mblock < kMBlocks; ++mblock) {
+        for (int mblock = 0; mblock < kMBlocks; ++mblock) {
 #pragma unroll
-        for (int pipe = 0; pipe < kPipes; ++pipe) {
-          const int c_tile = mblock * 2 + pipe;
-          store_128x128_float_tile(c_taddr[c_tile], out, out_ld,
-                                   global_row_base + mblock * kMmaM,
-                                   global_col_base + pipe * kMmaN);
+          for (int pipe = 0; pipe < kPipes; ++pipe) {
+            const int c_tile = mblock * 2 + pipe;
+            store_128x128_float_tile(c_taddr[c_tile], out, out_ld,
+                                     global_row_base + mblock * kMmaM,
+                                     global_col_base + pipe * kMmaN);
+          }
         }
       }
+    } else if (out != nullptr && store_mode == kStoreTma) {
+      const int global_row_base = tile_m * kCtaM;
+      const int global_col_base = tile_n * kCtaN;
+      store_256x256_float_tile_tma<
+          CStoreSwizzle128B != 0,
+          (SinglePipeline != 0 && kSinglePipelineWideMma != 0)>(
+          c_taddr, &c_map, c_store_smem, global_row_base, global_col_base);
     }
-  } else if (out != nullptr && store_mode == kStoreTma) {
-    const int global_row_base = tile_m * kCtaM;
-    const int global_col_base = tile_n * kCtaN;
-    store_256x256_float_tile_tma<
-        CStoreSwizzle128B != 0,
-        (SinglePipeline != 0 && kSinglePipelineWideMma != 0)>(
-        c_taddr, &c_map, c_store_smem, global_row_base, global_col_base);
   }
-  __syncthreads();
+  if constexpr (GEMM_FUSED_CSTORE_STAGING == 0) {
+    __syncthreads();
+  } else if (store_mode != kStoreTma) {
+    // The fused TMA-store helper already leaves the CTA synchronized after
+    // its final wait.  Scalar/no-store paths still need this rendezvous.
+    __syncthreads();
+  }
 
-  if (threadIdx.x == 0) {
-    tcgen05_fence_after_thread_sync();
-    uint32_t out = tmem_base ^ static_cast<uint32_t>(ktiles);
+  if constexpr (GEMM_ELIDE_DENSE_SINK == 0) {
+    if (threadIdx.x == 0) {
+      if constexpr (!GEMM_PERSISTENT_CTA) {
+        tcgen05_fence_after_thread_sync();
+      }
+      uint32_t out = tmem_base ^ static_cast<uint32_t>(ktiles);
 #pragma unroll
-    for (int w = 0; w < kWarps; ++w) {
-      out ^= warp_sinks[w];
+      for (int w = 0; w < kWarps; ++w) {
+        out ^= warp_sinks[w];
+      }
+      sink[tile_m * ntile + tile_n] = out;
     }
-    sink[tile_m * ntile + tile_n] = out;
+    __syncthreads();
+  } else if (store_mode != kStoreTma) {
+    if (threadIdx.x == 0) {
+      if constexpr (!GEMM_PERSISTENT_CTA) {
+        tcgen05_fence_after_thread_sync();
+      }
+      uint32_t out = tmem_base ^ static_cast<uint32_t>(ktiles);
+#pragma unroll
+      for (int w = 0; w < kWarps; ++w) {
+        out ^= warp_sinks[w];
+      }
+      sink[tile_m * ntile + tile_n] = out;
+    }
+    __syncthreads();
   }
-  __syncthreads();
+
+  previous_tile_m = tile_m;
+  previous_tile_n = tile_n;
+  have_previous_tile = true;
+  ++tile_iter;
+  }  // persistent output-tile loop
+
+  if constexpr (GEMM_EPILOGUE_MODE == 2) {
+    // Final drain: no next tile exists to hide this last epilogue behind.
+    if (have_previous_tile && out != nullptr) {
+      const uint32_t previous_bank_offset =
+          static_cast<uint32_t>(((tile_iter - 1) & 1) * 2) *
+          kTmemTileStride;
+      const uint32_t previous_c_taddr[2] = {
+          tmem_tile_addr[0] + previous_bank_offset,
+          tmem_tile_addr[1] + previous_bank_offset,
+      };
+      store_128x256_float_tile_epilogue_warps(
+          previous_c_taddr, out, out_ld, previous_tile_m * kCtaM,
+          previous_tile_n * kCtaN, warp_id);
+    }
+    __syncthreads();
+  }
+
+  if constexpr (GEMM_PERSISTENT_CTA) {
+    if (threadIdx.x == 0) tcgen05_fence_after_thread_sync();
+    __syncthreads();
+  }
 
   if (warp_id == 0) tcgen05_dealloc_512cols(tmem_base);
   __syncthreads();
@@ -1613,23 +2098,36 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
                                       uint64_t cols_bf16,
                                       CUtensorMapL2promotion l2_promotion) {
   const cuuint64_t cols_words = cols_bf16 / 2;
-  const cuuint64_t global_dim[2] = {cols_words, rows};
-  const cuuint64_t global_stride[1] = {cols_words * sizeof(uint32_t)};
-  const cuuint32_t box_dim[2] = {kStageK / 2, kCtaM};
-  const cuuint32_t elem_stride[2] = {1, 1};
-  driver_check(cuTensorMapEncodeTiled(map,
-                                      CU_TENSOR_MAP_DATA_TYPE_UINT32,
-                                      2,
-                                      base,
-                                      global_dim,
-                                      global_stride,
-                                      box_dim,
-                                      elem_stride,
-                                      CU_TENSOR_MAP_INTERLEAVE_NONE,
-                                      CU_TENSOR_MAP_SWIZZLE_128B,
-                                      l2_promotion,
-                                      CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
-               "cuTensorMapEncodeTiled(a_row_major_sw128)");
+  if constexpr (kStageK <= 64) {
+    const cuuint64_t global_dim[2] = {cols_words, rows};
+    const cuuint64_t global_stride[1] = {cols_words * sizeof(uint32_t)};
+    const cuuint32_t box_dim[2] = {kStageK / 2, kCtaM};
+    const cuuint32_t elem_stride[2] = {1, 1};
+    driver_check(cuTensorMapEncodeTiled(map, CU_TENSOR_MAP_DATA_TYPE_UINT32, 2,
+                                        base, global_dim, global_stride,
+                                        box_dim, elem_stride,
+                                        CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                        CU_TENSOR_MAP_SWIZZLE_128B,
+                                        l2_promotion,
+                                        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+                 "cuTensorMapEncodeTiled(a_row_major_sw128)");
+  } else {
+    static_assert(kStageK % 64 == 0,
+                  "GEMM_STAGE_K above 64 must be a multiple of 64");
+    const cuuint64_t global_dim[3] = {32, rows, cols_words / 32};
+    const cuuint64_t global_stride[2] = {
+        cols_words * sizeof(uint32_t), 32 * sizeof(uint32_t)};
+    const cuuint32_t box_dim[3] = {32, kCtaM, kStageK / 64};
+    const cuuint32_t elem_stride[3] = {1, 1, 1};
+    driver_check(cuTensorMapEncodeTiled(map, CU_TENSOR_MAP_DATA_TYPE_UINT32, 3,
+                                        base, global_dim, global_stride,
+                                        box_dim, elem_stride,
+                                        CU_TENSOR_MAP_INTERLEAVE_NONE,
+                                        CU_TENSOR_MAP_SWIZZLE_128B,
+                                        l2_promotion,
+                                        CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+                 "cuTensorMapEncodeTiled(a_row_major_sw128_k64)");
+  }
 }
 
 void encode_b_row_major_sw128_k16_tma_map(CUtensorMap* map,
@@ -1745,6 +2243,21 @@ const char* store_mode_name(int store_mode) {
   }
 }
 
+const char* input_init_mode_name(int mode) {
+  switch (mode) {
+    case kInputInitMemset:
+      return "memset";
+    case kInputInitFormula:
+      return "formula";
+    case kInputInitRandom:
+      return "random";
+    case kInputInitRandomSigned8:
+      return "random-signed8";
+    default:
+      return "unknown";
+  }
+}
+
 std::vector<int> parse_sizes(const char* s) {
   std::vector<int> out;
   const char* p = s;
@@ -1765,6 +2278,8 @@ std::vector<int> parse_sizes(const char* s) {
 void usage(const char* argv0) {
   std::printf("Usage: %s [--device N] [--sizes 4096,8192,16384,32768] "
               "[--warmup W] [--iters I] [--csv PATH] "
+              "[--input-init memset|formula|random|random-signed8] "
+              "[--persistent-ctas N] "
               "[--validate] [--validate-size N] [--validate-pattern pattern|ones] "
               "[--clock-trace] [--clock-trace-start N] "
               "[--clock-trace-iters N] [--trace-csv PATH]\n",
@@ -1792,6 +2307,28 @@ Args parse_args(int argc, char** argv) {
       args.iters = std::atoi(need_arg("--iters"));
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
+    } else if (std::strcmp(argv[i], "--input-init") == 0) {
+      const char* mode = need_arg("--input-init");
+      if (std::strcmp(mode, "memset") == 0) {
+        args.input_init_mode = kInputInitMemset;
+      } else if (std::strcmp(mode, "formula") == 0) {
+        args.input_init_mode = kInputInitFormula;
+      } else if (std::strcmp(mode, "random") == 0) {
+        args.input_init_mode = kInputInitRandom;
+      } else if (std::strcmp(mode, "random-signed8") == 0) {
+        args.input_init_mode = kInputInitRandomSigned8;
+      } else {
+        std::fprintf(stderr,
+                     "input init must be 'memset', 'formula', 'random', or "
+                     "'random-signed8'\n");
+        std::exit(EXIT_FAILURE);
+      }
+    } else if (std::strcmp(argv[i], "--persistent-ctas") == 0) {
+      args.persistent_ctas = std::atoi(need_arg("--persistent-ctas"));
+      if (args.persistent_ctas < 0) {
+        std::fprintf(stderr, "persistent CTA count must be non-negative\n");
+        std::exit(EXIT_FAILURE);
+      }
     } else if (std::strcmp(argv[i], "--validate") == 0) {
       args.validate = true;
     } else if (std::strcmp(argv[i], "--validate-size") == 0) {
@@ -1842,6 +2379,104 @@ Args parse_args(int argc, char** argv) {
 double elapsed_ms(std::chrono::steady_clock::time_point start,
                   std::chrono::steady_clock::time_point stop) {
   return std::chrono::duration<double, std::milli>(stop - start).count();
+}
+
+static constexpr float kFormulaInitScale = 1.0f / 128.0f;
+
+__device__ __forceinline__ uint16_t float_to_bf16_bits_device(float value) {
+  uint32_t bits = __float_as_uint(value);
+  const uint32_t lsb = (bits >> 16) & 1u;
+  bits += 0x7fffu + lsb;
+  return static_cast<uint16_t>(bits >> 16);
+}
+
+__global__ void init_formula_bf16_words(uint32_t* words,
+                                        size_t word_count,
+                                        uint64_t index_offset,
+                                        float scale) {
+  const size_t word_idx =
+      static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (word_idx >= word_count) return;
+
+  const uint64_t lo_idx = index_offset + static_cast<uint64_t>(word_idx) * 2u;
+  const uint64_t hi_idx = lo_idx + 1u;
+  const float lo_value =
+      (static_cast<float>(static_cast<int>(lo_idx % 251u)) - 125.0f) * scale;
+  const float hi_value =
+      (static_cast<float>(static_cast<int>(hi_idx % 251u)) - 125.0f) * scale;
+  const uint32_t lo = float_to_bf16_bits_device(lo_value);
+  const uint32_t hi = float_to_bf16_bits_device(hi_value);
+  words[word_idx] = lo | (hi << 16);
+}
+
+__device__ __forceinline__ uint32_t random_mix32(uint32_t x) {
+  x += 0x9e3779b9u;
+  x = (x ^ (x >> 16)) * 0x85ebca6bu;
+  x = (x ^ (x >> 13)) * 0xc2b2ae35u;
+  return x ^ (x >> 16);
+}
+
+__global__ void init_random_bf16_words(uint32_t* words,
+                                       size_t word_count,
+                                       uint32_t seed,
+                                       float scale,
+                                       float bias) {
+  const size_t word_idx =
+      static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (word_idx >= word_count) return;
+  const uint32_t index = static_cast<uint32_t>(word_idx);
+  const uint32_t lo24 = random_mix32(seed ^ index ^ 0x9e3779b9u) >> 8;
+  const uint32_t hi24 = random_mix32(seed ^ index ^ 0x243f6a88u) >> 8;
+  const float lo = static_cast<float>(lo24) * 0x1.0p-24f * scale + bias;
+  const float hi = static_cast<float>(hi24) * 0x1.0p-24f * scale + bias;
+  words[word_idx] = static_cast<uint32_t>(float_to_bf16_bits_device(lo)) |
+                    (static_cast<uint32_t>(float_to_bf16_bits_device(hi))
+                     << 16);
+}
+
+void initialize_bf16_inputs(uint32_t* d_a,
+                            size_t a_words,
+                            uint32_t* d_b,
+                            size_t b_words,
+                            int input_init_mode) {
+  if (input_init_mode == kInputInitMemset) {
+    CUDA_CHECK(cudaMemset(d_a, 0x3f, a_words * sizeof(uint32_t)));
+    CUDA_CHECK(cudaMemset(d_b, 0x11, b_words * sizeof(uint32_t)));
+    return;
+  }
+  if (input_init_mode == kInputInitRandom ||
+      input_init_mode == kInputInitRandomSigned8) {
+    constexpr int kInitThreads = 256;
+    const int a_blocks =
+        static_cast<int>((a_words + kInitThreads - 1) / kInitThreads);
+    const int b_blocks =
+        static_cast<int>((b_words + kInitThreads - 1) / kInitThreads);
+    const float scale = input_init_mode == kInputInitRandom ? 1.0f : 16.0f;
+    const float bias = input_init_mode == kInputInitRandom ? 0.0f : -8.0f;
+    init_random_bf16_words<<<a_blocks, kInitThreads>>>(
+        d_a, a_words, 20260719u ^ 0xa511e9b3u, scale, bias);
+    CUDA_CHECK(cudaGetLastError());
+    init_random_bf16_words<<<b_blocks, kInitThreads>>>(
+        d_b, b_words, 20260719u ^ 0x63d83595u, scale, bias);
+    CUDA_CHECK(cudaGetLastError());
+    return;
+  }
+  if (input_init_mode != kInputInitFormula) {
+    std::fprintf(stderr, "Unknown input init mode: %d\n", input_init_mode);
+    std::exit(EXIT_FAILURE);
+  }
+
+  constexpr int kInitThreads = 256;
+  const int a_blocks =
+      static_cast<int>((a_words + kInitThreads - 1) / kInitThreads);
+  const int b_blocks =
+      static_cast<int>((b_words + kInitThreads - 1) / kInitThreads);
+  init_formula_bf16_words<<<a_blocks, kInitThreads>>>(d_a, a_words, 0,
+                                                      kFormulaInitScale);
+  CUDA_CHECK(cudaGetLastError());
+  init_formula_bf16_words<<<b_blocks, kInitThreads>>>(
+      d_b, b_words, static_cast<uint64_t>(a_words) * 2u, kFormulaInitScale);
+  CUDA_CHECK(cudaGetLastError());
 }
 
 struct GemmTuning {
@@ -2113,6 +2748,7 @@ struct CaseResult {
   int ntile = 0;
   int ktiles = 0;
   int ctas = 0;
+  int launch_ctas = 0;
   int grid_swizzle = 0;
   int group_m = 1;
   int group_n = 1;
@@ -2123,6 +2759,7 @@ struct CaseResult {
   int tma_a_l2_promotion = 0;
   int tma_b_l2_promotion = 0;
   int tma_c_l2_promotion = 0;
+  int input_init_mode = kInputInitMemset;
   int store_mode = kStoreNone;
   float event_ms = 0.0f;
   double wall_ms = 0.0;
@@ -2131,7 +2768,12 @@ struct CaseResult {
   uint32_t checksum = 0;
 };
 
-CaseResult run_case(int size, int warmup, int iters, int store_mode) {
+CaseResult run_case(int size,
+                    int warmup,
+                    int iters,
+                    int store_mode,
+                    int input_init_mode,
+                    int persistent_ctas) {
   if (size % kCtaM != 0 || size % kCtaN != 0 || size % kStageK != 0) {
     std::fprintf(stderr,
                  "size must be a multiple of cta_m=%d, cta_n=%d, and "
@@ -2156,14 +2798,15 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   float* d_c = nullptr;
   CUDA_CHECK(cudaMalloc(&d_a, a_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_b, b_words * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_sink, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_sink,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
   if (store_mode != kStoreNone) {
     CUDA_CHECK(cudaMalloc(&d_c, static_cast<size_t>(m) * n * sizeof(float)));
     CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
   }
-  CUDA_CHECK(cudaMemset(d_a, 0x3f, a_words * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMemset(d_b, 0x11, b_words * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  initialize_bf16_inputs(d_a, a_words, d_b, b_words, input_init_mode);
+  CUDA_CHECK(cudaMemset(d_sink, 0,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
   CUDA_CHECK(cudaDeviceSynchronize());
 
   const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
@@ -2184,8 +2827,14 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   set_gemm_kernel_attributes();
 
   dim3 grid = launch_grid(mtile, ntile, tuning);
+  if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
+    grid = dim3(std::min(persistent_ctas, ctas), 1, 1);
+  }
   dim3 block(kThreads, 1, 1);
   auto launch_gemm = [&]() {
+    if (GEMM_PERSISTENT_CTA && !GEMM_PERSISTENT_STATIC_SCHEDULER) {
+      CUDA_CHECK(cudaMemsetAsync(d_sink + ctas, 0, sizeof(uint32_t)));
+    }
     launch_gemm_kernel(tuning, grid, block, a_map, b_map, c_map, d_sink,
                        d_c, n, store_mode, ktiles, mtile, ntile, nullptr, 0,
                        0);
@@ -2229,6 +2878,7 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   result.ntile = ntile;
   result.ktiles = ktiles;
   result.ctas = ctas;
+  result.launch_ctas = static_cast<int>(grid.x * grid.y * grid.z);
   result.grid_swizzle = tuning.grid_swizzle;
   result.group_m = tuning.group_m;
   result.group_n = tuning.group_n;
@@ -2239,6 +2889,7 @@ CaseResult run_case(int size, int warmup, int iters, int store_mode) {
   result.tma_a_l2_promotion = static_cast<int>(a_l2_promotion);
   result.tma_b_l2_promotion = static_cast<int>(b_l2_promotion);
   result.tma_c_l2_promotion = static_cast<int>(c_l2_promotion);
+  result.input_init_mode = input_init_mode;
   result.store_mode = store_mode;
   result.event_ms = static_cast<float>(avg_event_ms);
   result.wall_ms = avg_wall_ms;
@@ -2299,7 +2950,10 @@ struct ValidateResult {
   float first_bad_ref = 0.0f;
 };
 
-ValidateResult run_validation(int size, const char* pattern, int store_mode) {
+ValidateResult run_validation(int size,
+                              const char* pattern,
+                              int store_mode,
+                              int persistent_ctas) {
   if (store_mode == kStoreNone) {
     store_mode = kStoreScalar;
   }
@@ -2349,13 +3003,15 @@ ValidateResult run_validation(int size, const char* pattern, int store_mode) {
   float* d_c = nullptr;
   CUDA_CHECK(cudaMalloc(&d_a, h_a.size() * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_b, h_b.size() * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_sink, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_sink,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_c, static_cast<size_t>(m) * n * sizeof(float)));
   CUDA_CHECK(cudaMemcpy(d_a, h_a.data(), h_a.size() * sizeof(uint32_t),
                         cudaMemcpyHostToDevice));
   CUDA_CHECK(cudaMemcpy(d_b, h_b.data(), h_b.size() * sizeof(uint32_t),
                         cudaMemcpyHostToDevice));
-  CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_sink, 0,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
 
   const GemmTuning tuning = select_gemm_tuning(mtile, ntile, ktiles);
@@ -2375,6 +3031,9 @@ ValidateResult run_validation(int size, const char* pattern, int store_mode) {
   set_gemm_kernel_attributes();
 
   dim3 grid = launch_grid(mtile, ntile, tuning);
+  if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
+    grid = dim3(std::min(persistent_ctas, ctas), 1, 1);
+  }
   dim3 block(kThreads, 1, 1);
   launch_gemm_kernel(tuning, grid, block, a_map, b_map, c_map, d_sink, d_c,
                      n, store_mode, ktiles, mtile, ntile, nullptr, 0, 0);
@@ -2392,8 +3051,13 @@ ValidateResult run_validation(int size, const char* pattern, int store_mode) {
     for (int col = 0; col < n; ++col) {
       double ref = 0.0;
       for (int kk = 0; kk < k; ++kk) {
-        ref += static_cast<double>(a_ref[static_cast<size_t>(row) * k + kk]) *
-               static_cast<double>(b_ref[static_cast<size_t>(kk) * n + col]);
+        const int source_row = GEMM_REPEAT_INPUT ? row % kCtaM : row;
+        const int source_col = GEMM_REPEAT_INPUT ? col % kCtaN : col;
+        const int source_k = GEMM_REPEAT_INPUT ? kk % kStageK : kk;
+        ref += static_cast<double>(
+                   a_ref[static_cast<size_t>(source_row) * k + source_k]) *
+               static_cast<double>(
+                   b_ref[static_cast<size_t>(source_k) * n + source_col]);
       }
       const double actual = got[static_cast<size_t>(row) * n + col];
       const double abs_err = std::abs(actual - ref);
@@ -2498,13 +3162,15 @@ void run_trace_case(const Args& args) {
   ClockTraceRecord* d_trace = nullptr;
   CUDA_CHECK(cudaMalloc(&d_a, a_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_b, b_words * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMalloc(&d_sink, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMalloc(&d_sink,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
   CUDA_CHECK(cudaMalloc(&d_trace,
                         static_cast<size_t>(records_count) *
                             sizeof(ClockTraceRecord)));
   CUDA_CHECK(cudaMemset(d_a, 0x3f, a_words * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_b, 0x11, b_words * sizeof(uint32_t)));
-  CUDA_CHECK(cudaMemset(d_sink, 0, static_cast<size_t>(ctas) * sizeof(uint32_t)));
+  CUDA_CHECK(cudaMemset(d_sink, 0,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
   CUDA_CHECK(cudaMemset(d_trace, 0,
                         static_cast<size_t>(records_count) *
                             sizeof(ClockTraceRecord)));
@@ -2523,6 +3189,9 @@ void run_trace_case(const Args& args) {
   dim3 block(kThreads, 1, 1);
   auto launch_trace_gemm = [&](ClockTraceRecord* trace, int trace_start,
                                int trace_iters_arg) {
+    if (GEMM_PERSISTENT_CTA && !GEMM_PERSISTENT_STATIC_SCHEDULER) {
+      CUDA_CHECK(cudaMemsetAsync(d_sink + ctas, 0, sizeof(uint32_t)));
+    }
     launch_gemm_kernel(tuning, grid, block, a_map, b_map, c_map, d_sink,
                        nullptr, 0, kStoreNone, ktiles, mtile, ntile, trace,
                        trace_start, trace_iters_arg);
@@ -2585,7 +3254,7 @@ int main(int argc, char** argv) {
   if (args.validate) {
     ValidateResult r =
         run_validation(args.validate_size, args.validate_pattern,
-                       kStoreTma);
+                       kStoreTma, args.persistent_ctas);
     std::printf("validation size=%d pattern=%s store_mode=%s status=%s "
                 "max_abs=%g max_rel=%g bad=%zu\n",
                 args.validate_size, args.validate_pattern,
@@ -2604,14 +3273,14 @@ int main(int argc, char** argv) {
     return 1;
   }
   std::fprintf(csv,
-               "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,"
+               "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,launch_ctas,"
                "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
                "pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,"
                "cstore_swizzle_128b,single_pipeline,single_pipeline_ntile_128,"
                "single_pipeline_wide_mma,single_pipeline_split_tma,"
                "single_pipeline_interleave_pipes,"
                "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
-               "store_mode,dynamic_smem_bytes,event_ms,"
+               "input_init,store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
   std::printf("device=%d name=\"%s\" cc=%d.%d dynamic_smem=%d bytes\n",
@@ -2636,6 +3305,15 @@ int main(int argc, char** argv) {
               "single_pipeline=%d single_pipeline_ntile_128=%d "
               "single_pipeline_wide_mma=%d "
               "single_pipeline_split_tma=%d single_pipeline_interleave_pipes=%d "
+              "wide_b_tma=%d "
+              "input_init=%s formula_scale=%g "
+              "persistent_ctas=%d "
+              "persistent_kernel=%d "
+              "persistent_macro=%dx%d persistent_8k_macro=%dx%d "
+              "persistent_32k_macro=%dx%d "
+              "persistent_order_local_m_fast=%d macro_n_fast=%d "
+              "persistent_static_scheduler=%d fused_cstore_staging=%d "
+              "elide_dense_sink=%d epilogue_mode=%d epilogue_warps=%d "
               "store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
               kPipe1PhaseShiftCycles, kPipe1PhaseShiftCycles8K,
@@ -2670,21 +3348,35 @@ int main(int argc, char** argv) {
               kSinglePipeline, kSinglePipelineNtile128,
               kSinglePipelineWideMma, kSinglePipelineSplitTma,
               kSinglePipelineInterleavePipes,
+              GEMM_WIDE_B_TMA,
+              input_init_mode_name(args.input_init_mode), kFormulaInitScale,
+              args.persistent_ctas,
+              GEMM_PERSISTENT_CTA,
+              GEMM_PERSISTENT_MACRO_M, GEMM_PERSISTENT_MACRO_N,
+              GEMM_PERSISTENT_8K_MACRO_M, GEMM_PERSISTENT_8K_MACRO_N,
+              GEMM_PERSISTENT_32K_MACRO_M, GEMM_PERSISTENT_32K_MACRO_N,
+              GEMM_PERSISTENT_LOCAL_M_FAST, GEMM_PERSISTENT_MACRO_N_FAST,
+              GEMM_PERSISTENT_STATIC_SCHEDULER,
+              GEMM_FUSED_CSTORE_STAGING, GEMM_ELIDE_DENSE_SINK,
+              GEMM_EPILOGUE_MODE, kEpilogueWarps,
               store_mode_name(kStoreTma),
               "fp32");
 
   for (int size : args.sizes) {
-    CaseResult r = run_case(size, args.warmup, args.iters, kStoreTma);
-    std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d "
+    CaseResult r =
+        run_case(size, args.warmup, args.iters, kStoreTma,
+                 args.input_init_mode, args.persistent_ctas);
+    std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d launch_ctas=%d "
                 "grid_swizzle=%d group=%dx%d pipe1_phase=%d "
                 "pipe1_tma_phase=%d pipe1_mma_phase=%d "
                 "cstore_swizzle_128b=%d single_pipeline=%d "
                 "single_pipeline_ntile_128=%d single_pipeline_wide_mma=%d "
                 "single_pipeline_split_tma=%d single_pipeline_interleave_pipes=%d "
-                "tma_l2=%d/%d/%d "
+                "tma_l2=%d/%d/%d input_init=%s "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
-                r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.grid_swizzle,
+                r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.launch_ctas,
+                r.grid_swizzle,
                 r.group_m, r.group_n, r.pipe1_phase_cycles,
                 r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                 r.cstore_swizzle_128b, kSinglePipeline,
@@ -2693,13 +3385,15 @@ int main(int argc, char** argv) {
                 kSinglePipelineInterleavePipes,
                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                 r.tma_c_l2_promotion,
+                input_init_mode_name(r.input_init_mode),
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
-                 r.mtile, r.ntile, r.ktiles, r.ctas, args.warmup, args.iters,
+                 r.mtile, r.ntile, r.ktiles, r.ctas, r.launch_ctas,
+                 args.warmup, args.iters,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
                  r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                  r.cstore_swizzle_128b, kSinglePipeline,
@@ -2708,6 +3402,7 @@ int main(int argc, char** argv) {
                  kSinglePipelineInterleavePipes,
                  r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                  r.tma_c_l2_promotion,
+                 input_init_mode_name(r.input_init_mode),
                  store_mode_name(r.store_mode),
                  kDynamicSmemBytes,
                  r.event_ms, r.wall_ms, r.event_tflops, r.wall_tflops,
