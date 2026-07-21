@@ -626,6 +626,41 @@ Exact source snapshots and raw artifacts are in:
 - `../results/gemm128x256_historical_1797_remeasure_b200_45481495/`
 - `../results/gemm128x256_broadcast_ablation_b200_45481495/`
 
+### Distinct-B pipeline depth ablation (`128x256`)
+
+To isolate pipeline changes from the shared-B communication reduction above,
+the left and right `128x128` output halves were returned to distinct B panels.
+The total A/B bytes, MMA work, random `[0,1)` input, repeated addresses,
+persistent schedule, and TMA C-store were fixed.  Only K-stage granularity and
+ring depth changed.  Each entry is the mean and sample standard deviation of
+three rotated, independent processes, each using warmup 1 and timed launches
+5:
+
+| variant | dynamic SMEM | 8K | 16K | 32K |
+|---|---:|---:|---:|---:|
+| `K128`, 2 stages | 197632 B | 1600.490 +/- 0.515 | 1711.930 +/- 0.969 | 1556.790 +/- 1.137 |
+| `K64`, 3 stages | 148480 B | 1642.320 +/- 1.160 | **1753.739 +/- 0.744** | 1600.875 +/- 1.915 |
+| `K64`, 4 stages | 197632 B | **1645.157 +/- 1.616** | 1751.973 +/- 0.547 | **1604.700 +/- 1.772** |
+
+Thus finer `K=64` staging improves the 1712-series baseline by 2.44% at 16K
+and 2.61--3.08% across all sizes without changing communication or math.  A
+fourth stage is not consistently better than three, so the main gain is finer
+producer/consumer interleaving rather than ring depth alone.  All variants
+passed the 512 pattern validation bit-exactly.  This pipeline-only change
+closes part, but not all, of the gap to the historical 1797/1800 shared-B
+ceiling; that result transferred less B data.
+
+Reproduce with:
+
+```bash
+./run_b200_gemm128x256_pipeline_depth_ablation.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm128x256_pipeline_depth_ablation
+```
+
+Raw artifacts and the exact source snapshot are in
+`../results/gemm128x256_pipeline_depth_ablation_b200_45481495/`.
+
 ### Input range comparison: `[0,1)` versus `[-8,8)`
 
 `--input-init random-signed8` uses the same hash stream and seeds as `random`,
