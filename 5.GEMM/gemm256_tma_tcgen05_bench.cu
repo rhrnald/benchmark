@@ -105,6 +105,14 @@
 #define GEMM_WIDE_B_TMA 0
 #endif
 
+// Repeated-tile ceiling control: load one 128x128 B panel and let both
+// N-direction issuer warps consume it.  This matches the historical 1797
+// kernel's implicit tiled-B GEMM and reduces a K=128 stage from 96 to 64 KiB,
+// allowing three stages.  It is intentionally invalid for dense addresses.
+#ifndef GEMM_REPEAT_B_BROADCAST
+#define GEMM_REPEAT_B_BROADCAST 0
+#endif
+
 #ifndef GEMM_CTA_M
 #define GEMM_CTA_M 256
 #endif
@@ -388,6 +396,7 @@ static constexpr int kBTmaNSubtiles = kBTmaN / 64;
 static constexpr int kStages = GEMM_STAGES;
 static constexpr int kPipes = kCtaN / kMmaN;
 static constexpr int kMBlocks = kCtaM / kMmaM;
+static constexpr bool kRepeatBBroadcast = GEMM_REPEAT_B_BROADCAST != 0;
 static_assert(GEMM_EPILOGUE_MODE >= 0 && GEMM_EPILOGUE_MODE <= 2,
               "GEMM_EPILOGUE_MODE must be 0, 1, or 2");
 static_assert(GEMM_EPILOGUE_MODE != 2 || GEMM_EPILOGUE_WARPS == 4,
@@ -398,8 +407,9 @@ static_assert(GEMM_EPILOGUE_MODE != 2 || kCtaM == 128,
 static_assert(GEMM_EPILOGUE_MODE != 2 || GEMM_PERSISTENT_CTA,
               "TMEM double-buffer epilogue requires persistent CTAs");
 static constexpr int kAStageWords = kCtaM * kStageK / 2;
-static constexpr int kBStageWords = kStageK * kCtaN / 2;
 static constexpr int kBPipeWords = kStageK * kMmaN / 2;
+static constexpr int kBStageWords =
+    kRepeatBBroadcast ? kBPipeWords : kStageK * kCtaN / 2;
 static constexpr int kStageWords = kAStageWords + kBStageWords;
 static constexpr int kAStageBytes = kAStageWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kBStageBytes = kBStageWords * static_cast<int>(sizeof(uint32_t));
@@ -487,7 +497,12 @@ static constexpr int kTuningTag32K = 32;
 
 static_assert(kCtaM == 128 || kCtaM == 256);
 static_assert(kCtaM % kMmaM == 0);
-static_assert(kPipes * kBPipeWords == kBStageWords);
+static_assert(kRepeatBBroadcast || kPipes * kBPipeWords == kBStageWords);
+static_assert(!kRepeatBBroadcast || GEMM_REPEAT_INPUT,
+              "B broadcast is only valid for the repeated-input control");
+static_assert(!kRepeatBBroadcast ||
+                  (kCtaM == 128 && kCtaN == 256 && kStageK == 128),
+              "B broadcast currently requires CTA=128x256 and stage K=128");
 static_assert(kMmaM % kCStoreChunkM == 0);
 static_assert(kCtaM % kCStoreChunkM == 0);
 static_assert(kCStoreChunkN % kMmaN == 0);
@@ -1703,7 +1718,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                 (SinglePipeline == 0 ||
                  (kSinglePipelineSplitTma != 0 &&
                   kSinglePipelineWideMma == 0)) &&
-                GEMM_WIDE_B_TMA == 0) {
+                GEMM_WIDE_B_TMA == 0 && !kRepeatBBroadcast) {
     if (warp_id == 1 && lane0) {
       if constexpr (SinglePipeline == 0) {
         wait_pipe1_phase_shift_tuned<Pipe1TmaPhaseCycles>();
@@ -1887,12 +1902,16 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
             static_cast<uint32_t>((stage_epoch / kStages) & 1);
         uint32_t* stage_smem = smem + stage * kStageWords;
         uint32_t* a_smem = stage_smem;
-        uint32_t* b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
+        uint32_t* b_smem =
+            stage_smem + kAStageWords +
+            (kRepeatBBroadcast ? 0 : pipe * kBPipeWords);
 
         const unsigned long long tma_wait_start =
             clock_trace != nullptr ? clock64() : 0ull;
         mbarrier_wait(&a_ready[stage], tma_phase);
-        mbarrier_wait(&b_ready[GEMM_WIDE_B_TMA ? 0 : pipe][stage], tma_phase);
+        mbarrier_wait(
+            &b_ready[(GEMM_WIDE_B_TMA || kRepeatBBroadcast) ? 0 : pipe][stage],
+            tma_phase);
         const unsigned long long tma_wait_end =
             clock_trace != nullptr ? clock64() : 0ull;
         write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
@@ -3052,7 +3071,10 @@ ValidateResult run_validation(int size,
       double ref = 0.0;
       for (int kk = 0; kk < k; ++kk) {
         const int source_row = GEMM_REPEAT_INPUT ? row % kCtaM : row;
-        const int source_col = GEMM_REPEAT_INPUT ? col % kCtaN : col;
+        const int source_col =
+            GEMM_REPEAT_INPUT
+                ? col % (kRepeatBBroadcast ? kMmaN : kCtaN)
+                : col;
         const int source_k = GEMM_REPEAT_INPUT ? kk % kStageK : kk;
         ref += static_cast<double>(
                    a_ref[static_cast<size_t>(source_row) * k + source_k]) *
@@ -3305,7 +3327,7 @@ int main(int argc, char** argv) {
               "single_pipeline=%d single_pipeline_ntile_128=%d "
               "single_pipeline_wide_mma=%d "
               "single_pipeline_split_tma=%d single_pipeline_interleave_pipes=%d "
-              "wide_b_tma=%d "
+              "wide_b_tma=%d repeat_b_broadcast=%d "
               "input_init=%s formula_scale=%g "
               "persistent_ctas=%d "
               "persistent_kernel=%d "
@@ -3348,7 +3370,7 @@ int main(int argc, char** argv) {
               kSinglePipeline, kSinglePipelineNtile128,
               kSinglePipelineWideMma, kSinglePipelineSplitTma,
               kSinglePipelineInterleavePipes,
-              GEMM_WIDE_B_TMA,
+              GEMM_WIDE_B_TMA, static_cast<int>(kRepeatBBroadcast),
               input_init_mode_name(args.input_init_mode), kFormulaInitScale,
               args.persistent_ctas,
               GEMM_PERSISTENT_CTA,
