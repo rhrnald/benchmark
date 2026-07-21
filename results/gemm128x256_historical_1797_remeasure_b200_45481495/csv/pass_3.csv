@@ -1,0 +1,2 @@
+blocks,steps_n,steps_2n,warmup,iters,seed,ms_n,ms_2n,delta_ms,differential_tflops,logical_tma_TBps,c_store_bytes
+592,8192,16384,1,5,20260718,21.590488434,44.255527496,22.665039062,1794.919926,14.022812,77594624

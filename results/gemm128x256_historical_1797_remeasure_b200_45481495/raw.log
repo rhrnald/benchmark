@@ -1,0 +1,9 @@
+pass=1
+Device: NVIDIA B200, repeated random BF16 A/B 128x128, C=592x128x256 FP32
+N 21.606989 ms, 2N 44.223110 ms, delta 22.616121 ms: 1798.802 TFLOP/s, logical TMA 14.053 TB/s
+pass=2
+Device: NVIDIA B200, repeated random BF16 A/B 128x128, C=592x128x256 FP32
+N 21.564724 ms, 2N 44.076683 ms, delta 22.511959 ms: 1807.125 TFLOP/s, logical TMA 14.118 TB/s
+pass=3
+Device: NVIDIA B200, repeated random BF16 A/B 128x128, C=592x128x256 FP32
+N 21.590488 ms, 2N 44.255527 ms, delta 22.665039 ms: 1794.920 TFLOP/s, logical TMA 14.023 TB/s

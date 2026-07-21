@@ -1,0 +1,3 @@
+validation: PASS bad=0 max_abs=6.10352e-05 max_rel=7.87969e-07
+Device: NVIDIA B200, repeated random BF16 A/B 128x128, C=1x128x256 FP32
+N 0.030240 ms, 2N 0.035360 ms, delta 0.005120 ms: 13.107 TFLOP/s, logical TMA 0.102 TB/s
