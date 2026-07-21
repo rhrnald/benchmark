@@ -570,6 +570,62 @@ from 34 C before the sequence to 40 C after it; the rotated order and low
 process-to-process variance make thermal ordering an unlikely explanation for
 the result.
 
+### Recovery of the historical `128x256, K=128` repeated-tile ceiling
+
+The exact 2026-07-18 source that originally measured 1797.227 TFLOP/s was
+remeasured on instance `45481495` under the current standard. It used 592 CTAs,
+8192/16384-step differential timing, one warmup, five timed launches, and
+three independent processes:
+
+| process | differential TFLOP/s |
+|---:|---:|
+| 1 | 1798.802 |
+| 2 | 1807.125 |
+| 3 | 1794.920 |
+| mean | **1800.282 ± 5.092** |
+
+The old source therefore remains reproducible. Its important difference from
+the initial integrated 1712-series reconstruction was not phase shifting or
+the C epilogue. It loaded one `128x128` B panel and reused it for both N
+accumulators. Together with one `128x128` A panel, this makes a 64-KiB stage
+and permits three stages. The initial reconstruction loaded distinct B panels
+for the left and right halves, making a 96-KiB stage and permitting only two.
+
+The integrated kernel now exposes this ceiling control as
+`GEMM_REPEAT_B_BROADCAST`. A fixed-work ablation kept the persistent scheduler,
+TMA C-store, random `[0,1)` input, CTA shape, K-stage, and measurement protocol
+unchanged:
+
+| variant | 8K | 16K | 32K |
+|---|---:|---:|---:|
+| distinct B halves, 2 stages | 1599.919 ± 0.909 | 1700.903 ± 15.239 | 1556.285 ± 1.745 |
+| shared B panel, 2 stages | 1673.163 ± 0.484 | 1824.972 ± 0.566 | 1661.418 ± 2.103 |
+| shared B panel, 3 stages | **1787.751 ± 0.536** | **1913.033 ± 0.362** | **1773.949 ± 6.036** |
+
+B reuse contributes 4.58--7.29%, and restoring the third stage contributes a
+further 4.83--6.85%. The combined change improves the original integrated
+path by 11.74--13.99% and recovers the targeted throughput. All three variants
+passed the 512 pattern validation bit-exactly.
+
+This is still an implicit tiled-B GEMM ceiling, not a dense GEMM optimization:
+the two output halves intentionally use the same B data and are therefore
+identical. A dense GEMM must load distinct B coordinates or obtain equivalent
+reuse from a mathematically valid larger output tile, multicast, or cache
+schedule.
+
+Build and run the selected repeated-tile configuration with:
+
+```bash
+make build-repeat-128x256 NVCC=/usr/local/cuda/bin/nvcc
+make run-repeat-128x256 SIZES=8192,16384,32768 WARMUP=1 ITERS=5 \
+  PERSISTENT_CTAS=148
+```
+
+Exact source snapshots and raw artifacts are in:
+
+- `../results/gemm128x256_historical_1797_remeasure_b200_45481495/`
+- `../results/gemm128x256_broadcast_ablation_b200_45481495/`
+
 ### Input range comparison: `[0,1)` versus `[-8,8)`
 
 `--input-init random-signed8` uses the same hash stream and seeds as `random`,

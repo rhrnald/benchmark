@@ -8,6 +8,7 @@ REPEAT_TARGET := gemm256_tma_tcgen05_repeat
 L2_TARGET := gemm256_tma_tcgen05_l2
 PERSISTENT_TARGET := gemm256_tma_tcgen05_persistent
 PERSISTENT_1777_TARGET := gemm256_tma_tcgen05_persistent_1777
+REPEAT_128X256_TARGET := gemm128x256_tma_tcgen05_repeat_broadcast
 TRACE_TARGET := gemm256_tma_tcgen05_trace
 SRC := gemm256_tma_tcgen05_bench.cu
 PYTHON ?= python3
@@ -32,7 +33,17 @@ PERSISTENT_CONFIG_FLAGS := \
 	-DGEMM_PERSISTENT_32K_MACRO_M=8 -DGEMM_PERSISTENT_32K_MACRO_N=18 \
 	-DGEMM_PERSISTENT_LOCAL_M_FAST=1 -DGEMM_PERSISTENT_MACRO_N_FAST=1
 
-.PHONY: all build build-repeat build-l2 build-persistent build-persistent-1777 run run-repeat run-l2 run-persistent run-persistent-1777 plot clean
+REPEAT_128X256_FLAGS := \
+	-DGEMM_REPEAT_INPUT=1 -DGEMM_REPEAT_TUNING=1 \
+	-DGEMM_PERSISTENT_CTA=1 \
+	-DGEMM_CTA_M=128 -DGEMM_STAGE_K=128 -DGEMM_STAGES=3 \
+	-DGEMM_REPEAT_B_BROADCAST=1 \
+	-DGEMM_PERSISTENT_MACRO_M=16 -DGEMM_PERSISTENT_MACRO_N=16 \
+	-DGEMM_PERSISTENT_8K_MACRO_M=16 -DGEMM_PERSISTENT_8K_MACRO_N=16 \
+	-DGEMM_PERSISTENT_32K_MACRO_M=8 -DGEMM_PERSISTENT_32K_MACRO_N=18 \
+	-DGEMM_PERSISTENT_LOCAL_M_FAST=1 -DGEMM_PERSISTENT_MACRO_N_FAST=1
+
+.PHONY: all build build-repeat build-repeat-128x256 build-l2 build-persistent build-persistent-1777 run run-repeat run-repeat-128x256 run-l2 run-persistent run-persistent-1777 plot clean
 
 all: build-persistent
 
@@ -45,6 +56,11 @@ build-repeat: $(REPEAT_TARGET)
 
 $(REPEAT_TARGET): $(SRC)
 	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) -DGEMM_REPEAT_INPUT=1 $(GPU_ARCHS) $< -lcuda -o $@
+
+build-repeat-128x256: $(REPEAT_128X256_TARGET)
+
+$(REPEAT_128X256_TARGET): $(SRC)
+	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(REPEAT_128X256_FLAGS) $(GPU_ARCHS) $< -lcuda -o $@
 
 build-l2: $(L2_TARGET)
 
@@ -73,6 +89,9 @@ run: $(PERSISTENT_TARGET)
 run-repeat: build-repeat
 	./$(REPEAT_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --csv gemm256_tma_tcgen05_repeat.csv
 
+run-repeat-128x256: build-repeat-128x256
+	./$(REPEAT_128X256_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --persistent-ctas $(PERSISTENT_CTAS) --csv gemm128x256_tma_tcgen05_repeat_broadcast.csv
+
 run-l2: build-l2
 	./$(L2_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --csv gemm256_tma_tcgen05_l2.csv
 
@@ -89,4 +108,4 @@ plot: $(TRACE_TARGET)
 	$(PYTHON) plot_gemm_trace.py --trace $(TRACE_CSV) --svg $(TRACE_SVG) --title "$(TRACE_TITLE)"
 
 clean:
-	rm -f $(TARGET) $(REPEAT_TARGET) $(L2_TARGET) $(PERSISTENT_TARGET) $(PERSISTENT_1777_TARGET) $(TRACE_TARGET) *.csv
+	rm -f $(TARGET) $(REPEAT_TARGET) $(REPEAT_128X256_TARGET) $(L2_TARGET) $(PERSISTENT_TARGET) $(PERSISTENT_1777_TARGET) $(TRACE_TARGET) *.csv
