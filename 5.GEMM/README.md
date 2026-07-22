@@ -63,6 +63,45 @@ as if they were measurements of the same workload:
 L2-resident global working set.  It is useful for isolating the compute and
 pipeline ceilings, but it is not a dense square GEMM.
 
+### Consolidated repeated-tile ceiling history
+
+The old results confirm that a full TMA-to-MMA pipeline with repeated global
+tiles can exceed 1900 TFLOP/s.  The clearest observation is the corrected
+asynchronous `256x256x64` kernel from 2026-07-20: with random BF16 `[0,1)`,
+distinct left/right B panels, and the full FP32 TMA C-store, its 16K
+same-address control measured 1953.929 TFLOP/s on the normal grid and
+1955.753 TFLOP/s with 148 persistent CTAs.
+
+The following table separates the historical ceilings by workload.  A dash
+means that the experiment did not use the square-size benchmark interface.
+
+| workload | tile / data reuse | TMA dependency and C store | non-size reference | 8K | 16K | 32K | protocol/status |
+|---|---|---|---:|---:|---:|---:|---|
+| MMA only, constant | `m128n128k16`, operands resident in SMEM | no per-step TMA or commit/wait; no C store | **2229.664** | -- | -- | -- | long differential timing, controlled upper bound |
+| MMA only, random `[0,1)` | same MMA work | no per-step TMA or commit/wait; no C store | **1928.151** | -- | -- | -- | long differential timing, data-activity ceiling |
+| dependent TMA+MMA | repeated A/B panel, depth 3, two issuers | `wait A/B -> MMA x8 -> commit`; no C store | **1800.166** | -- | -- | -- | long differential timing |
+| historical repeated GEMM | `128x256x128`; one B panel reused by both N accumulators | dependent pipeline and FP32 C store | **1800.282 +/- 5.092** | -- | -- | -- | remeasured with warmup 1, timed 5, three processes |
+| corrected async same-address GEMM, normal grid | valid `256x256x64`; distinct B halves; every CTA/stage reloads the same global panels | three-stage producer-side reuse wait and FP32 TMA C store | -- | **1877.233** | **1953.929** | **1781.176** | historical warmup 3, timed 5; one recorded process per case |
+| corrected async same-address GEMM, persistent | same valid `256x256x64` work; 148 persistent workers | same pipeline and store | -- | **1874.692** | **1955.753** | **1785.165** | historical warmup 3, timed 5; one recorded process per case |
+| integrated shared-B control | `128x256x128`; both N halves intentionally reuse one B panel | three stages and FP32 TMA C store | -- | **1787.751** | **1913.033** | **1773.949** | warmup 1, timed 5, three rotated processes; not a valid distinct-B GEMM |
+| integrated distinct-B pipeline | valid `128x256x64`; distinct B halves | three stages and FP32 TMA C store | -- | **1642.320** | **1753.739** | **1600.875** | warmup 1, timed 5, three rotated processes |
+| dense end-to-end persistent GEMM | valid `256x256x64`; real A/B coordinates | three stages and FP32 TMA C store | -- | **1697.631** | **1777.128** | **1615.074** | six paired historical passes |
+
+All values are TFLOP/s.  The 2026-07-20 `1955.753` same-address result is the
+right historical target for a valid `256x256` repeated-tile pipeline, but it
+has not yet been rerun under the current warmup-1/timed-5/three-process
+standard.  It should therefore be reproduced before using it as a paper
+ablation anchor.
+
+The current `128x256` result is not an apples-to-apples regression from that
+1956 result.  At K=64, a valid `128x256` tile performs 4,194,304 FLOP from
+48 KiB of A+B payload, or 85.33 FLOP/requested byte.  A valid `256x256` tile
+performs 8,388,608 FLOP from 64 KiB, or 128 FLOP/requested byte.  The larger
+tile therefore moves one-third fewer requested operand bytes per FLOP.  The
+invalid shared-B `128x256` control also reaches 128 FLOP/byte and recovers
+1913 TFLOP/s, reinforcing that valid operand reuse, rather than pipeline
+depth alone, separates the 1754 and 1900-series results.
+
 ### 1. Long-repeat microbenchmark progression
 
 | date | step | input and synchronization | issuer warps | result | interpretation |
