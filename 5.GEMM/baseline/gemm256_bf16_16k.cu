@@ -636,12 +636,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   const int persistent_macro_tiles = persistent_macro_m * persistent_macro_n;
   const int persistent_task_count =
       persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
-  // Each role lane keeps an independent cursor over the three-stage barrier
-  // ring.  The cursor is not reset between valid output tiles, so barrier
-  // parity remains continuous across the persistent-CTA loop.
-  int ring_stage = 0;
-  uint32_t ring_phase = 0;
-  bool producer_reuse_ready = false;
+  int tile_iter = 0;
   while (true) {
     if (threadIdx.x == 0) {
       persistent_task_shared =
@@ -667,6 +662,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       continue;
     }
     const int ntile = ntile_count;
+    const int stage_epoch_base = tile_iter * ktiles;
     const uint32_t c_taddr[4] = {
         tmem_tile_addr[0],
         tmem_tile_addr[1],
@@ -676,12 +672,14 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 
     if (warp_id == 0 && lane0) {
       for (int kt = 0; kt < ktiles; ++kt) {
-        const int stage = ring_stage;
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
         uint32_t *stage_smem = smem + stage * kStageWords;
         uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords;
-        if (producer_reuse_ready) {
-          const uint32_t reuse_phase = ring_phase ^ 1u;
+        if (stage_epoch >= kStages) {
+          const uint32_t reuse_phase =
+              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
 #pragma unroll
           for (int p = 0; p < kPipes; ++p) {
             mbarrier_wait(&mma_done[p][stage], reuse_phase);
@@ -690,37 +688,32 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
         issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n, kt,
                                0);
-        if (++ring_stage == kStages) {
-          ring_stage = 0;
-          ring_phase ^= 1u;
-          producer_reuse_ready = true;
-        }
       }
     }
 
     if (warp_id == 1 && lane0) {
       for (int kt = 0; kt < ktiles; ++kt) {
-        const int stage = ring_stage;
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
         uint32_t *stage_smem = smem + stage * kStageWords;
         uint32_t *b_smem = stage_smem + kAStageWords + kBPipeWords;
-        if (producer_reuse_ready) {
-          mbarrier_wait(&mma_done[1][stage], ring_phase ^ 1u);
+        if (stage_epoch >= kStages) {
+          mbarrier_wait(
+              &mma_done[1][stage],
+              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1));
         }
         issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n, kt,
                                1);
-        if (++ring_stage == kStages) {
-          ring_stage = 0;
-          ring_phase ^= 1u;
-          producer_reuse_ready = true;
-        }
       }
     }
 
     if ((warp_id == 2 || warp_id == 3) && lane0) {
       const int pipe = warp_id - 2;
       for (int kt = 0; kt < ktiles; ++kt) {
-        const int stage = ring_stage;
-        const uint32_t tma_phase = ring_phase;
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
+        const uint32_t tma_phase =
+            static_cast<uint32_t>((stage_epoch / kStages) & 1);
         uint32_t *stage_smem = smem + stage * kStageWords;
         uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
@@ -742,15 +735,11 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           }
         }
         tcgen05_commit(&mma_done[pipe][stage]);
-        if (++ring_stage == kStages) {
-          ring_stage = 0;
-          ring_phase ^= 1u;
-        }
       }
-      const bool wrapped_after_last = ring_stage == 0;
-      const int last_stage = wrapped_after_last ? kStages - 1 : ring_stage - 1;
+      const int last_stage_epoch = stage_epoch_base + ktiles - 1;
+      const int last_stage = last_stage_epoch % kStages;
       const uint32_t last_phase =
-          ring_phase ^ static_cast<uint32_t>(wrapped_after_last);
+          static_cast<uint32_t>((last_stage_epoch / kStages) & 1);
       mbarrier_wait(&mma_done[pipe][last_stage], last_phase);
     }
     __syncthreads();
@@ -775,6 +764,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     }
     __syncthreads();
 
+    ++tile_iter;
   } // persistent output-tile loop
 
   if (threadIdx.x == 0)
