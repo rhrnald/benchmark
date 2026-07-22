@@ -1,0 +1,7 @@
+input	pass	first	second	third
+random	1	clean	store_on	store_off
+random	2	store_on	store_off	clean
+random	3	store_off	clean	store_on
+random-signed8	1	store_on	store_off	clean
+random-signed8	2	store_off	clean	store_on
+random-signed8	3	clean	store_on	store_off

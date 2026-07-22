@@ -1,0 +1,2 @@
+size,m,n,k,cta_m,cta_n,stage_k,stages,mtile,ntile,ktiles,ctas,launch_ctas,warmup,iters,input_init,c_store,dynamic_smem_bytes,event_ms,wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device
+16384,16384,16384,16384,256,256,64,3,64,64,256,4096,148,1,5,random,off,197632,4.805664,4.807855,1830.360,1829.525,00000000,NVIDIA B200

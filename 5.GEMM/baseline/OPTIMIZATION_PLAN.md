@@ -167,3 +167,4 @@ mainloop wait/issue, final drain, epilogue, scheduler 비율을 갱신하는 것
 | E4d | x128 TMEM epilogue loads | exact | 174/0 | 1748.644 | 1514.628 | +0.020% / -0.307% vs macro-free E2a | reject; distribution-dependent |
 | E7a | two-warp M-split `m128n256k16`, staggered split-K B TMA, K-loop u1 | exact | 172/0 | 1773.523 | 1531.740 | +1.337% / +1.290% vs macro-free E2a | adopt as clean working default |
 | E7b | compiler auto-unroll of dual-wide consumer K loop | exact | 172/0 | 1772.807 | 1527.173 | -0.027% / -0.209% vs dual-wide u1 | reject; all pairs favor u1 |
+| P1a | E7a same-binary C-store-off strict ceiling | on exact; off no C | 172/0 | 1830.992 | 1580.081 | +3.191% / +3.298% vs store-on | diagnostic upper bound; epilogue alone cannot close gap |
