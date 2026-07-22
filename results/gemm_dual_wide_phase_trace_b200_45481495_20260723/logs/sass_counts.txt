@@ -1,0 +1,10 @@
+metric dual_wide_phase_trace
+instructions 5040
+UTCHMMA 4
+UTMALDG.2D 7
+UTMALDG.4D 14
+UTMASTG.4D 4
+LDTM 8
+UTCBAR 1
+BAR.SYNC 21
+SYNCS.PHASECHK 64

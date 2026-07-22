@@ -1,0 +1,1 @@
+trace_csv=/workspace/gemm_dual_wide_phase_trace_87b908b/csv/trace_random_p5.csv size=16384 input=random ctas=148 block=0 sm=142 tile_iter=8 linear_tile=1207 tile=(23,11) slots=64

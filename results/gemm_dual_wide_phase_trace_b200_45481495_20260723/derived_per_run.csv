@@ -1,0 +1,11 @@
+file,input,tile_envelope,scheduler_envelope,mainloop_to_join,epilogue_envelope,producer_lead,producer_end_skew,consumer_end_skew,wait_a_total_max,wait_b0_total_max,wait_b1_total_max,mma_b0_issue_total_max,mma_b1_issue_total_max,commit_total_max,final_drain_max,producer_join_wait_max,epilogue_pct
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random-signed8_p1.csv,random-signed8,277012,803,265604,10077,2901,35,106,36709,25827,21574,45056,40704,17152,713,3089,3.637749
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random-signed8_p2.csv,random-signed8,277970,852,266512,10078,2880,5,106,38361,25526,21553,45056,40704,17152,713,3068,3.625571
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random-signed8_p3.csv,random-signed8,276845,804,265436,10077,2935,1,106,37260,25700,21583,45056,40704,17152,713,3123,3.639943
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random-signed8_p4.csv,random-signed8,277852,862,266384,10078,2805,76,106,37687,26632,21722,45056,40704,17152,713,3069,3.627111
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random-signed8_p5.csv,random-signed8,276905,804,265493,10080,2875,62,106,36476,25715,21583,45056,40704,17152,713,3125,3.640238
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random_p1.csv,random,279398,822,267983,10077,2798,34,106,40817,25755,21593,45056,40704,17152,713,3020,3.606683
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random_p2.csv,random,280124,915,268604,10077,2989,49,106,38984,27400,22389,45056,40704,17152,713,3226,3.597335
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random_p3.csv,random,279105,821,267679,10077,2947,23,106,40590,25615,21580,45056,40704,17152,713,3134,3.610469
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random_p4.csv,random,278966,839,267522,10077,2927,22,106,38664,26018,21749,45056,40704,17152,713,3137,3.612268
+results/gemm_dual_wide_phase_trace_b200_45481495_20260723/csv/trace_random_p5.csv,random,280093,934,268554,10077,2844,167,146,42308,25331,21577,45056,40704,17152,565,3199,3.597734

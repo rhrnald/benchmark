@@ -1,0 +1,1 @@
+trace_csv=/workspace/gemm_dual_wide_phase_trace_87b908b/csv/trace_random-signed8_p4.csv size=16384 input=random-signed8 ctas=148 block=0 sm=142 tile_iter=8 linear_tile=1190 tile=(22,10) slots=64

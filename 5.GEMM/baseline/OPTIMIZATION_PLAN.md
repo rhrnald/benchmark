@@ -115,6 +115,26 @@ store-off 상한과 P0c phase 비율을 그대로 사용하지 않는다. 다음
 작업은 E7a default의 same-binary store-off와 phase trace를 다시 측정해
 mainloop wait/issue, final drain, epilogue, scheduler 비율을 갱신하는 것이다.
 
+### P1. dual-wide 병목 재측정 (완료)
+
+same-binary C-store-off 상한은 `[0,1)` +3.191%, `[-8,8)` +3.298%였다.
+phase trace에서 epilogue는 tile cycle의 3.607%/3.638%, scheduler는
+0.300%/0.290%였다. 두 producer는 consumer보다 약 2.9K cycle 먼저 끝났고
+producer 간 차이는 34/35 cycle뿐이었다. 반면 consumer의 stage별 A, B0,
+B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
+
+따라서 다음 순서를 사용한다.
+
+1. 두 consumer commit이 arrival count 2로 합류하는 stage별 공용
+   `mma_done` barrier를 독립 측정한다.
+2. 두 consumer가 공통으로 필요로 하는 A+B0를 arrival count 2의 공용
+   readiness barrier로 합치되 B1 dependency는 추가하지 않는다.
+3. 채택된 barrier 변경만 합친다.
+4. producer K loop에만 u1을 적용해 code size 감소와 동적 산술 비용을
+   독립 비교한다.
+5. 이후에 epilogue overlap을 다시 검토한다. task prefetch와 producer 역할
+   재배치는 profiler 근거가 생길 때까지 보류한다.
+
 ## L2/scheduler 실험
 
 비-L2 실험에서 채택된 변경을 합친 뒤 다음을 진행한다.
@@ -168,3 +188,4 @@ mainloop wait/issue, final drain, epilogue, scheduler 비율을 갱신하는 것
 | E7a | two-warp M-split `m128n256k16`, staggered split-K B TMA, K-loop u1 | exact | 172/0 | 1773.523 | 1531.740 | +1.337% / +1.290% vs macro-free E2a | adopt as clean working default |
 | E7b | compiler auto-unroll of dual-wide consumer K loop | exact | 172/0 | 1772.807 | 1527.173 | -0.027% / -0.209% vs dual-wide u1 | reject; all pairs favor u1 |
 | P1a | E7a same-binary C-store-off strict ceiling | on exact; off no C | 172/0 | 1830.992 | 1580.081 | +3.191% / +3.298% vs store-on | diagnostic upper bound; epilogue alone cannot close gap |
+| P1b | E7a block-0 tile-8 phase trace, five processes | exact before trace | 186/0 diagnostic | N/A | N/A | epilogue 3.607% / 3.638%; scheduler 0.300% / 0.290% | prioritize readiness/completion barrier ablations |
