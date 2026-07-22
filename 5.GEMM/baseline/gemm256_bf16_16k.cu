@@ -81,7 +81,7 @@ static constexpr int kCStoreChunksM = kCtaM / kCStoreChunkM;
 static constexpr int kCStoreChunksN = kCtaN / kCStoreChunkN;
 static constexpr int kCStoreChunkCount = kCStoreChunksM * kCStoreChunksN;
 static constexpr int kCStoreTilesPerChunkN = kCStoreChunkN / kMmaN;
-static constexpr int kCStoreBuffers = 3;
+static constexpr int kCStoreBuffers = kCStoreTilesPerChunkN == 1 ? 2 : 1;
 static constexpr int kCStoreTotalBytes = kCStoreBuffers * kCStoreStageBytes;
 static constexpr int kDynamicSmemPayloadBytes =
     kMainloopSmemBytes > kCStoreTotalBytes ? kMainloopSmemBytes
@@ -99,8 +99,7 @@ static_assert(kCStoreChunkN % kMmaN == 0);
 static_assert(kCtaN % kCStoreChunkN == 0);
 static_assert(kCStoreChunkN % 64 == 0);
 static_assert(kCStoreWarps * (kMmaM / kCStoreChunkM) <= kWarps);
-static_assert(kCStoreBuffers >= 1 && kCStoreBuffers <= kCStoreChunkCount);
-static_assert(kCStoreTotalBytes <= kMainloopSmemBytes);
+static_assert(kCStoreChunkCount % kCStoreBuffers == 0);
 static_assert(kCStoreChunkN == 128 || kCStoreChunkN == 256);
 static_assert(kBTmaN == 128);
 
@@ -289,15 +288,9 @@ __device__ __forceinline__ void tma_store_commit_group() {
 #endif
 }
 
-__device__ __forceinline__ void tma_store_wait_group_read_0() {
+__device__ __forceinline__ void tma_store_wait_group_0() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("cp.async.bulk.wait_group.read 0;" ::: "memory");
-#endif
-}
-
-__device__ __forceinline__ void tma_store_wait_group_read_2() {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("cp.async.bulk.wait_group.read 2;" ::: "memory");
+  asm volatile("cp.async.bulk.wait_group 0;" ::: "memory");
 #endif
 }
 
@@ -514,29 +507,24 @@ store_256x256_float_tile_tma(uint32_t tmem_base,
                              int row_offset, int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
 #pragma unroll
-  for (int chunk = 0; chunk < kCStoreChunkCount; ++chunk) {
-    const int buffer = chunk % kCStoreBuffers;
-    if (chunk >= kCStoreBuffers) {
-      if (threadIdx.x == 0) {
-        tma_store_wait_group_read_2();
-      }
-      __syncthreads();
+  for (int group = 0; group < kCStoreChunkCount; group += kCStoreBuffers) {
+#pragma unroll
+    for (int i = 0; i < kCStoreBuffers; ++i) {
+      const int chunk = group + i;
+      uint32_t *tile_smem = c_smem + i * kCStoreStageWords;
+      const int chunk_m = chunk / kCStoreChunksN;
+      const int chunk_n = chunk - chunk_m * kCStoreChunksN;
+      const int tile_row = row_offset + chunk_m * kCStoreChunkM;
+      const int tile_col = col_offset + chunk_n * kCStoreChunkN;
+      issue_float_c_chunk_tma(tmem_base, c_map, tile_smem, chunk_m, chunk_n,
+                              tile_row, tile_col);
     }
-    uint32_t *tile_smem = c_smem + buffer * kCStoreStageWords;
-    const int chunk_m = chunk / kCStoreChunksN;
-    const int chunk_n = chunk - chunk_m * kCStoreChunksN;
-    const int tile_row = row_offset + chunk_m * kCStoreChunkM;
-    const int tile_col = col_offset + chunk_n * kCStoreChunkN;
-    issue_float_c_chunk_tma(tmem_base, c_map, tile_smem, chunk_m, chunk_n,
-                            tile_row, tile_col);
     if (threadIdx.x == 0) {
       tma_store_commit_group();
+      tma_store_wait_group_0();
     }
+    __syncthreads();
   }
-  if (threadIdx.x == 0) {
-    tma_store_wait_group_read_0();
-  }
-  __syncthreads();
 #else
   (void)tmem_base;
   (void)c_map;
