@@ -667,7 +667,7 @@ cluster/scheduler overhead from the traffic-saving benefit itself.
 Raw CSVs, validation logs, source snapshots, hashes, and the full analysis are
 in `../results/gemm256_tma_multicast_b_b200_45481495/`.
 
-#### Planned 16K multicast scheduler/swizzle sweep
+#### 16K multicast scheduler/swizzle sweep
 
 The first multicast result above retained the pre-cluster 16x16 macroblock
 and dynamic atomic scheduler. To test whether that remains optimal for a
@@ -688,8 +688,31 @@ use CLC rather than this global-atomic or simple grid-stride implementation.
   /workspace/gemm256_multicast_16k_scheduler_sweep
 ```
 
-Each of the 18 configurations is validated, then measured in three rotated
-one-process runs with warmup 1 and five timed launches.
+All 18 configurations passed the 512 pattern validation bit-exactly. Event
+throughput is the mean and sample standard deviation of three rotated
+one-process runs with warmup 1 and five timed launches:
+
+| macro | dynamic | static | static change |
+|---:|---:|---:|---:|
+| 8x8 | 1752.756 +/- 1.831 | 1783.083 +/- 0.392 | +1.730% |
+| 8x16 | 1753.843 +/- 1.332 | **1784.075 +/- 0.924** | +1.724% |
+| 8x32 | 1753.457 +/- 0.784 | 1783.371 +/- 0.966 | +1.706% |
+| 16x8 | 1771.626 +/- 1.357 | 1783.477 +/- 0.329 | +0.669% |
+| 16x16 | **1772.407 +/- 0.984** | **1783.590 +/- 0.247** | +0.631% |
+| 16x32 | 1771.766 +/- 0.236 | 1783.738 +/- 0.488 | +0.676% |
+| 32x8 | 1722.044 +/- 0.868 | 1691.152 +/- 1.009 | -1.794% |
+| 32x16 | 1722.082 +/- 0.801 | 1692.586 +/- 2.923 | -1.713% |
+| 32x32 | 1721.882 +/- 0.220 | 1688.941 +/- 1.460 | -1.913% |
+
+`16x16` is the best dynamic shape. With static scheduling, macro M=8 and 16
+are effectively tied: `8x16` has the highest mean, but is only 0.027% above
+`16x16`, while static `16x16` has the lowest variance in the sweep. Static
+`16x16` is therefore selected as the robust 16K multicast default. Static
+improves matched `16x16` by 0.631%. Macro M=32 is consistently poor and should
+not be used with this 148-CTA grid-stride schedule.
+
+Raw data and the full interpretation are in
+`../results/gemm256_multicast_16k_scheduler_sweep_b200_45481495/`.
 
 ### Persistent TMEM epilogue overlap, CTA `128x256` (2026-07-22)
 
