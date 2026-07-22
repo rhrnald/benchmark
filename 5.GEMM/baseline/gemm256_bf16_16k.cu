@@ -584,7 +584,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 
   __shared__ uint64_t a_ready[kStages];
   __shared__ uint64_t b_ready[kBProducerParts][kStages];
-  __shared__ uint64_t mma_done[kMBlocks][kStages];
+  __shared__ uint64_t mma_done[kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
@@ -600,11 +600,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       }
     }
 #pragma unroll
-    for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-#pragma unroll
-      for (int s = 0; s < kStages; ++s) {
-        mbarrier_init(&mma_done[mblock][s], 1);
-      }
+    for (int s = 0; s < kStages; ++s) {
+      mbarrier_init(&mma_done[s], kMBlocks);
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
@@ -677,10 +674,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         if (stage_epoch >= kStages) {
           const uint32_t reuse_phase =
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
-#pragma unroll
-          for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
-          }
+          mbarrier_wait(&mma_done[stage], reuse_phase);
         }
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
@@ -697,10 +691,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         if (stage_epoch >= kStages) {
           const uint32_t reuse_phase =
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
-#pragma unroll
-          for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
-          }
+          mbarrier_wait(&mma_done[stage], reuse_phase);
         }
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                                   kt, 0);
@@ -745,13 +736,13 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               tmem_base + mblock * 2 * kTmemTileStride;
           tcgen05_mma_bf16_ss(c_taddr, a_desc, b0_desc, idesc, input_d);
         }
-        tcgen05_commit(&mma_done[mblock][stage]);
+        tcgen05_commit(&mma_done[stage]);
       }
       const int last_stage_epoch = stage_epoch_base + ktiles - 1;
       const int last_stage = last_stage_epoch % kStages;
       const uint32_t last_phase =
           static_cast<uint32_t>((last_stage_epoch / kStages) & 1);
-      mbarrier_wait(&mma_done[mblock][last_stage], last_phase);
+      mbarrier_wait(&mma_done[last_stage], last_phase);
     }
     __syncthreads();
 
