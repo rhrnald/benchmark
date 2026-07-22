@@ -1,0 +1,11 @@
+metric dual_wide_clean split_a
+instructions 4192 4512
+main_kernel_instructions 1952 2112
+UTCHMMA 4 4
+UTMALDG.2D 7 14
+UTMALDG.4D 14 14
+UTMASTG.4D 4 4
+UTCBAR 1 1
+BAR.SYNC 20 20
+SYNCS.PHASECHK 64 64
+SYNCS.ARRIVE 21 28

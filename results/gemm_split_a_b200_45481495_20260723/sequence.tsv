@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	dual_wide_clean	split_a
+random	2	split_a	dual_wide_clean
+random	3	dual_wide_clean	split_a
+random-signed8	1	split_a	dual_wide_clean
+random-signed8	2	dual_wide_clean	split_a
+random-signed8	3	split_a	dual_wide_clean
