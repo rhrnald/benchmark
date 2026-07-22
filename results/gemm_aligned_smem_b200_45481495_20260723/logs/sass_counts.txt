@@ -1,0 +1,8 @@
+metric baseline aligned_smem
+ST.E.128 128 0
+STS.128 0 128
+IMAD.WIDE 77 69
+UTCHMMA 8 8
+UTMALDG 21 21
+UTMASTG 4 4
+LDTM 8 8

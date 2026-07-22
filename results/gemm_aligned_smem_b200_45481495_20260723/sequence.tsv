@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	baseline	aligned_smem
+random	2	aligned_smem	baseline
+random	3	baseline	aligned_smem
+random-signed8	1	aligned_smem	baseline
+random-signed8	2	baseline	aligned_smem
+random-signed8	3	aligned_smem	baseline
