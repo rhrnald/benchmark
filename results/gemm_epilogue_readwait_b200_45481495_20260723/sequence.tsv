@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	e31	e32
+random	2	e32	e31
+random	3	e31	e32
+random-signed8	1	e32	e31
+random-signed8	2	e31	e32
+random-signed8	3	e32	e31

@@ -33,6 +33,16 @@ paired mean이 0.5% 미만이면 noise로 간주한다. 0.5--1.0% 후보는 표�
 B0가 1% 이내로 재현되지 않으면 아래 최적화로 넘어가지 않는다. 먼저
 SASS diff, CUDA toolchain, clock/power, scheduler mapping 순서로 차이를 찾는다.
 
+## P0. phase trace와 상한 control
+
+작은 instruction 제거만으로 병목 위치를 추측하지 않도록, E3을 끝낸 직후
+대표 CTA 하나에만 `clock64` trace를 넣는다. warp 0/1 producer, warp 2/3
+TMA wait와 MMA issue/final drain, 네 C chunk의 TMEM-to-SMEM staging/TMA store,
+task atomic/decode 구간을 각각 분리한다. 별도 store-off control은 최종 MMA
+drain은 유지하고 C staging/store만 생략해 epilogue 최적화의 최대 이득 상한을
+구한다. trace 소스와 성능 소스는 분리하며 trace 자체의 TFLOP/s는 결과로
+사용하지 않는다.
+
 ## 비-L2 hot path 실험
 
 ### E1. stage ring 산술 전문화
@@ -65,9 +75,11 @@ proxy fence가 있고, 두 chunk마다 TMA store group을 wait한다. 다음을
 ### E4. 3-buffer C-store pipeline
 
 mainloop가 쓰던 196608 B shared payload를 epilogue에서 재사용하므로
-`128 x 128 x FP32` C buffer를 3개 둘 수 있다. 세 chunk를 issue한 뒤
-buffer 재사용 직전에 wait하도록 바꿔 2-buffer/3-buffer를 비교한다. 네
-chunk 전체를 위한 4-buffer는 현재 dynamic shared-memory 한도를 넘으므로
+`128 x 128 x FP32` C buffer를 3개 둘 수 있다. 먼저 2-buffer에서 chunk별
+commit 후 재사용 직전에 `wait_group.read 1`, 다음으로 3-buffer에서 chunk별
+commit 후 재사용 직전에 `wait_group.read 2`를 사용하고 마지막에만
+`wait_group.read 0`을 수행한다. 이 순서로 2-buffer/3-buffer를 비교한다.
+네 chunk 전체를 위한 4-buffer는 현재 dynamic shared-memory 한도를 넘으므로
 대상에서 제외한다.
 
 ### E5. producer warp 역할 균형
@@ -133,3 +145,4 @@ warp specialization의 비용을 분리하기 위한 것이다.
 | B0 | clean reconstruction | exact | 178/0 | 1738.199 | 1508.979 | -0.052% / -0.225% vs p0 | pass |
 | E1 | incremental stage ring | exact | 184/0 | 1729.041 | 1505.076 | -0.535% / -0.403% | reject |
 | E3.1 | remove pre-fence C-store barriers | exact | 178/0 | 1739.212 | 1508.947 | +0.033% / +0.057% | neutral |
+| E3.2 | TMA store `wait_group.read 0` | exact | 178/0 | 1738.970 | 1508.044 | -0.062% / -0.249% vs E3.1 | neutral/reject |
