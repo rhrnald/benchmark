@@ -1847,13 +1847,13 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const int persistent_macro_tiles = persistent_macro_m * persistent_macro_n;
   const int persistent_wave_groups_m = kExplicitPersistentWave
       ? (mtile_count + kPersistentWaveM - 1) / kPersistentWaveM
-      : 0;
+      : 1;
   const int persistent_wave_groups_n = kExplicitPersistentWave
       ? (ntile_count + kPersistentWaveN - 1) / kPersistentWaveN
-      : 0;
+      : 1;
   const int persistent_wave_tiles = kExplicitPersistentWave
       ? kPersistentWaveM * kPersistentWaveN
-      : 0;
+      : 1;
   const int persistent_task_count = kExplicitPersistentWave
       ? persistent_wave_groups_m * persistent_wave_groups_n *
             persistent_wave_tiles
