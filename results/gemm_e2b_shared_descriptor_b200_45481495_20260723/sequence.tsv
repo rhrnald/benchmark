@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	e2a	e2b
+random	2	e2b	e2a
+random	3	e2a	e2b
+random-signed8	1	e2b	e2a
+random-signed8	2	e2a	e2b
+random-signed8	3	e2b	e2a

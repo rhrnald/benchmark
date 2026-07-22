@@ -1,0 +1,17 @@
+metric e2a_parent e2b_shared_descriptor
+registers 174 174
+stack_bytes 0 0
+spill_bytes 0 0
+static_text_slots 1928 1920
+UTMALDG 21 21
+UTMASTG 4 4
+UTCHMMA 8 8
+UTMACMDFLUSH 2 2
+SYNCS_PHASECHK 48 48
+BAR_SYNC 20 20
+LDTM 8 8
+R2UR_BROADCAST 65 65
+
+E2b converts the stage shared pointer once per consumer K stage, then derives
+the A and B descriptors with 32-bit byte offsets.  Resource usage and all key
+work/synchronization opcode counts remain identical to E2a.
