@@ -287,9 +287,9 @@ __device__ __forceinline__ void tma_store_commit_group() {
 #endif
 }
 
-__device__ __forceinline__ void tma_store_wait_group_0() {
+__device__ __forceinline__ void tma_store_wait_group_read_0() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("cp.async.bulk.wait_group 0;" ::: "memory");
+  asm volatile("cp.async.bulk.wait_group.read 0;" ::: "memory");
 #endif
 }
 
@@ -523,7 +523,7 @@ store_256x256_float_tile_tma(const uint32_t (&c_taddr)[4],
     }
     if (threadIdx.x == 0) {
       tma_store_commit_group();
-      tma_store_wait_group_0();
+      tma_store_wait_group_read_0();
     }
     __syncthreads();
   }
