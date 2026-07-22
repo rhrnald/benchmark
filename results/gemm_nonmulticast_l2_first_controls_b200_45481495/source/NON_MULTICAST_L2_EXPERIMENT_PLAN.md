@@ -60,7 +60,7 @@ tile_n   = macro_n * 16 + local / 16
 | K stage / depth | K64/S3 selected; K32/S4/S5 was slower in the multicast path; K128 multistage infeasibility for 256x256 follows from SMEM capacity |
 | Wide B | One `64x256` TMA was about 3% slower than split `64x128` streams |
 | TMA L2 promotion | 128B/256B promotion was neutral or negative; this is not an eviction-priority test |
-| TMA L2 eviction priority | A `evict_last` was stable but only `+0.113%`; isolated A/B `evict_first` regressed `-19.723%`/`-1.642%`, so keep no hint |
+| TMA L2 eviction priority | A `evict_last` was stable but only `+0.113%`; asymmetric `evict_first` controls regressed, so keep no hint |
 | B multicast | Useful traffic reduction, but did not beat peak non-multicast at 16K |
 | A multicast | Slower than B multicast |
 | Cluster 4 | Large regression |
@@ -259,7 +259,7 @@ residency being more important under this traversal.  These are not
 unconditional single-factor effects, and L2/DRAM counters were unavailable;
 record the result as a throughput-based inference, not measured traffic.
 
-## Experiment H: isolated `evict_first` controls (complete)
+## Experiment H: isolated `evict_first` controls (next)
 
 Experiment G's negative symmetric controls are conditional contrasts: adding
 A `evict_first` while B is fixed at `evict_last` cost `19.575%`, whereas
@@ -270,9 +270,9 @@ only these three cases:
 
 | Variant | A policy | B policy | Status |
 |---|---|---|---|
-| `baseline` | none | none | complete: `1770.976 +/- 1.887` |
-| `a_first` | evict_first | none | reject: `1421.683 +/- 8.470`, `-19.723%` |
-| `b_first` | none | evict_first | reject: `1741.889 +/- 3.967`, `-1.642%` |
+| `baseline` | none | none | pending |
+| `a_first` | evict_first | none | pending |
+| `b_first` | none | evict_first | pending |
 
 Keep every other compile flag and logical memory request identical to
 Experiment G.  Use three cyclic Latin-order process passes so every variant
@@ -280,12 +280,6 @@ occupies each sequence position exactly once, with W1/I5 and exact 512
 validation.  This is a causal diagnostic only: none of these policies can be
 promoted over the already-rejected positive-hint candidates.  Do not extend it
 to other sizes or a full policy cross-product.
-
-Result: all three 512 pattern checks were bit-exact.  Every variant occupied
-each sequence position once, and both negative controls regressed in all three
-paired passes.  The isolated effects closely match Experiment G's conditional
-contrasts, removing the opposite-operand `evict_last` confound.  Close the
-eviction-hint direction and keep the no-hint baseline.
 
 ## Decision gates
 
@@ -313,7 +307,7 @@ from TFLOP/s alone.
 | 2026-07-22 | `ac71b14` | F: six-pair `order_mn`/`order_nm` confirmation | both GPU checks exact; expanded host coverage passed | paired `+0.077%`, 95% CI `[-0.822%, +0.976%]` | reject promotion; keep `order_mn` |
 | 2026-07-22 | analysis at `2dfb872` | E: K-outer two-full-output capacity audit | source/PTX resource proof; no GPU run | 1024 TMEM columns required, 512 available | close as infeasible; no GPU spend |
 | 2026-07-22 | `1bb691b` | G: A/B TMA eviction-priority sweep | all 5 GPU checks exact; host coverage passed | `a_last` `1771.192 +/- 1.539`, paired `+0.113%`; negative controls `-1.456%`/`-19.552%` | reject promotion; keep no hint |
-| 2026-07-22 | `1463cea` | H: isolated A/B `evict_first` controls | all 3 GPU checks exact; host coverage passed | A first `-19.723%`; B first `-1.642%` | close eviction-hint direction; keep no hint |
+| 2026-07-22 | pending definition commit | H: isolated A/B `evict_first` controls | pending | pending | pending |
 
 Round-one artifacts are in
 `../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
@@ -325,9 +319,6 @@ Focused confirmation artifacts are in
 
 Eviction-priority artifacts are in
 `../results/gemm_nonmulticast_l2_evict_b200_45481495/`.
-
-Isolated first-priority control artifacts are in
-`../results/gemm_nonmulticast_l2_first_controls_b200_45481495/`.
 
 ## Deferred / out of scope
 

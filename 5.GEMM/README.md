@@ -1124,10 +1124,10 @@ request payload, C store, scheduler, and W1/I5 x three-process protocol.
 below the predeclared `+0.5%` promotion gate.  No hint remains the default and
 no focused confirmation or 8K/32K extension is planned.  The asymmetric
 negative controls are consistent with A retention being more important under
-this schedule.  They change both operands across the symmetric cases, though:
-an A-first-only/B-first-only control is required for an unconditional claim.
-This is only a throughput-based locality inference because L2/DRAM counters
-were unavailable.  All five 512 pattern validations were bit-exact.
+this schedule.  Because the symmetric endpoints change both operands, the
+single-factor controls below were added before making that claim.  This is
+still only a throughput-based locality inference because L2/DRAM counters were
+unavailable.  All five 512 pattern validations were bit-exact.
 
 Exact CSVs, validation logs, compile commands, source snapshots, execution
 order, telemetry, and hashes are in
@@ -1137,4 +1137,29 @@ order, telemetry, and hashes are in
 DEFINITION_COMMIT=1bb691b ./run_b200_gemm_nonmulticast_l2_evict.sh \
   /workspace/benchmark/5.GEMM \
   /workspace/gemm_nonmulticast_l2_evict
+```
+
+The follow-up isolated `evict_first` on one operand at a time.  Its three
+cyclic process orders placed each case in every sequence position once while
+preserving the same 16K W1/I5 conditions:
+
+| variant | A / B policy | TFLOP/s | paired change |
+|---|---|---:|---:|
+| baseline | none / none | 1770.976 +/- 1.887 | baseline |
+| `a_first` | evict_first / none | 1421.683 +/- 8.470 | **-19.723%** |
+| `b_first` | none / evict_first | 1741.889 +/- 3.967 | **-1.642%** |
+
+Both controls regressed in all three paired passes.  The single-factor
+magnitudes agree with the preceding conditional contrasts, so throughput is
+much more sensitive to the A eviction policy under the current local-M-fast /
+macro-N-fast traversal.  This does not quantify cache misses or DRAM traffic.
+All three 512 pattern checks were bit-exact; no hint remains the default, and
+the eviction-hint direction is closed.  Artifacts are in
+`../results/gemm_nonmulticast_l2_first_controls_b200_45481495/`.
+
+```bash
+DEFINITION_COMMIT=1463cea \
+  ./run_b200_gemm_nonmulticast_l2_first_controls.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm_nonmulticast_l2_first_controls
 ```

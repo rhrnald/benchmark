@@ -1,0 +1,3 @@
+0=no_hint
+1=L2::evict_last
+2=L2::evict_first
