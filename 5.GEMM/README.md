@@ -1039,3 +1039,47 @@ Reproduce the two sweeps with:
 Full artifacts are in
 `../results/gemm_cluster_nfast_ablation_b200_45481495/` and
 `../results/gemm_cluster_ngroup_ablation_b200_45481495/`.
+
+### Non-multicast scheduler order, snake, and N-strip (2026-07-22)
+
+The 16K non-multicast dynamic-persistent path was tested independently of the
+cluster scheduler.  Each variant used 148 CTAs, a `256x256x64` CTA tile,
+three stages, split `64x128` B loads, random BF16 `[0,1)`, complete FP32 C,
+and effective phase `0/0`.  Results are three forward/reverse/rotated process
+samples with warmup 1 and five timed launches.
+
+| variant | local order | macro order / change | TFLOP/s | paired change |
+|---|---|---|---:|---:|
+| `order_mn` | M-fast | N-fast | 1769.017 +/- 1.387 | baseline |
+| `order_mm` | M-fast | M-fast | 1740.880 +/- 0.838 | -1.590% |
+| `order_nn` | N-fast | N-fast | 1756.834 +/- 1.140 | -0.689% |
+| `order_nm` | N-fast | M-fast | **1778.907 +/- 2.584** | **+0.559%** |
+| macro snake | M-fast | reverse macro N | 1770.520 +/- 0.366 | +0.085% |
+| full snake | M-fast | reverse macro and local N | 1771.428 +/- 0.679 | +0.136% |
+| N-strip 2 | M-fast | one allocation owns 2 N outputs | 1764.801 +/- 1.567 | -0.238% |
+| N-strip 4 | M-fast | one allocation owns 4 N outputs | 1747.406 +/- 2.533 | -1.222% |
+
+`order_nm` was faster in every paired pass (`+0.400%`, `+0.747%`, and
+`+0.530%`).  It makes same-A N neighbors consecutive inside each macro and
+keeps one B-coordinate range across adjacent M macros.  Because its mean gain
+is close to the 0.5% selection gate, it remains a candidate pending a focused
+AB/BA rerun rather than becoming the default immediately.
+
+Snake affects only three 16K macro-row wrap boundaries and stayed below the
+selection threshold.  N-strip ownership also failed: the CTA finishes all
+256 K stages for one output before revisiting A for the next output, so this
+does not retain a K64 A panel in shared memory and adds ownership/tail costs.
+All eight binaries passed the 512 pattern reference bit-exactly, and the host
+mapping test proved exact scheduler coverage.  Actual L2/DRAM traffic is
+unmeasured because performance counters are unavailable on the rented host.
+Exact raw data and source snapshots are in
+`../results/gemm_nonmulticast_l2_round1_b200_45481495/`.
+
+This result applies to the non-multicast dynamic scheduler and does not revise
+the separate two-CTA multicast cluster-order conclusion.  Reproduce it with:
+
+```bash
+DEFINITION_COMMIT=f669b6f ./run_b200_gemm_nonmulticast_l2_round1.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm_nonmulticast_l2_round1
+```

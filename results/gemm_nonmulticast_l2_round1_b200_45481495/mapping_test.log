@@ -1,0 +1,4 @@
+persistent mapping coverage: ok
+baseline boundary: [(15, 63), (16, 0)]
+macro snake boundary: [(15, 63), (16, 48)]
+full snake boundary: [(15, 63), (16, 63)]

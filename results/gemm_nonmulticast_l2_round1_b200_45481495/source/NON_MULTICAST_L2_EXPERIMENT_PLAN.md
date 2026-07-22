@@ -55,7 +55,7 @@ tile_n   = macro_n * 16 + local / 16
 |---|---|
 | Persistent versus normal | Persistent selected |
 | Dynamic versus static grid-stride | Dynamic selected; static was `-0.44%` at 16K and much worse at 32K |
-| Local and macro M/N order | Local M-fast plus macro N-fast was the historical selection; round one found local N-fast plus macro M-fast `+0.559%`, pending confirmation |
+| Local and macro M/N order | Local M-fast plus macro N-fast selected |
 | Macro shapes / worker counts | Broad sweeps completed; 16x16 and 148 workers selected at 16K |
 | K stage / depth | K64/S3 selected; K32/S4/S5 was slower in the multicast path; K128 multistage infeasibility for 256x256 follows from SMEM capacity |
 | Wide B | One `64x256` TMA was about 3% slower than split `64x128` streams |
@@ -75,15 +75,13 @@ latest source before introducing new ownership logic.
 
 | Variant | Local order | Macro order | Status |
 |---|---|---|---|
-| `order_mn` | M-fast | N-fast | complete: `1769.017 +/- 1.387`, paired baseline |
-| `order_mm` | M-fast | M-fast | complete: `1740.880 +/- 0.838` (`-1.590%`) |
-| `order_nn` | N-fast | N-fast | complete: `1756.834 +/- 1.140` (`-0.689%`) |
-| `order_nm` | N-fast | M-fast | candidate: `1778.907 +/- 2.584` (`+0.559%`) |
+| `order_mn` | M-fast | N-fast | pending |
+| `order_mm` | M-fast | M-fast | pending |
+| `order_nn` | N-fast | N-fast | pending |
+| `order_nm` | N-fast | M-fast | pending |
 
-Contrary to the initial expectation, `order_nm` won all three paired passes
-by `+0.400%`, `+0.747%`, and `+0.530%`.  The gain is just above the selection
-threshold, so a focused AB/BA confirmation is required before changing the
-default.
+Expected selection is `order_mn`; this experiment is primarily a controlled
+reproduction, not a new broad search.
 
 ## Experiment B: macro-row snake
 
@@ -94,9 +92,9 @@ stream, so a large effect is unlikely.
 
 | Variant | Mapping | Status |
 |---|---|---|
-| `snake_0` | Existing monotonic macro N and local N | complete: aliases `order_mn` |
-| `snake_1` | Reverse only macro-N order; incomplete/likely-negative decomposition control | reject: `+0.085%` |
-| `snake_2` | Reverse both macro N and local N on odd macro-M rows | reject: `+0.136%` |
+| `snake_0` | Existing monotonic macro N and local N | pending |
+| `snake_1` | Reverse only macro-N order; incomplete/likely-negative decomposition control | pending |
+| `snake_2` | Reverse both macro N and local N on odd macro-M rows | pending |
 
 At 16K, full snake changes the boundary from `(M15,N63)->(M16,N0)` to
 `(M15,N63)->(M16,N63)`, preserving the exact B tile across that boundary.
@@ -134,9 +132,9 @@ workers advance through the strip together and continue sharing B.
 
 | Variant | S | Work units at 16K | Status |
 |---|---:|---:|---|
-| `strip_1` | 1 | 4096 | complete: aliases `order_mn` |
-| `strip_2` | 2 | 2048 | reject: `1764.801 +/- 1.567` (`-0.238%`) |
-| `strip_4` | 4 | 1024 | reject: `1747.406 +/- 2.533` (`-1.222%`) |
+| `strip_1` | 1 | 4096 | pending baseline |
+| `strip_2` | 2 | 2048 | pending |
+| `strip_4` | 4 | 1024 | pending |
 | `strip_8` | 8 | 512 | deferred tail diagnostic |
 
 The primary comparison is S=1/2/4.  S=8 has only 512 work items: its last wave
@@ -182,20 +180,6 @@ current 256x256 output already occupies four 128x128 accumulator regions, so
 two simultaneous outputs may require a different CTA shape, staged spill, or
 sequential accumulator strategy.
 
-## Experiment F: focused order confirmation (next)
-
-Rerun only the existing default (`order_mn`, local M-fast plus macro N-fast)
-and the round-one candidate (`order_nm`, local N-fast plus macro M-fast).
-Use six independent one-case processes per binary in alternating AB/BA order,
-with warmup 1 and five timed launches in each process.  The source and kernel
-work must remain identical to definition `f669b6f`; only the two scheduler
-compile-time constants differ.
-
-Promote `order_nm` only if all or nearly all matched pairs remain positive and
-the aggregate paired gain remains about 0.5% or larger.  Otherwise retain the
-current default.  This confirmation precedes both macro-shape retuning and the
-K-outer redesign.
-
 ## Decision gates
 
 1. Always validate before timing; discard timing from a failing binary.
@@ -216,12 +200,7 @@ from TFLOP/s alone.
 
 | Date | Definition commit | Experiment | Validation | Result | Decision |
 |---|---|---|---|---|---|
-| 2026-07-22 | `f669b6f` | A/B/C S=1/2/4 combined first sweep | all 8 GPU checks exact; host coverage passed | `order_nm` `1778.907 +/- 2.584`, `+0.559%` | confirm `order_nm`; reject snake and strip 2/4 |
-
-Round-one artifacts are in
-`../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
-payload is invariant; hardware L2/DRAM traffic remains unmeasured because
-performance-counter permission is unavailable.
+| 2026-07-22 | pending | A/B/C S=1/2/4 combined first sweep | pending | pending | pending |
 
 ## Deferred / out of scope
 
