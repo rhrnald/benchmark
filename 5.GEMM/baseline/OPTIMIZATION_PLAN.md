@@ -151,6 +151,20 @@ E8g는 TMA 수를 유지한 채 producer를 A 32 KiB/B 32 KiB로 재배치했지
 -0.108%/-0.324%였고 6/6 pair가 느렸다. B0/B1을 한 warp에 직렬화하지 않고
 현재의 두 독립 B producer stream을 유지한다.
 
+### 다음 비-L2 순서
+
+1. 동일 TMA byte, 동적 MMA 8회, TMEM destination을 고정한 same-address
+   microbenchmark에서 2-consumer와 strict 1-consumer issue를 먼저 비교한다.
+   1-consumer는 warp 2가 각 K16에서 M0/M1을 연속 issue하고 wait를
+   stage당 6회에서 3회, commit을 2회에서 1회로 줄인다. 총 work가 달랐던
+   과거 1-warp/2-warp 숫자는 이 판정에 사용하지 않는다.
+2. microbenchmark가 0.5% 안이면 dense kernel로 옮기고, 그보다 크게
+   느리면 dense 측정 없이 종료한다.
+3. epilogue는 same-binary `stage-only/no-TMA-store` control로 TMEM staging과
+   store completion 비용을 먼저 분리한다. 그 뒤에만 세 buffer로 chunk
+   0--2를 한 group, chunk 3을 다음 group으로 처리하는 `3+1`을 측정한다.
+4. scheduler는 phase trace 상한이 0.3%이므로 위 실험 뒤에도 후순위다.
+
 ## L2/scheduler 실험
 
 비-L2 실험에서 채택된 변경을 합친 뒤 다음을 진행한다.

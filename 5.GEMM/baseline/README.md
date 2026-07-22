@@ -52,6 +52,40 @@ consumer K loop의 `#pragma unroll 1`을 제거한 compiler-auto-unroll 대조�
 pair 모두 느려서 명시적 u1을 유지한다. 상세 결과는
 `../../results/gemm_dual_wide_auto_b200_45481495_20260723/summary.md`에 있다.
 
+## 최신 비-L2 병목 실험
+
+E7a dual-wide default에서 C store를 같은 binary의 runtime control로 끈
+상한은 `[0,1)` +3.191%, `[-8,8)` +3.298%였다. phase trace에서는 한 tile의
+95.9%가 mainloop-to-join, epilogue가 3.6%, scheduler가 0.3%였다. 두
+producer는 consumer보다 약 2.9K cycle 먼저 끝났고 서로의 completion
+차이도 34--35 cycle뿐이었다. 따라서 scheduler나 단순 producer workload
+균형보다 mainloop readiness/wait 동작을 먼저 분리했다.
+
+아래 delta는 매 실험의 동일 실행 clean 대비 paired 결과다. 모든 성능
+case는 한 프로세스당 한 case, warmup 1회, timed 5회 평균이다.
+
+| 실험 | `[0,1)` | `[-8,8)` | 결론 |
+|---|---:|---:|---|
+| shared `mma_done` barrier | -0.079% | +0.043% | neutral/reject |
+| combined A+B0 readiness | +0.228% | +0.062% | 0.5% gate 아래, 미채택 |
+| producer loop만 `unroll 1` | -0.491% | -0.113% | reject |
+| CUTLASS식 suspend hint, 모든 wait | +0.285% | +0.241% | 6/6 pair 양수지만 gate 아래 |
+| CUTLASS식 suspend hint, producer wait만 | +0.357% | +0.488% | 12/12 pair 양수지만 gate 아래 |
+| A 32 KiB를 16 KiB 두 TMA로 분할 | -0.143% | -0.047% | reject |
+| producer를 A 32 KiB / B 32 KiB로 재배치 | -0.108% | -0.324% | reject |
+
+producer-only suspend 후보의 절대 평균은 1777.055/1535.769 TFLOP/s였고
+일관되게 양수였지만, 사전에 정한 두 분포 모두 0.5% 이상이라는 materiality
+gate를 넘지 못했으므로 default에 넣지 않았다. 가장 빠른 source-backed
+canonical default는 계속 E7a의 1773.523/1531.740 TFLOP/s다. 세부 원시
+결과와 source/binary hash는 다음 문서에 있다.
+
+- [dual-wide C-store 상한](../../results/gemm_dual_wide_cstore_control_b200_45481495_20260723/summary.md)
+- [dual-wide phase trace](../../results/gemm_dual_wide_phase_trace_b200_45481495_20260723/summary.md)
+- [producer-only suspended wait](../../results/gemm_suspend_producer_b200_45481495_20260723/summary.md)
+- [split-A](../../results/gemm_split_a_b200_45481495_20260723/summary.md)
+- [balanced producers](../../results/gemm_balanced_producers_b200_45481495_20260723/summary.md)
+
 현재 소스에는 `#define`이 하나도 없다. 64개 inline-PTX output operand도
 함수 본문에 명시적으로 적었으며, macro 제거 전후의 2072개 SASS instruction
 sequence가 동일함을 확인했다. 외부 `-D` 옵션도 사용하지 않는다.
