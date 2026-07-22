@@ -264,6 +264,17 @@
 #define GEMM_TMA_C_L2_PROMOTION CU_TENSOR_MAP_L2_PROMOTION_NONE
 #endif
 
+// PTX TMA L2 eviction-priority hints.  These are independent of tensor-map
+// L2 promotion, which controls the DRAM fill granularity rather than cache
+// residency priority: 0 = no cache hint, 1 = evict_last, 2 = evict_first.
+#ifndef GEMM_TMA_A_L2_EVICT_POLICY
+#define GEMM_TMA_A_L2_EVICT_POLICY 0
+#endif
+
+#ifndef GEMM_TMA_B_L2_EVICT_POLICY
+#define GEMM_TMA_B_L2_EVICT_POLICY 0
+#endif
+
 #ifndef GEMM_TUNED_4K_GRID_SWIZZLE
 #define GEMM_TUNED_4K_GRID_SWIZZLE GEMM_GRID_SWIZZLE
 #endif
@@ -617,6 +628,17 @@ static_assert(kPersistentNStrip == 1 ||
               "N strips require dynamic non-multicast M-fast/N-fast");
 static_assert(kPersistentNStrip == 1 || kPersistentSnakeMode == 0,
               "measure snake and N-strip ownership independently");
+static_assert(GEMM_TMA_A_L2_EVICT_POLICY >= 0 &&
+                  GEMM_TMA_A_L2_EVICT_POLICY <= 2,
+              "A L2 eviction policy must be 0, 1, or 2");
+static_assert(GEMM_TMA_B_L2_EVICT_POLICY >= 0 &&
+                  GEMM_TMA_B_L2_EVICT_POLICY <= 2,
+              "B L2 eviction policy must be 0, 1, or 2");
+static_assert(!kTmaMulticast ||
+                  (GEMM_TMA_A_L2_EVICT_POLICY == 0 &&
+                   GEMM_TMA_B_L2_EVICT_POLICY == 0),
+              "L2 eviction-priority ablation currently supports only "
+              "non-multicast TMA loads");
 static_assert(!kPersistentClusterGrouped || GEMM_TMA_MULTICAST_B,
               "cluster-grouped order requires B multicast");
 static_assert(!kPersistentClusterGrouped || GEMM_PERSISTENT_CTA,
@@ -984,42 +1006,90 @@ __device__ __forceinline__ void mbarrier_arrive_remote(
 #endif
 }
 
+template <int EvictPolicy>
+__device__ __forceinline__ uint64_t make_l2_cache_policy() {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  uint64_t policy = 0;
+  if constexpr (EvictPolicy == 1) {
+    asm volatile(
+        "createpolicy.fractional.L2::evict_last.L2::evict_unchanged.b64 "
+        "%0, 1.0;"
+        : "=l"(policy));
+  } else if constexpr (EvictPolicy == 2) {
+    asm volatile(
+        "createpolicy.fractional.L2::evict_first.L2::evict_unchanged.b64 "
+        "%0, 1.0;"
+        : "=l"(policy));
+  }
+  return policy;
+#else
+  return 0;
+#endif
+}
+
+template <int EvictPolicy>
 __device__ __forceinline__ void tma_load_2d(const CUtensorMap* map,
                                             uint32_t dst_smem,
                                             uint64_t* barrier,
                                             int c,
-                                            int r) {
+                                            int r,
+                                            uint64_t cache_policy) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t bar = smem_ptr_u32(barrier);
-  asm volatile(
-      "cp.async.bulk.tensor.2d.shared::cta.global.tile.mbarrier::complete_tx::bytes"
-      " [%0], [%1, {%3, %4}], [%2];"
-      :
-      : "r"(dst_smem), "l"(map), "r"(bar), "r"(c), "r"(r)
-      : "memory");
+  if constexpr (EvictPolicy == 0) {
+    asm volatile(
+        "cp.async.bulk.tensor.2d.shared::cta.global.tile."
+        "mbarrier::complete_tx::bytes [%0], [%1, {%3, %4}], [%2];"
+        :
+        : "r"(dst_smem), "l"(map), "r"(bar), "r"(c), "r"(r)
+        : "memory");
+  } else {
+    asm volatile(
+        "cp.async.bulk.tensor.2d.shared::cta.global.tile."
+        "mbarrier::complete_tx::bytes.L2::cache_hint "
+        "[%0], [%1, {%3, %4}], [%2], %5;"
+        :
+        : "r"(dst_smem), "l"(map), "r"(bar), "r"(c), "r"(r),
+          "l"(cache_policy)
+        : "memory");
+  }
 #else
   (void)map;
   (void)dst_smem;
   (void)barrier;
   (void)c;
   (void)r;
+  (void)cache_policy;
 #endif
 }
 
+template <int EvictPolicy>
 __device__ __forceinline__ void tma_load_3d(const CUtensorMap* map,
                                             uint32_t dst_smem,
                                             uint64_t* barrier,
                                             int c0,
                                             int c1,
-                                            int c2) {
+                                            int c2,
+                                            uint64_t cache_policy) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t bar = smem_ptr_u32(barrier);
-  asm volatile(
-      "cp.async.bulk.tensor.3d.shared::cta.global.tile.mbarrier::complete_tx::bytes"
-      " [%0], [%1, {%3, %4, %5}], [%2];"
-      :
-      : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2)
-      : "memory");
+  if constexpr (EvictPolicy == 0) {
+    asm volatile(
+        "cp.async.bulk.tensor.3d.shared::cta.global.tile."
+        "mbarrier::complete_tx::bytes [%0], [%1, {%3, %4, %5}], [%2];"
+        :
+        : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2)
+        : "memory");
+  } else {
+    asm volatile(
+        "cp.async.bulk.tensor.3d.shared::cta.global.tile."
+        "mbarrier::complete_tx::bytes.L2::cache_hint "
+        "[%0], [%1, {%3, %4, %5}], [%2], %6;"
+        :
+        : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2),
+          "l"(cache_policy)
+        : "memory");
+  }
 #else
   (void)map;
   (void)dst_smem;
@@ -1027,25 +1097,39 @@ __device__ __forceinline__ void tma_load_3d(const CUtensorMap* map,
   (void)c0;
   (void)c1;
   (void)c2;
+  (void)cache_policy;
 #endif
 }
 
+template <int EvictPolicy>
 __device__ __forceinline__ void tma_load_4d(const CUtensorMap* map,
                                             uint32_t dst_smem,
                                             uint64_t* barrier,
                                             int c0,
                                             int c1,
                                             int c2,
-                                            int c3) {
+                                            int c3,
+                                            uint64_t cache_policy) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t bar = smem_ptr_u32(barrier);
-  asm volatile(
-      "cp.async.bulk.tensor.4d.shared::cta.global.tile.mbarrier::complete_tx::bytes"
-      " [%0], [%1, {%3, %4, %5, %6}], [%2];"
-      :
-      : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2),
-        "r"(c3)
-      : "memory");
+  if constexpr (EvictPolicy == 0) {
+    asm volatile(
+        "cp.async.bulk.tensor.4d.shared::cta.global.tile."
+        "mbarrier::complete_tx::bytes [%0], [%1, {%3, %4, %5, %6}], [%2];"
+        :
+        : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2),
+          "r"(c3)
+        : "memory");
+  } else {
+    asm volatile(
+        "cp.async.bulk.tensor.4d.shared::cta.global.tile."
+        "mbarrier::complete_tx::bytes.L2::cache_hint "
+        "[%0], [%1, {%3, %4, %5, %6}], [%2], %7;"
+        :
+        : "r"(dst_smem), "l"(map), "r"(bar), "r"(c0), "r"(c1), "r"(c2),
+          "r"(c3), "l"(cache_policy)
+        : "memory");
+  }
 #else
   (void)map;
   (void)dst_smem;
@@ -1054,6 +1138,7 @@ __device__ __forceinline__ void tma_load_4d(const CUtensorMap* map,
   (void)c1;
   (void)c2;
   (void)c3;
+  (void)cache_policy;
 #endif
 }
 
@@ -1640,17 +1725,21 @@ __device__ __forceinline__ void issue_a_stage_tma(const CUtensorMap* a_map,
                                                   uint32_t* a_smem,
                                                   uint64_t* ready,
                                                   int tile_m,
-                                                  int ktile) {
+                                                  int ktile,
+                                                  uint64_t cache_policy) {
   mbarrier_expect_tx(ready, kAStageBytes);
   const int a_row = tile_m * kCtaM;
   if constexpr (kStageK <= 64) {
     const int a_col_words = ktile * (kStageK / 2);
-    tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
+    tma_load_2d<GEMM_TMA_A_L2_EVICT_POLICY>(
+        a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row,
+        cache_policy);
   } else {
     // A 128B-swizzled tensor map may expose at most 32 uint32 words in its
     // contiguous dimension.  Represent wider K stages as 64-BF16 subtiles.
     const int a_k64 = ktile * (kStageK / 64);
-    tma_load_3d(a_map, smem_ptr_u32(a_smem), ready, 0, a_row, a_k64);
+    tma_load_3d<GEMM_TMA_A_L2_EVICT_POLICY>(
+        a_map, smem_ptr_u32(a_smem), ready, 0, a_row, a_k64, cache_policy);
   }
 }
 
@@ -1666,13 +1755,16 @@ __device__ __forceinline__ void issue_b_pipe_stage_tma(
     int clock_trace_iters,
     unsigned long long trace_base,
     int trace_slot,
-    int trace_warp) {
+    int trace_warp,
+    uint64_t cache_policy) {
   const unsigned long long trace_start =
       clock_trace != nullptr ? clock64() : 0ull;
   mbarrier_expect_tx(ready, kBPipeBytes);
   const int b_col_words = tile_n * (kCtaN / 2) + pipe * (kMmaN / 2);
   const int b_k16 = ktile * (kStageK / kMmaK);
-  tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
+  tma_load_4d<GEMM_TMA_B_L2_EVICT_POLICY>(
+      b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16,
+      cache_policy);
   const unsigned long long trace_end =
       clock_trace != nullptr ? clock64() : 0ull;
   write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
@@ -1742,13 +1834,16 @@ __device__ __forceinline__ void issue_b_stage_tma(
     int clock_trace_iters,
     unsigned long long trace_base,
     int trace_slot,
-    int trace_warp) {
+    int trace_warp,
+    uint64_t cache_policy) {
   const unsigned long long trace_start =
       clock_trace != nullptr ? clock64() : 0ull;
   mbarrier_expect_tx(ready, kBStageBytes);
   const int b_col_words = tile_n * (kCtaN / 2);
   const int b_k16 = ktile * (kStageK / kMmaK);
-  tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
+  tma_load_4d<GEMM_TMA_B_L2_EVICT_POLICY>(
+      b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16,
+      cache_policy);
   const unsigned long long trace_end =
       clock_trace != nullptr ? clock64() : 0ull;
   write_trace_record(clock_trace, clock_trace_start, clock_trace_iters,
@@ -2142,6 +2237,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     }
 
   if (warp_id == 0 && lane0) {
+    const uint64_t a_l2_cache_policy =
+        make_l2_cache_policy<GEMM_TMA_A_L2_EVICT_POLICY>();
+    const uint64_t b_l2_cache_policy =
+        make_l2_cache_policy<GEMM_TMA_B_L2_EVICT_POLICY>();
     for (int kt = 0; kt < ktiles; ++kt) {
       const int stage_epoch = stage_epoch_base + kt;
       const int stage = stage_epoch % kStages;
@@ -2185,7 +2284,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         }
       } else {
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], source_m,
-                          source_a_kt);
+                          source_a_kt, a_l2_cache_policy);
       }
       if constexpr (GEMM_TMA_MULTICAST_B) {
         if (cluster_rank == 0) {
@@ -2201,11 +2300,12 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                     GEMM_WIDE_B_TMA != 0) {
         issue_b_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
                           source_b_kt,
-                          nullptr, 0, 0, trace_base_shared, 0, 0);
+                          nullptr, 0, 0, trace_base_shared, 0, 0,
+                          b_l2_cache_policy);
       } else {
         issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
                                source_b_kt, 0, nullptr, 0, 0,
-                               trace_base_shared, 0, 0);
+                               trace_base_shared, 0, 0, b_l2_cache_policy);
       }
       if constexpr (SinglePipeline != 0 && kPipes > 1 &&
                     kSinglePipelineSplitTma == 0 &&
@@ -2213,7 +2313,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         uint32_t* b1_smem = b_smem + kBPipeWords;
         issue_b_pipe_stage_tma(&b_map, b1_smem, &b_ready[1][stage], source_n,
                                source_b_kt, 1, nullptr, 0, 0,
-                               trace_base_shared, 1, 0);
+                               trace_base_shared, 1, 0, b_l2_cache_policy);
       }
       const unsigned long long trace_end =
           clock_trace != nullptr ? clock64() : 0ull;
@@ -2229,6 +2329,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                   kSinglePipelineWideMma == 0)) &&
                 GEMM_WIDE_B_TMA == 0 && !kRepeatBBroadcast) {
     if (warp_id == 1 && lane0) {
+      const uint64_t b_l2_cache_policy =
+          make_l2_cache_policy<GEMM_TMA_B_L2_EVICT_POLICY>();
       if constexpr (SinglePipeline == 0) {
         wait_pipe1_phase_shift_tuned<Pipe1TmaPhaseCycles>();
       }
@@ -2258,7 +2360,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         } else {
           issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], source_n,
                                  source_kt, 1, clock_trace, clock_trace_start,
-                                 clock_trace_iters, trace_base_shared, 1, 1);
+                                 clock_trace_iters, trace_base_shared, 1, 1,
+                                 b_l2_cache_policy);
         }
       }
     }
@@ -3850,6 +3953,7 @@ int main(int argc, char** argv) {
                "single_pipeline_wide_mma,single_pipeline_split_tma,"
                "single_pipeline_interleave_pipes,"
                "tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,"
+               "tma_a_l2_evict_policy,tma_b_l2_evict_policy,"
                "input_init,store_mode,dynamic_smem_bytes,event_ms,"
                "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
@@ -3868,7 +3972,8 @@ int main(int argc, char** argv) {
               "tuned32k=%dx%d:%d/%d "
               "tuned_cstore_swizzle_128b=%d/%d/%d/%d "
               "tma_l2_promotion_a=%d tma_l2_promotion_b=%d "
-              "tma_l2_promotion_c=%d tuned4k_tma_l2=%d/%d/%d "
+              "tma_l2_promotion_c=%d tma_l2_evict_policy=%d/%d "
+              "tuned4k_tma_l2=%d/%d/%d "
               "tuned8k_tma_l2=%d/%d/%d "
               "tuned32k_tma_l2=%d/%d/%d "
               "cstore_swizzle_128b=%d cstore_vectorize_smem=%d "
@@ -3909,6 +4014,8 @@ int main(int argc, char** argv) {
               static_cast<int>(GEMM_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TMA_C_L2_PROMOTION),
+              GEMM_TMA_A_L2_EVICT_POLICY,
+              GEMM_TMA_B_L2_EVICT_POLICY,
               static_cast<int>(GEMM_TUNED_4K_TMA_A_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_4K_TMA_B_L2_PROMOTION),
               static_cast<int>(GEMM_TUNED_4K_TMA_C_L2_PROMOTION),
@@ -3957,7 +4064,7 @@ int main(int argc, char** argv) {
                 "cstore_swizzle_128b=%d single_pipeline=%d "
                 "single_pipeline_ntile_128=%d single_pipeline_wide_mma=%d "
                 "single_pipeline_split_tma=%d single_pipeline_interleave_pipes=%d "
-                "tma_l2=%d/%d/%d input_init=%s "
+                "tma_l2=%d/%d/%d tma_l2_evict=%d/%d input_init=%s "
                 "store_mode=%s event_ms=%.6f wall_ms=%.6f "
                 "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
                 r.size, r.mtile, r.ntile, r.ktiles, r.ctas, r.launch_ctas,
@@ -3970,13 +4077,15 @@ int main(int argc, char** argv) {
                 kSinglePipelineInterleavePipes,
                 r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                 r.tma_c_l2_promotion,
+                GEMM_TMA_A_L2_EVICT_POLICY,
+                GEMM_TMA_B_L2_EVICT_POLICY,
                 input_init_mode_name(r.input_init_mode),
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
                  "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,"
                  "%d,%d,%d,%d,"
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, r.launch_ctas,
@@ -3992,6 +4101,8 @@ int main(int argc, char** argv) {
                  kSinglePipelineInterleavePipes,
                  r.tma_a_l2_promotion, r.tma_b_l2_promotion,
                  r.tma_c_l2_promotion,
+                 GEMM_TMA_A_L2_EVICT_POLICY,
+                 GEMM_TMA_B_L2_EVICT_POLICY,
                  input_init_mode_name(r.input_init_mode),
                  store_mode_name(r.store_mode),
                  kDynamicSmemBytes,

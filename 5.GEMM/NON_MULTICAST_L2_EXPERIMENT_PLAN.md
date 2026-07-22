@@ -171,16 +171,28 @@ isolating.
 |---|---:|---|---|
 | non-multicast explicit `16x9` | 144 | dynamic 144 and dynamic 148 | conditional |
 
-## Experiment E: K-outer two-output A reuse (major conditional change)
+## Experiment E: K-outer two-output A reuse (closed by capacity audit)
 
-If S=2/4 do not improve, scheduler-only A reuse is exhausted.  The stronger
-design is to keep one `256x64` A stage resident and apply it to two N-output
-accumulator contexts before advancing K.  This directly halves A TMA traffic
-for the paired outputs, but it is a mainloop/TMEM/epilogue redesign rather than
-a tile scheduler change.  Before implementation, audit TMEM capacity: the
-current 256x256 output already occupies four 128x128 accumulator regions, so
-two simultaneous outputs may require a different CTA shape, staged spill, or
-sequential accumulator strategy.
+The selected kernel already applies one `256x64` A stage to both `256x128`
+N halves of its `256x256` output.  Extending that reuse to the next scheduler
+tile would require two live `256x256` FP32 outputs: eight `128x128` accumulator
+regions, or 1024 TMEM columns.  The current output occupies four regions at
+TMEM offsets `0/128/256/384` and allocates all 512 columns.  SM100 exposes only
+512 columns x 128 lanes x 32 bits per CTA, so the literal design is impossible
+without spilling.  See the [NVIDIA PTX tensor-memory
+layout](https://docs.nvidia.com/cuda/parallel-thread-execution/#tensor-memory).
+
+SMEM cannot hold the additional 256-KiB FP32 tile.  A K64-by-K64 global spill
+would add about 128 MiB of partial-C traffic per output pair to save only 8 MiB
+of A requests.  Sequential full-output execution is the rejected N-strip
+experiment and does not retain a K64 panel.  The exact multi-CTA realization,
+two-CTA A multicast, already measured `1730.416 +/- 0.424 TFLOP/s` and lost
+2.993% to the selected B-multicast control.
+
+Decision: no GPU implementation for a single-CTA `256x512` FP32 accumulator.
+A `128x512` K64/S2 CTA or a matched S2 shared-A/duplicate-A microbenchmark is
+possible, but has only 102.4 FLOP/requested byte versus 128 for the selected
+`256x256`; keep it as a paper-causality diagnostic, not a throughput candidate.
 
 ## Experiment F: focused order confirmation (complete)
 
@@ -206,6 +218,36 @@ AB-first and BA-first subgroup means were `-0.230%` and `+0.385%`.  The
 candidate failed the all-positive, 0.5%, both-subgroup, and confidence-interval
 gates.  Keep `order_mn`; do not retune macro shapes for `order_nm`.
 
+## Experiment G: TMA L2 eviction-priority hints (next)
+
+Tensor-map L2 promotion widens the DRAM-to-L2 fill granularity; it does not set
+eviction priority.  PTX independently supports
+`cp.async.bulk.tensor...L2::cache_hint` with an opaque policy produced by
+`createpolicy`.  Add compile-time non-multicast policies only:
+
+```text
+0 = no cache hint (byte-for-byte baseline instruction)
+1 = L2::evict_last
+2 = L2::evict_first
+```
+
+Compare at 16K under the selected `order_mn` scheduler:
+
+| Variant | A policy | B policy | Purpose | Status |
+|---|---|---|---|---|
+| `baseline` | none | none | paired control | pending |
+| `a_last` | evict_last | none | favor the operand with the larger partial-reuse gap | pending |
+| `b_last` | none | evict_last | direction control | pending |
+| `a_last_b_first` | evict_last | evict_first | strongest A-priority separation | pending |
+| `a_first_b_last` | evict_first | evict_last | symmetric B-priority control | pending |
+
+Keep tensor-map promotion disabled, logical TMA issue count/payload unchanged,
+and do not apply the policy to C stores.  Use the standard three rotated W1/I5
+process passes and exact 512 validation.  The policy is a hint and may be
+ignored by hardware; without profiler permission, report L2/HBM bytes as
+unmeasured.  Select only a three-for-three gain of at least 0.5%, then confirm
+that candidate separately before changing the default.
+
 ## Decision gates
 
 1. Always validate before timing; discard timing from a failing binary.
@@ -230,6 +272,8 @@ from TFLOP/s alone.
 |---|---|---|---|---|---|
 | 2026-07-22 | `f669b6f` | A/B/C S=1/2/4 combined first sweep | all 8 GPU checks exact; host coverage passed | `order_nm` `1778.907 +/- 2.584`, `+0.559%` | confirm `order_nm`; reject snake and strip 2/4 |
 | 2026-07-22 | `ac71b14` | F: six-pair `order_mn`/`order_nm` confirmation | both GPU checks exact; expanded host coverage passed | paired `+0.077%`, 95% CI `[-0.822%, +0.976%]` | reject promotion; keep `order_mn` |
+| 2026-07-22 | analysis at `2dfb872` | E: K-outer two-full-output capacity audit | source/PTX resource proof; no GPU run | 1024 TMEM columns required, 512 available | close as infeasible; no GPU spend |
+| 2026-07-22 | pending definition commit | G: A/B TMA eviction-priority sweep | pending | pending | pending |
 
 Round-one artifacts are in
 `../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
@@ -247,5 +291,8 @@ Focused confirmation artifacts are in
 - Morton/Z-order and exhaustive group-size search
 - Broad fixed-wave/cohort sweep; the ownership behavior was already tested
 - Stream-K/Split-K
+- Single-CTA `256x512` FP32 accumulation; exceeds TMEM capacity
+- `128x512` and S2 duplicate/shared-A causality kernels unless needed for a
+  paper-only mechanism ablation
 - Decode/asymmetric GEMMs and non-multiple edge support; these require a
   broader kernel/interface generalization than the current square-16K target
