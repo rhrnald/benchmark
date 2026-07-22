@@ -1,5 +1,6 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <cooperative_groups.h>
 
 #include <algorithm>
 #include <chrono>
@@ -29,6 +30,13 @@
 
 #ifndef GEMM_PERSISTENT_CTA
 #define GEMM_PERSISTENT_CTA 0
+#endif
+
+// Two-CTA cluster ablation.  The CTAs share the same N tile and rank 0
+// multicasts each B stage into both CTAs.  MMA remains tcgen05 cta_group::1;
+// the cluster is used only for TMA/DSM synchronization and data movement.
+#ifndef GEMM_TMA_MULTICAST_B
+#define GEMM_TMA_MULTICAST_B 0
 #endif
 
 // Optional persistent/epilogue ablations.  Keep these independent so each
@@ -497,6 +505,21 @@ static constexpr int kTuningTag32K = 32;
 
 static_assert(kCtaM == 128 || kCtaM == 256);
 static_assert(kCtaM % kMmaM == 0);
+static_assert(!GEMM_TMA_MULTICAST_B || GEMM_PERSISTENT_CTA,
+              "B multicast requires the paired persistent scheduler");
+static_assert(!GEMM_TMA_MULTICAST_B || GEMM_CTA_M == 256,
+              "the first multicast ablation targets the 256x256 CTA");
+static_assert(!GEMM_TMA_MULTICAST_B || GEMM_SINGLE_PIPELINE == 0,
+              "B multicast currently requires the two-issuer pipeline");
+static_assert(!GEMM_TMA_MULTICAST_B || GEMM_WIDE_B_TMA == 0,
+              "B multicast currently uses two 128-wide B transactions");
+static_assert(!GEMM_TMA_MULTICAST_B || GEMM_REPEAT_B_BROADCAST == 0,
+              "B multicast is a dense-address GEMM ablation");
+static_assert(!GEMM_TMA_MULTICAST_B ||
+                  (GEMM_PERSISTENT_MACRO_M % 2 == 0 &&
+                   GEMM_PERSISTENT_8K_MACRO_M % 2 == 0 &&
+                   GEMM_PERSISTENT_32K_MACRO_M % 2 == 0),
+              "paired scheduling requires even M macro sizes");
 static_assert(kRepeatBBroadcast || kPipes * kBPipeWords == kBStageWords);
 static_assert(!kRepeatBBroadcast || GEMM_REPEAT_INPUT,
               "B broadcast is only valid for the repeated-input control");
@@ -767,6 +790,39 @@ __device__ __forceinline__ void mbarrier_expect_tx(uint64_t* barrier, uint32_t b
 #endif
 }
 
+__device__ __forceinline__ void mbarrier_arrive_expect_tx_remote(
+    uint64_t* local_barrier, uint32_t bytes, uint32_t dst_cta_rank) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t local_addr = smem_ptr_u32(local_barrier);
+  asm volatile(
+      "{ .reg .b32 remote_addr; "
+      "mapa.shared::cluster.u32 remote_addr, %0, %1; "
+      "mbarrier.arrive.expect_tx.shared::cluster.b64 _, [remote_addr], %2; }"
+      :: "r"(local_addr), "r"(dst_cta_rank), "r"(bytes)
+      : "memory");
+#else
+  (void)local_barrier;
+  (void)bytes;
+  (void)dst_cta_rank;
+#endif
+}
+
+__device__ __forceinline__ void mbarrier_arrive_remote(
+    uint64_t* local_barrier, uint32_t dst_cta_rank) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t local_addr = smem_ptr_u32(local_barrier);
+  asm volatile(
+      "{ .reg .b32 remote_addr; "
+      "mapa.shared::cluster.u32 remote_addr, %0, %1; "
+      "mbarrier.arrive.shared::cluster.b64 _, [remote_addr]; }"
+      :: "r"(local_addr), "r"(dst_cta_rank)
+      : "memory");
+#else
+  (void)local_barrier;
+  (void)dst_cta_rank;
+#endif
+}
+
 __device__ __forceinline__ void tma_load_2d(const CUtensorMap* map,
                                             uint32_t dst_smem,
                                             uint64_t* barrier,
@@ -833,6 +889,37 @@ __device__ __forceinline__ void tma_load_4d(const CUtensorMap* map,
   (void)map;
   (void)dst_smem;
   (void)barrier;
+  (void)c0;
+  (void)c1;
+  (void)c2;
+  (void)c3;
+#endif
+}
+
+__device__ __forceinline__ void tma_load_4d_multicast(
+    const CUtensorMap* map,
+    uint32_t dst_smem,
+    uint64_t* barrier,
+    uint16_t multicast_mask,
+    int c0,
+    int c1,
+    int c2,
+    int c3) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t bar = smem_ptr_u32(barrier);
+  asm volatile(
+      "cp.async.bulk.tensor.4d.shared::cluster.global.tile."
+      "mbarrier::complete_tx::bytes.multicast::cluster"
+      " [%0], [%1, {%4, %5, %6, %7}], [%2], %3;"
+      :
+      : "r"(dst_smem), "l"(map), "r"(bar), "h"(multicast_mask),
+        "r"(c0), "r"(c1), "r"(c2), "r"(c3)
+      : "memory");
+#else
+  (void)map;
+  (void)dst_smem;
+  (void)barrier;
+  (void)multicast_mask;
   (void)c0;
   (void)c1;
   (void)c2;
@@ -1405,6 +1492,23 @@ __device__ __forceinline__ void issue_b_pipe_stage_tma(
                      trace_start, trace_end);
 }
 
+__device__ __forceinline__ void issue_b_pipe_stage_tma_multicast(
+    const CUtensorMap* b_map,
+    uint32_t* b_smem,
+    uint64_t* ready,
+    int tile_n,
+    int ktile,
+    int pipe) {
+  // Rank 0 owns the transaction.  Arrive/expect is applied to the matching
+  // barrier address in both CTAs before the multicast can complete.
+  mbarrier_arrive_expect_tx_remote(ready, kBPipeBytes, 0);
+  mbarrier_arrive_expect_tx_remote(ready, kBPipeBytes, 1);
+  const int b_col_words = tile_n * (kCtaN / 2) + pipe * (kMmaN / 2);
+  const int b_k16 = ktile * (kStageK / kMmaK);
+  tma_load_4d_multicast(b_map, smem_ptr_u32(b_smem), ready, 0x3u,
+                        b_col_words, 0, 0, b_k16);
+}
+
 __device__ __forceinline__ void issue_b_stage_tma(
     const CUtensorMap* b_map,
     uint32_t* b_smem,
@@ -1430,6 +1534,12 @@ __device__ __forceinline__ void issue_b_stage_tma(
                      trace_start, trace_end);
 }
 
+#if GEMM_TMA_MULTICAST_B
+#define GEMM_CLUSTER_ATTRIBUTE __cluster_dims__(2, 1, 1)
+#else
+#define GEMM_CLUSTER_ATTRIBUTE
+#endif
+
 template <int GridSwizzle,
           int GroupM,
           int GroupN,
@@ -1438,7 +1548,7 @@ template <int GridSwizzle,
           int CStoreSwizzle128B,
           int SinglePipeline,
           int TuningTag>
-__global__ __launch_bounds__(kThreads, 1)
+__global__ GEMM_CLUSTER_ATTRIBUTE __launch_bounds__(kThreads, 1)
 void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                                 const __grid_constant__ CUtensorMap b_map,
                                 const __grid_constant__ CUtensorMap c_map,
@@ -1477,11 +1587,19 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   __shared__ uint64_t a_ready[kStages];
   __shared__ uint64_t b_ready[kPipes][kStages];
   __shared__ uint64_t mma_done[kPipes][kStages];
+  __shared__ uint64_t b_reuse_ready[kPipes][kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
   __shared__ unsigned long long trace_base_shared;
   __shared__ int persistent_task_shared;
+
+  auto cluster = cooperative_groups::this_cluster();
+#if GEMM_TMA_MULTICAST_B
+  const uint32_t cluster_rank = cluster.block_rank();
+#else
+  constexpr uint32_t cluster_rank = 0;
+#endif
 
   if (threadIdx.x == 0) {
 #pragma unroll
@@ -1497,12 +1615,20 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 #pragma unroll
       for (int s = 0; s < kStages; ++s) {
         mbarrier_init(&mma_done[p][s], 1);
+        if constexpr (GEMM_TMA_MULTICAST_B) {
+          mbarrier_init(&b_reuse_ready[p][s], 2);
+        }
       }
     }
     trace_base_shared = clock64();
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
   __syncthreads();
+#if GEMM_TMA_MULTICAST_B
+  // Remote mbarrier operations and multicast may begin only after every CTA
+  // in the cluster has published its barrier initialization.
+  cluster.sync();
+#endif
 
   const int lane = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
@@ -1575,12 +1701,26 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                       task_iter * static_cast<int>(gridDim.x * gridDim.y);
         ++task_iter;
       } else {
-        if (threadIdx.x == 0) {
-          persistent_task_shared =
-              static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+        if constexpr (GEMM_TMA_MULTICAST_B) {
+          // One atomic allocation per cluster.  Rank 0/1 receive consecutive
+          // M-fast tasks, hence the same N tile and two adjacent M tiles.
+          cluster.sync();
+          if (threadIdx.x == 0 && cluster_rank == 0) {
+            persistent_task_shared =
+                static_cast<int>(atomicAdd(sink + total_tiles, 2u));
+          }
+          cluster.sync();
+          int* leader_task =
+              cluster.map_shared_rank(&persistent_task_shared, 0);
+          linear_tile = *leader_task + static_cast<int>(cluster_rank);
+        } else {
+          if (threadIdx.x == 0) {
+            persistent_task_shared =
+                static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+          }
+          __syncthreads();
+          linear_tile = persistent_task_shared;
         }
-        __syncthreads();
-        linear_tile = persistent_task_shared;
       }
       if (linear_tile >= persistent_task_count) break;
     } else if (tile_iter != 0) {
@@ -1681,6 +1821,14 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         for (int p = 0; p < kPipes; ++p) {
           mbarrier_wait(&mma_done[p][stage], reuse_phase);
         }
+        if constexpr (GEMM_TMA_MULTICAST_B) {
+          // Both consumers report that pipe 0 no longer reads this stage.
+          // Rank 0 waits locally before it overwrites both CTA destinations.
+          mbarrier_arrive_remote(&b_reuse_ready[0][stage], 0);
+          if (cluster_rank == 0) {
+            mbarrier_wait(&b_reuse_ready[0][stage], reuse_phase);
+          }
+        }
       }
       const unsigned long long trace_start =
           clock_trace != nullptr ? clock64() : 0ull;
@@ -1688,7 +1836,12 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
       const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
       issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], source_m, source_kt);
-      if constexpr ((SinglePipeline != 0 && kSinglePipelineWideMma != 0) ||
+      if constexpr (GEMM_TMA_MULTICAST_B) {
+        if (cluster_rank == 0) {
+          issue_b_pipe_stage_tma_multicast(
+              &b_map, b_smem, &b_ready[0][stage], source_n, source_kt, 0);
+        }
+      } else if constexpr ((SinglePipeline != 0 && kSinglePipelineWideMma != 0) ||
                     GEMM_WIDE_B_TMA != 0) {
         issue_b_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
                           source_kt,
@@ -1729,16 +1882,28 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         uint32_t* stage_smem = smem + stage * kStageWords;
         uint32_t* b_smem = stage_smem + kAStageWords + kBPipeWords;
         if (stage_epoch >= kStages) {
-          mbarrier_wait(&mma_done[1][stage], static_cast<uint32_t>(
-                                                    ((stage_epoch - kStages) /
-                                                     kStages) &
-                                                    1));
+          const uint32_t reuse_phase = static_cast<uint32_t>(
+              ((stage_epoch - kStages) / kStages) & 1);
+          mbarrier_wait(&mma_done[1][stage], reuse_phase);
+          if constexpr (GEMM_TMA_MULTICAST_B) {
+            mbarrier_arrive_remote(&b_reuse_ready[1][stage], 0);
+            if (cluster_rank == 0) {
+              mbarrier_wait(&b_reuse_ready[1][stage], reuse_phase);
+            }
+          }
         }
         const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
         const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
-        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], source_n,
-                               source_kt, 1, clock_trace, clock_trace_start,
-                               clock_trace_iters, trace_base_shared, 1, 1);
+        if constexpr (GEMM_TMA_MULTICAST_B) {
+          if (cluster_rank == 0) {
+            issue_b_pipe_stage_tma_multicast(
+                &b_map, b_smem, &b_ready[1][stage], source_n, source_kt, 1);
+          }
+        } else {
+          issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], source_n,
+                                 source_kt, 1, clock_trace, clock_trace_start,
+                                 clock_trace_iters, trace_base_shared, 1, 1);
+        }
       }
     }
   }
@@ -2847,7 +3012,13 @@ CaseResult run_case(int size,
 
   dim3 grid = launch_grid(mtile, ntile, tuning);
   if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
-    grid = dim3(std::min(persistent_ctas, ctas), 1, 1);
+    int launch_ctas = std::min(persistent_ctas, ctas);
+    if (GEMM_TMA_MULTICAST_B) launch_ctas &= ~1;
+    if (launch_ctas <= 0) {
+      std::fprintf(stderr, "B multicast requires at least two launch CTAs\n");
+      std::exit(EXIT_FAILURE);
+    }
+    grid = dim3(launch_ctas, 1, 1);
   }
   dim3 block(kThreads, 1, 1);
   auto launch_gemm = [&]() {
@@ -3051,7 +3222,13 @@ ValidateResult run_validation(int size,
 
   dim3 grid = launch_grid(mtile, ntile, tuning);
   if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
-    grid = dim3(std::min(persistent_ctas, ctas), 1, 1);
+    int launch_ctas = std::min(persistent_ctas, ctas);
+    if (GEMM_TMA_MULTICAST_B) launch_ctas &= ~1;
+    if (launch_ctas <= 0) {
+      std::fprintf(stderr, "B multicast requires at least two launch CTAs\n");
+      std::exit(EXIT_FAILURE);
+    }
+    grid = dim3(launch_ctas, 1, 1);
   }
   dim3 block(kThreads, 1, 1);
   launch_gemm_kernel(tuning, grid, block, a_map, b_map, c_map, d_sink, d_c,
@@ -3331,6 +3508,7 @@ int main(int argc, char** argv) {
               "input_init=%s formula_scale=%g "
               "persistent_ctas=%d "
               "persistent_kernel=%d "
+              "cluster_size=%d tma_multicast_b=%d "
               "persistent_macro=%dx%d persistent_8k_macro=%dx%d "
               "persistent_32k_macro=%dx%d "
               "persistent_order_local_m_fast=%d macro_n_fast=%d "
@@ -3374,6 +3552,7 @@ int main(int argc, char** argv) {
               input_init_mode_name(args.input_init_mode), kFormulaInitScale,
               args.persistent_ctas,
               GEMM_PERSISTENT_CTA,
+              GEMM_TMA_MULTICAST_B ? 2 : 1, GEMM_TMA_MULTICAST_B,
               GEMM_PERSISTENT_MACRO_M, GEMM_PERSISTENT_MACRO_N,
               GEMM_PERSISTENT_8K_MACRO_M, GEMM_PERSISTENT_8K_MACRO_N,
               GEMM_PERSISTENT_32K_MACRO_M, GEMM_PERSISTENT_32K_MACRO_N,

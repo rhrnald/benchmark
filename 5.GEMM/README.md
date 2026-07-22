@@ -604,6 +604,51 @@ are in:
 - `../results/gemm256_dense_matched_baseline_b200_45481495/`
 - `../results/gemm256_dense_l2_focused_sweep_b200_45481495/`
 
+### Two-CTA B TMA multicast ablation
+
+The next dense-GEMM experiment uses a fixed `cluster_shape=(2,1,1)`. It does
+not switch the tensor-core instruction to `cta_group::2`: every CTA still
+computes an independent `256x256` output tile with the existing
+`tcgen05.mma cta_group::1` pipeline. The two clustered CTAs are assigned the
+same N tile and adjacent M tiles, so only B is common between them.
+
+Cluster rank 0 issues each of the two `64x128` BF16 B loads with TMA multicast
+mask `0b11`. The payload is deposited at the same SMEM offset in both CTAs;
+A remains a normal, independent `256x64` load in each CTA. Per K64 stage this
+changes the two-CTA global-load payload from 128 KiB to 96 KiB, a 25% input
+traffic reduction for the pair. Full FP32 C stores and all GEMM coordinates
+remain mathematically dense.
+
+The persistent launch remains 148 CTAs, now grouped as 74 two-CTA clusters.
+One leader allocation gives the pair consecutive M-fast tasks. Remote
+mbarrier arrivals make both B-ready barriers visible to the multicast, and a
+two-consumer DSM reuse barrier prevents rank 0 from overwriting either CTA's B
+stage before both local MMAs have completed. This is required for correctness
+and is separate from the `tcgen05` completion barriers.
+
+The paired experiment compares this path against the selected 1-CTA dense
+control. Both use CTA `256x256`, K64, three stages, two B issuer/MMA warps,
+random BF16 `[0,1)`, 148 CTA workers, the selected 12x12/16x16/12x12 tile
+schedule, and full FP32 TMA C stores. Each case is one process with warmup 1
+and five timed launches; 8K/16K/32K are measured in three rotated passes.
+
+```bash
+./run_b200_gemm256_tma_multicast_b.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm256_tma_multicast_b
+```
+
+Standalone build/run:
+
+```bash
+make build-multicast-b NVCC=/usr/local/cuda/bin/nvcc
+make run-multicast-b SIZES=8192,16384,32768 WARMUP=1 ITERS=5 \
+  PERSISTENT_CTAS=148
+```
+
+The result table and artifact path will be added after B200 validation and
+measurement.
+
 ### Persistent TMEM epilogue overlap, CTA `128x256` (2026-07-22)
 
 This experiment returns to the repeated-address `128x256` shape before
