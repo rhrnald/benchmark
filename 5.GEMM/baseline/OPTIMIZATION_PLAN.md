@@ -147,6 +147,9 @@ positive diagnostic으로 보존하되 default에는 합치지 않는다. 다음
 긴 A readiness를 직접 줄이는 split-A를 clean default에서 독립 측정했다.
 E8f는 K64당 총 byte를 유지했지만 TMA transaction이 3개에서 4개로 늘면서
 -0.143%/-0.047%였으므로 기각한다. alternate issue order는 측정하지 않는다.
+E8g는 TMA 수를 유지한 채 producer를 A 32 KiB/B 32 KiB로 재배치했지만
+-0.108%/-0.324%였고 6/6 pair가 느렸다. B0/B1을 한 warp에 직렬화하지 않고
+현재의 두 독립 B producer stream을 유지한다.
 
 ## L2/scheduler 실험
 
@@ -208,3 +211,4 @@ E8f는 K64당 총 byte를 유지했지만 TMA transaction이 3개에서 4개로 
 | E8d | CUTLASS-style suspend hint on all `mbarrier` waits | exact, pattern/ones x1 | 172/0 | 1774.453 | 1534.989 | +0.285% / +0.241% vs dual-wide u1 | neutral; 6/6 positive but below 0.5% gate |
 | E8e | CUTLASS suspend hint on producer `mma_done` waits only | exact, pattern/ones x1 | 172/0 | 1777.055 | 1535.769 | +0.357% / +0.488% vs dual-wide u1 | neutral; 12/12 positive but both below 0.5% gate |
 | E8f | split A 32 KiB into two M128 x K64 16 KiB TMAs | exact, pattern/ones x1 | 174/0 | 1766.954 | 1525.982 | -0.143% / -0.047% vs dual-wide u1 | reject; fourth TMA transaction does not repay finer readiness |
+| E8g | producer ownership A-only / B0-then-B1 | exact, pattern/ones x1 | 176/0 | 1767.832 | 1525.960 | -0.108% / -0.324% vs dual-wide u1 | reject; keep two independent B producer streams |
