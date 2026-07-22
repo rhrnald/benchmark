@@ -157,3 +157,4 @@ warp specialization의 비용을 분리하기 위한 것이다.
 | E4b | three-buffer, per-chunk C-store commit/read wait | exact | 172/0 | 1739.175 | 1511.237 | -0.503% / -0.235% vs macro-free E2a | reject; all pairs negative |
 | E4c | aligned dynamic-shared declaration / native shared stores | exact | 166/0 | 1735.996 | 1508.330 | -0.713% / -0.380% vs macro-free E2a | reject; all pairs negative |
 | E4d | x128 TMEM epilogue loads | exact | 174/0 | 1748.644 | 1514.628 | +0.020% / -0.307% vs macro-free E2a | reject; distribution-dependent |
+| E7a | two-warp M-split `m128n256k16`, staggered split-K B TMA, K-loop u1 | exact | 172/0 | 1773.523 | 1531.740 | +1.337% / +1.290% vs macro-free E2a | pass; compare compiler auto-unroll before adoption |

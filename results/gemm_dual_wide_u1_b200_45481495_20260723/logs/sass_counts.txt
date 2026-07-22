@@ -1,0 +1,7 @@
+metric baseline dual_wide_u1
+UTCHMMA 8 4
+UTMALDG.2D 7 7
+UTMALDG.4D 14 14
+UTMASTG.4D 4 4
+UTCBAR 1 1
+BAR.SYNC 20 20
