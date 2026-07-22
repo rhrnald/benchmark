@@ -13,10 +13,10 @@
 // Clean 16K dense working default.
 //
 // The original B0 was reconstructed from the configuration that produced the
-// preserved 1806.657-TFLOP/s p0 binary.  This version also retains the measured
-// E2a TMEM-address cleanup.  The exact p0 source was not archived, so p0 remains
-// a performance/codegen oracle.  There are no tuning macros or experiment
-// switches: no command-line -D can silently change the kernel.
+// preserved 1806.657-TFLOP/s p0 binary.  This version retains the measured E2a
+// TMEM-address cleanup and E7a dual-wide staggered M-split mainloop.  The exact
+// p0 source was not archived, so p0 remains a performance/codegen oracle.  No
+// tuning macros or command-line -D switches can silently change the kernel.
 
 void cuda_check(cudaError_t result) {
   if (result != cudaSuccess) {
@@ -1358,7 +1358,8 @@ int main(int argc, char **argv) {
 
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
-      "stages=3 pipes=2 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
+      "stages=3 b_parts=2 mma=m128n256k16 split=m_split "
+      "k_loop=u1 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
       "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,

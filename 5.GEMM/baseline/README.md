@@ -1,8 +1,8 @@
 # 16K BF16 dense GEMM working default
 
 이 디렉터리는 16K 정방 GEMM 최적화의 현재 working default다. 실험용
-전처리 분기와 다중 커널 specialization을 제거하고, B0와 codegen이 동등한
-reconstruction에 E2a TMEM 주소 정리를 반영했다.
+전처리 분기와 다중 커널 specialization을 제거한 reconstruction에 E2a
+TMEM 주소 정리와 E7a dual-wide M-split mainloop를 반영했다.
 
 ## Provenance와 현재 상태
 
@@ -23,14 +23,34 @@ reconstruction에 E2a TMEM 주소 정리를 반영했다.
 - B0 교차 측정에서 clean은 `[0,1)` 1738.199 TFLOP/s, `p0`는
   1739.110 TFLOP/s로 차이가 -0.0524%였다. `[-8,8)`에서도 -0.2253%로
   0.5% noise gate 안이었다. 상세 결과는
-  `results/gemm_clean_b0_b200_45481495_20260723/summary.md`에 있다.
+  `../../results/gemm_clean_b0_b200_45481495_20260723/summary.md`에 있다.
 
 그 위에 TMEM tile 주소 배열을 직접 scalar 주소식으로 바꾼 E2a를 적용했다.
 6쌍 교차 측정에서 `[0,1)`은 1751.903 TFLOP/s로 B0 대비 +0.614%,
 `[-8,8)`은 1518.912 TFLOP/s로 +0.393%였고, 두 분포의 모든 paired delta가
-양수였다. 현재 codegen은 `REG 174`, `STACK 0 B`, spill 0, static shared
-`1184 B`다. 상세 결과는
-`results/gemm_e2a_tmem_scalar_b200_45481495_20260723/summary.md`에 있다.
+양수였다. E2a codegen은 `REG 174`, `STACK 0 B`, spill 0, static shared
+`1184 B`였다. 상세 결과는
+`../../results/gemm_e2a_tmem_scalar_b200_45481495_20260723/summary.md`에 있다.
+
+현재 E7a는 두 consumer warp가 N128씩 맡던 구조를 M 방향으로 바꿨다.
+warp 2는 위쪽 `128 x 256`, warp 3은 아래쪽 `128 x 256`을 각각
+`m128n256k16`으로 계산한다. K64당 CTA의 동적 MMA issue 수는 16회에서
+8회로 줄었고, TMA byte 수와 output store는 유지된다. 세 쌍 교차 측정에서
+`[0,1)`은 **1773.523 TFLOP/s**로 E2a 대비 **+1.3366%**, `[-8,8)`은
+**1531.740 TFLOP/s**로 **+1.2900%**였으며 여섯 paired delta가 모두
+양수였다. pattern/ones 512 full-C validation도 정확히 통과했다. 현재
+codegen은 `REG 172`, `STACK 0 B`, spill 0, static shared `1184 B`다.
+상세 결과는
+`../../results/gemm_dual_wide_u1_b200_45481495_20260723/summary.md`에 있다.
+정의/result commit은 각각 `4e1ac27`/`f35bca3`, 측정 source/binary
+SHA-256은 각각 `fdd34cec...`/`0c34e046...`이다. 이후 설명 주석과 runtime
+banner만 정리했으며, 로컬 SM100a에서 측정 snapshot과 4192개 전체 SASS
+instruction sequence가 동일함을 확인했다.
+
+consumer K loop의 `#pragma unroll 1`을 제거한 compiler-auto-unroll 대조군도
+별도로 측정했다. u1 대비 `[0,1)` -0.0272%, `[-8,8)` -0.2087%였고 여섯
+pair 모두 느려서 명시적 u1을 유지한다. 상세 결과는
+`../../results/gemm_dual_wide_auto_b200_45481495_20260723/summary.md`에 있다.
 
 현재 소스에는 `#define`이 하나도 없다. 64개 inline-PTX output operand도
 함수 본문에 명시적으로 적었으며, macro 제거 전후의 2072개 SASS instruction
@@ -48,18 +68,27 @@ sequence가 동일함을 확인했다. 외부 `-D` 옵션도 사용하지 않는
 | 문제 | `C[16384,16384] = A[16384,16384] * B[16384,16384]` |
 | 자료형/layout | row-major BF16 A/B, row-major FP32 C |
 | CTA output tile | `256 x 256` |
-| `tcgen05.mma` | `128 x 128 x 16`, N 방향 2 pipe |
+| `tcgen05.mma` | `128 x 256 x 16`, M 방향 2 consumer warp |
 | K staging | `K=64`, shared-memory 3 stage |
+| K64당 TMA | A `M256 x K64` 32 KiB 한 번, B `K32 x N256` 16 KiB 두 번 |
 | threads | 4 warps, 128 threads |
-| warp 0 | A와 B의 첫 N128 TMA issue |
-| warp 1 | B의 둘째 N128 TMA issue |
-| warp 2/3 | 각 N128의 MMA issue |
+| warp 0 | A 뒤 late B1 `K32:64 x N256` TMA issue |
+| warp 1 | early B0 `K0:32 x N256` TMA issue |
+| warp 2 | 위쪽 `M0:128 x N256` MMA issue |
+| warp 3 | 아래쪽 `M128:256 x N256` MMA issue |
+| MMA issue | CTA/K64당 8회, consumer K loop `#pragma unroll 1` |
 | output | `128 x 128` 네 chunk를 SW128 shared memory에서 FP32 TMA store |
 | scheduler | 148 persistent CTA, global atomic task counter |
 | tile order | `16 x 16` macro, macro N-fast, macro 내부 M-fast |
 | phase shift | TMA 0 cycle, MMA 0 cycle |
 | L2 promotion/multicast | 없음 / 없음 |
 | dynamic shared memory | 197632 B |
+
+각 K64 stage에서 두 B TMA는 N 방향 panel이 아니라 K 방향으로 나뉜다.
+consumer는 A와 early B0 완료를 기다린 뒤 K16 MMA 두 번을 issue하고, late
+B1 완료를 기다린 뒤 나머지 두 번을 issue하고 commit한다. 따라서 B는
+여전히 16 KiB TMA 두 번이고 A를 포함한 총 global-memory traffic도
+E2a와 같다.
 
 각 CTA는 scheduler가 지정한 실제 `(tile_m, tile_n)`의 A/B를 읽고 실제
 C 위치를 저장한다. 동일한 global-memory tile을 반복해서 읽는
@@ -92,6 +121,14 @@ reference와 비교한다. validation 크기는 CPU O(N^3) reference가 실수�
 `checksum`은 scheduler 실행 여부를 보는 diagnostic일 뿐 C correctness
 판정값은 아니다.
 
+ones 입력도 별도로 전체 C를 확인한다.
+
+```bash
+./gemm256_bf16_16k \
+  --validate --validate-size 512 \
+  --validate-pattern ones
+```
+
 ## 표준 성능 측정
 
 기본 측정은 BF16 uniform `[0,1)` 입력, warmup 1회, timed 5회 평균,
@@ -101,7 +138,7 @@ reference와 비교한다. validation 크기는 CPU O(N^3) reference가 실수�
 ./gemm256_bf16_16k \
   --warmup 1 --iters 5 \
   --input-init random \
-  --csv clean_16384_random.csv
+  --csv gemm256_bf16_16k_random.csv
 ```
 
 `[-8,8)` 입력은 다음처럼 측정한다.
@@ -110,7 +147,7 @@ reference와 비교한다. validation 크기는 CPU O(N^3) reference가 실수�
 ./gemm256_bf16_16k \
   --warmup 1 --iters 5 \
   --input-init random-signed8 \
-  --csv clean_16384_random-signed8.csv
+  --csv gemm256_bf16_16k_random-signed8.csv
 ```
 
 `run_1x5.sh`는 위 규약으로 정확히 한 프로세스만 실행하고 CSV와 log를
@@ -124,6 +161,23 @@ reference와 비교한다. validation 크기는 CPU O(N^3) reference가 실수�
 기준선 동등성은 같은 B200에서 clean과 `p0`를 AB/BA 순서로 각각 3회
 측정해 통과했다. 후속 후보도 GPU power limit, 온도, clock, 드라이버와
 CUDA 버전을 같이 기록하고 같은 방식의 paired ratio로 판단한다.
+
+현재 default의 canonical 세 프로세스 평균은 `[0,1)` 1773.523 TFLOP/s,
+`[-8,8)` 1531.740 TFLOP/s다. 별도 auto-unroll 대조 실험에서 같은 u1
+binary를 다시 측정한 평균도 각각 1773.290, 1530.367 TFLOP/s로 일치했다.
+
+## 소스 위치
+
+- [상수와 shared/TMEM layout](gemm256_bf16_16k.cu#L42-L110)
+- [wide-B descriptor와 MMA instruction descriptor](gemm256_bf16_16k.cu#L149-L177)
+- [`tcgen05.mma` PTX wrapper](gemm256_bf16_16k.cu#L402-L426)
+- [C epilogue staging과 store](gemm256_bf16_16k.cu#L445-L543)
+- [A/B stage TMA helper](gemm256_bf16_16k.cu#L545-L563)
+- [persistent kernel과 scheduler](gemm256_bf16_16k.cu#L565-L792)
+- [producer/consumer mainloop](gemm256_bf16_16k.cu#L669-L755)
+- [A/B/C tensor map encoding](gemm256_bf16_16k.cu#L794-L849)
+- [benchmark timing](gemm256_bf16_16k.cu#L1069-L1163)
+- [full-C validation](gemm256_bf16_16k.cu#L1209-L1317)
 
 후속 실험의 순서와 판정 규칙은 [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md)에
 고정한다.

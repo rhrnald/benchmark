@@ -5,7 +5,9 @@
 목표는 단순히 L2 hit rate만 올리는 것이 아니라, 실제 위치의 dense
 `16384 x 16384 x 16384` GEMM에서 현재 드러난 모든 serial bottleneck을
 분리해 찾는 것이다. 첫 기준선은 `gemm256_bf16_16k.cu`이며, 보존된
-`p0` binary의 1806.657 TFLOP/s를 같은 GPU에서 재현하는 것이 B0 gate다.
+`p0` binary의 1806.657 TFLOP/s를 같은 GPU에서 재현하는 것이 역사적 B0
+gate였다. 이 gate와 E2a를 통과한 뒤 채택한 E7a dual-wide u1이 현재 후속
+실험의 source-backed baseline이다.
 
 모든 실험은 다음 조건을 고정한다.
 
@@ -82,16 +84,14 @@ commit 후 재사용 직전에 `wait_group.read 2`를 사용하고 마지막에�
 네 chunk 전체를 위한 4-buffer는 현재 dynamic shared-memory 한도를 넘으므로
 대상에서 제외한다.
 
-### E5. producer warp 역할 균형
+### E5. producer warp 역할 균형 (보류)
 
-현재 warp 0은 A 32 KiB와 B0 16 KiB를 issue하고, warp 1은 B1 16 KiB만
-issue한다. 다음 두 topology를 동일 work로 비교한다.
-
-- baseline: warp 0 = A+B0, warp 1 = B1
-- candidate: warp 0 = A, warp 1 = B0+B1
-
-TMA byte 수와 descriptor는 바꾸지 않는다. 효과가 있으면 producer-side
-instruction imbalance가 병목이었다고 판단한다.
+이전 E2a phase trace에서 producer completion skew는 `[0,1)` 89 cycle,
+`[-8,8)` 13 cycle뿐이었고 두 producer 모두 consumer보다 약 2.7K cycle
+먼저 끝났다. E7a 채택 뒤에는 warp 1이 early B0 16 KiB를 먼저 issue하고,
+warp 0이 A 32 KiB 뒤 late B1 16 KiB를 issue한다. 새 phase trace에서
+consumer가 B1을 실제로 기다리는 구간이 확인될 때만 다음 producer mapping
+ablation을 연다. TMA byte 수와 descriptor shape는 고정한다.
 
 ### E6. 다음 task ID 선취
 
@@ -101,12 +101,19 @@ instruction imbalance가 병목이었다고 판단한다.
 atomic 수와 tile order는 동일하게 유지한다. 별도로 persistent CTA 수
 148 고정과 132/140/144/148 sweep을 비교해 tail 효과도 확인한다.
 
-### E7. 1-warp 대 2-warp MMA issue
+### E7. consumer MMA topology와 K-loop codegen (완료)
 
-두 warp가 N128씩 issue하는 기준선과 한 warp가 두 N128을 모두 issue하는
-후보를 비교한다. K 반복, TMA bytes, MMA 개수, C store와 scheduler는
-완전히 같아야 한다. 이 실험은 warp 수가 아니라 issue-side dependency와
-warp specialization의 비용을 분리하기 위한 것이다.
+두 warp가 N128씩 `m128n128k16`을 issue하던 기준선을, 두 warp가 각각
+M128씩 `m128n256k16`을 issue하는 구조로 바꿨다. B stage는 총 byte 수를
+유지한 채 N-split에서 K-split 16 KiB 두 transaction으로 바꾸고, early
+B0 뒤 첫 두 MMA와 late B1 뒤 나머지 두 MMA를 issue한다. E7a는 두 분포에서
+각각 +1.337%, +1.290%로 채택했다. 동일 코드에서 consumer K loop의
+compiler auto-unroll만 허용한 E7b는 -0.027%, -0.209%여서 u1을 유지한다.
+
+동적 MMA issue가 K64당 16회에서 8회로 바뀌었으므로 E2a에서 측정한 P0b
+store-off 상한과 P0c phase 비율을 그대로 사용하지 않는다. 다음 비-L2
+작업은 E7a default의 same-binary store-off와 phase trace를 다시 측정해
+mainloop wait/issue, final drain, epilogue, scheduler 비율을 갱신하는 것이다.
 
 ## L2/scheduler 실험
 
@@ -127,7 +134,8 @@ warp specialization의 비용을 분리하기 위한 것이다.
 기존 측정에서 효과가 없거나 악화된 항목은 우선순위를 낮춘다.
 
 - TMA/MMA phase shift: 16K에서 `0/0`이 최선
-- wide-B와 `CSTORE_CHUNK_N=256`
+- 단일 32 KiB wide-B TMA와 `CSTORE_CHUNK_N=256` (현재의 K-split
+  16 KiB wide-B TMA 두 번은 유지)
 - K32, stage 4/5
 - 단순 L2 promotion hint
 - 현재 형태의 static scheduler와 multicast
