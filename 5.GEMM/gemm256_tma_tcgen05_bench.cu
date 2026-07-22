@@ -2408,7 +2408,7 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
                                         CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                  "cuTensorMapEncodeTiled(a_row_major_sw128)");
   } else {
-    static_assert(kStageK % 64 == 0,
+    static_assert(kStageK <= 64 || kStageK % 64 == 0,
                   "GEMM_STAGE_K above 64 must be a multiple of 64");
     const cuuint64_t global_dim[3] = {32, rows, cols_words / 32};
     const cuuint64_t global_stride[2] = {
