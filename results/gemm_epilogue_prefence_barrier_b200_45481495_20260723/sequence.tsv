@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	baseline	e3
+random	2	e3	baseline
+random	3	baseline	e3
+random-signed8	1	e3	baseline
+random-signed8	2	baseline	e3
+random-signed8	3	e3	baseline

@@ -1,0 +1,11 @@
+metric baseline e3_prefence_removed
+registers 178 178
+stack_bytes 16 16
+spill_bytes 0 0
+static_instructions 1936 1928
+BAR 29 25
+WARPSYNC 14 14
+UTMALDG 21 21
+UTCHMMA 8 8
+SYNCS.TRYWAIT 48 48
+UTMASTG 4 4

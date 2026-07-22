@@ -1,0 +1,49 @@
+gpu label=before_baseline_random_p1 32, 141.58, 1000.00, 120, 3996
+run variant=baseline input=random pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.056070 wall_ms=5.058276 event_TFLOPS=1739.709 wall_TFLOPS=1738.951 checksum=00000000
+gpu label=before_e3_random_p1 34, 208.62, 1000.00, 1965, 3996
+run variant=e3 input=random pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.061933 wall_ms=5.065426 event_TFLOPS=1737.695 wall_TFLOPS=1736.496 checksum=00000000
+gpu label=before_e3_random_p2 34, 228.73, 1000.00, 1965, 3996
+run variant=e3 input=random pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.050201 wall_ms=5.052366 event_TFLOPS=1741.731 wall_TFLOPS=1740.985 checksum=00000000
+gpu label=before_baseline_random_p2 34, 228.86, 1000.00, 1965, 3996
+run variant=baseline input=random pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.063034 wall_ms=5.065172 event_TFLOPS=1737.317 wall_TFLOPS=1736.583 checksum=00000000
+gpu label=before_baseline_random_p3 34, 227.40, 1000.00, 1965, 3996
+run variant=baseline input=random pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.058509 wall_ms=5.060775 event_TFLOPS=1738.871 wall_TFLOPS=1738.092 checksum=00000000
+gpu label=before_e3_random_p3 34, 224.98, 1000.00, 1965, 3996
+run variant=e3 input=random pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.060429 wall_ms=5.062692 event_TFLOPS=1738.211 wall_TFLOPS=1737.434 checksum=00000000
+gpu label=before_e3_random-signed8_p1 34, 225.57, 1000.00, 1965, 3996
+run variant=e3 input=random-signed8 pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.845466 wall_ms=5.847788 event_TFLOPS=1504.772 wall_TFLOPS=1504.175 checksum=00000000
+gpu label=before_baseline_random-signed8_p1 35, 225.93, 1000.00, 1965, 3996
+run variant=baseline input=random-signed8 pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.833030 wall_ms=5.835165 event_TFLOPS=1507.980 wall_TFLOPS=1507.428 checksum=00000000
+gpu label=before_baseline_random-signed8_p2 35, 231.46, 1000.00, 1965, 3996
+run variant=baseline input=random-signed8 pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.838496 wall_ms=5.840608 event_TFLOPS=1506.568 wall_TFLOPS=1506.024 checksum=00000000
+gpu label=before_e3_random-signed8_p2 35, 229.51, 1000.00, 1965, 3996
+run variant=e3 input=random-signed8 pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.832973 wall_ms=5.835214 event_TFLOPS=1507.995 wall_TFLOPS=1507.416 checksum=00000000
+gpu label=before_e3_random-signed8_p3 35, 232.34, 1000.00, 1965, 3996
+run variant=e3 input=random-signed8 pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.809555 wall_ms=5.811713 event_TFLOPS=1514.073 wall_TFLOPS=1513.511 checksum=00000000
+gpu label=before_baseline_random-signed8_p3 35, 232.40, 1000.00, 1965, 3996
+run variant=baseline input=random-signed8 pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.826272 wall_ms=5.828557 event_TFLOPS=1509.729 wall_TFLOPS=1509.137 checksum=00000000
+gpu label=after_all 35, 231.85, 1000.00, 1965, 3996

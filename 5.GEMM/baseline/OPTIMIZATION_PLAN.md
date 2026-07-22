@@ -132,3 +132,4 @@ warp specialization의 비용을 분리하기 위한 것이다.
 |---|---|---|---|---:|---:|---:|---|
 | B0 | clean reconstruction | exact | 178/0 | 1738.199 | 1508.979 | -0.052% / -0.225% vs p0 | pass |
 | E1 | incremental stage ring | exact | 184/0 | 1729.041 | 1505.076 | -0.535% / -0.403% | reject |
+| E3.1 | remove pre-fence C-store barriers | exact | 178/0 | 1739.212 | 1508.947 | +0.033% / +0.057% | neutral |
