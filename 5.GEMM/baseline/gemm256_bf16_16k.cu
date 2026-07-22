@@ -667,7 +667,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     const int stage_epoch_base = tile_iter * ktiles;
 
     if (warp_id == 0 && lane0) {
-#pragma unroll 1
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
@@ -690,7 +689,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     }
 
     if (warp_id == 1 && lane0) {
-#pragma unroll 1
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
