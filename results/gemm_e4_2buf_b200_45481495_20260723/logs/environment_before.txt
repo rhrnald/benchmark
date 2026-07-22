@@ -1,0 +1,7 @@
+name, uuid, driver_version, temperature.gpu, power.limit [W], clocks.current.sm [MHz], clocks.max.sm [MHz]
+NVIDIA B200, GPU-a941a3b8-3a18-b964-8594-bd271f99115d, 580.126.09, 36, 1000.00 W, 120 MHz, 1965 MHz
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
