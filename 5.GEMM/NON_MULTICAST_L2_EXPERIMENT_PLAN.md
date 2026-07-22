@@ -186,23 +186,27 @@ sequential accumulator strategy.
 
 Rerun only the existing default (`order_mn`, local M-fast plus macro N-fast)
 and the round-one candidate (`order_nm`, local N-fast plus macro M-fast).
-Use six independent one-case processes per binary in alternating AB/BA order,
+Use six independent one-case processes per binary in counterbalanced AB/BA order,
 with warmup 1 and five timed launches in each process.  The source and kernel
 work must remain identical to definition `f669b6f`; only the two scheduler
 compile-time constants differ.
 
-Promote `order_nm` only if all or nearly all matched pairs remain positive and
-the aggregate paired gain remains about 0.5% or larger.  Otherwise retain the
-current default.  This confirmation precedes both macro-shape retuning and the
-K-outer redesign.
+Promote `order_nm` only if all six matched pairs are positive, the aggregate
+paired gain is at least 0.5%, both AB-first and BA-first subgroup means are
+positive, and the two-sided paired 95% confidence interval excludes zero.
+Otherwise retain the current default.  Treat each process-level W1/I5 result
+as one sample, not its five timed launches as five independent observations.
+This confirmation precedes both macro-shape retuning and the K-outer redesign.
 
 ## Decision gates
 
 1. Always validate before timing; discard timing from a failing binary.
-2. Select a candidate only if all three process samples move in the same
-   direction and the mean gain is at least approximately 0.5% relative to the
-   paired baseline.
-3. A marginal result must be rerun before selection.
+2. In a three-process exploratory sweep, select a candidate only if all three
+   paired samples move in the same direction and the mean gain is at least
+   approximately 0.5% relative to the paired baseline.
+3. A marginal result must be rerun before selection using its declared focused
+   confirmation gate; Experiment F uses six pairs and a paired confidence
+   interval.
 4. Keep baseline behavior as the compile-time default until a winner passes.
 5. Extend only the winning 16K candidate to 8K/32K; do not spend GPU time on
    a full cross-product at all sizes.
@@ -217,6 +221,7 @@ from TFLOP/s alone.
 | Date | Definition commit | Experiment | Validation | Result | Decision |
 |---|---|---|---|---|---|
 | 2026-07-22 | `f669b6f` | A/B/C S=1/2/4 combined first sweep | all 8 GPU checks exact; host coverage passed | `order_nm` `1778.907 +/- 2.584`, `+0.559%` | confirm `order_nm`; reject snake and strip 2/4 |
+| 2026-07-22 | pending definition commit | F: six-pair `order_mn`/`order_nm` confirmation | pending | pending | pending |
 
 Round-one artifacts are in
 `../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
