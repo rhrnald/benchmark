@@ -141,7 +141,10 @@ E8d에서는 CUTLASS와 같이 모든 `mbarrier.try_wait`에 `0x989680` suspend
 hint를 넣었다. 두 분포의 여섯 pair가 모두 빨랐지만 +0.285%/+0.241%로
 0.5% gate 아래였다. broad 후보는 채택하지 않고, 짧은 consumer readiness
 wait의 wake-up 비용을 분리하기 위해 producer `mma_done` reuse wait에만
-hint를 적용한 E8e를 비교한다.
+hint를 적용한 E8e를 비교했다. E8e는 12/12 pair가 양수였지만 6쌍 평균이
++0.357%/+0.488%로 역시 두 분포 모두 gate 아래였다. suspend 계열은
+positive diagnostic으로 보존하되 default에는 합치지 않는다. 다음은 가장
+긴 A readiness를 직접 줄이는 split-A를 clean default에서 독립 측정한다.
 
 ## L2/scheduler 실험
 
@@ -201,3 +204,4 @@ hint를 적용한 E8e를 비교한다.
 | E8b | shared A+B0 readiness, arrival count 2; B1 independent | exact, pattern/ones x3 | 172/0 | 1773.802 | 1529.112 | +0.228% / +0.062% vs dual-wide u1 | neutral; below 0.5% gate, do not adopt |
 | E8c | producer K loops only `unroll 1` | exact, pattern/ones x1 | 172/0 | 1761.532 | 1526.575 | -0.491% / -0.113% vs dual-wide u1 | reject; producer code size is off critical path |
 | E8d | CUTLASS-style suspend hint on all `mbarrier` waits | exact, pattern/ones x1 | 172/0 | 1774.453 | 1534.989 | +0.285% / +0.241% vs dual-wide u1 | neutral; 6/6 positive but below 0.5% gate |
+| E8e | CUTLASS suspend hint on producer `mma_done` waits only | exact, pattern/ones x1 | 172/0 | 1777.055 | 1535.769 | +0.357% / +0.488% vs dual-wide u1 | neutral; 12/12 positive but both below 0.5% gate |
