@@ -1,0 +1,28 @@
+
+Fatbin elf code:
+================
+arch = sm_100a
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+
+Fatbin elf code:
+================
+arch = sm_100a
+code version = [1,8]
+host = linux
+compile_size = 64bit
+
+Resource usage:
+ Common:
+  GLOBAL:0
+ Function _ZN47_GLOBAL__N__0cbe6a2b_14_producer_u1_cu_a2175ef022init_random_bf16_wordsEPjmjff:
+  REG:12 STACK:0 SHARED:1024 LOCAL:0 CONSTANT[0]:924 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN47_GLOBAL__N__0cbe6a2b_14_producer_u1_cu_a2175ef023init_formula_bf16_wordsEPjmmf:
+  REG:22 STACK:0 SHARED:1024 LOCAL:0 CONSTANT[0]:924 TEXTURE:0 SURFACE:0 SAMPLER:0
+ Function _ZN47_GLOBAL__N__0cbe6a2b_14_producer_u1_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii:
+  REG:172 STACK:0 SHARED:1184 LOCAL:0 CONSTANT[0]:1300 TEXTURE:0 SURFACE:0 SAMPLER:0

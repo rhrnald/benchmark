@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	dual_wide_clean	producer_u1
+random	2	producer_u1	dual_wide_clean
+random	3	dual_wide_clean	producer_u1
+random-signed8	1	producer_u1	dual_wide_clean
+random-signed8	2	dual_wide_clean	producer_u1
+random-signed8	3	producer_u1	dual_wide_clean

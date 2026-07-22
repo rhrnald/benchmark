@@ -131,7 +131,9 @@ B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
    readiness barrier로 합치되 B1 dependency는 추가하지 않는다.
 3. 채택된 barrier 변경만 합친다.
 4. producer K loop에만 u1을 적용해 code size 감소와 동적 산술 비용을
-   독립 비교한다.
+   독립 비교한다. E8c에서 main-kernel instruction이 1952에서 1144로
+   줄었지만 `[0,1)` -0.491%, `[-8,8)` -0.113%여서 채택하지 않았다.
+   producer code size는 현재 critical path가 아니다.
 5. 이후에 epilogue overlap을 다시 검토한다. task prefetch와 producer 역할
    재배치는 profiler 근거가 생길 때까지 보류한다.
 
@@ -191,3 +193,4 @@ B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
 | P1b | E7a block-0 tile-8 phase trace, five processes | exact before trace | 186/0 diagnostic | N/A | N/A | epilogue 3.607% / 3.638%; scheduler 0.300% / 0.290% | prioritize readiness/completion barrier ablations |
 | E8a | shared stage `mma_done`, arrival count 2 | exact, pattern/ones x3 | 170/0 | 1769.467 | 1530.390 | -0.079% / +0.043% vs dual-wide u1 | neutral/reject; producer waits are off critical path |
 | E8b | shared A+B0 readiness, arrival count 2; B1 independent | exact, pattern/ones x3 | 172/0 | 1773.802 | 1529.112 | +0.228% / +0.062% vs dual-wide u1 | neutral; below 0.5% gate, do not adopt |
+| E8c | producer K loops only `unroll 1` | exact, pattern/ones x1 | 172/0 | 1761.532 | 1526.575 | -0.491% / -0.113% vs dual-wide u1 | reject; producer code size is off critical path |

@@ -1,0 +1,11 @@
+metric dual_wide_clean producer_u1
+instructions 4192 2576
+main_kernel_instructions 1952 1144
+UTCHMMA 4 4
+UTMALDG.2D 7 1
+UTMALDG.4D 14 2
+UTMASTG.4D 4 4
+UTCBAR 1 1
+BAR.SYNC 20 20
+SYNCS.PHASECHK 64 16
+SYNCS.ARRIVE 21 3
