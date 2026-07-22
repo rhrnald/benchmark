@@ -1,0 +1,7 @@
+metric dual_wide_u1 dual_wide_auto
+UTCHMMA 4 12
+UTMALDG.2D 7 7
+UTMALDG.4D 14 14
+UTMASTG.4D 4 4
+UTCBAR 1 3
+BAR.SYNC 20 20
