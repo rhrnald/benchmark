@@ -1,0 +1,14 @@
+metric e32_parent e33_duplicate_barrier_removed
+registers 178 178
+stack_bytes 16 16
+spill_bytes 0 0
+text_slots_including_padding 1928 1928
+effective_instructions 1918 1917
+BAR_SYNC 16 15
+UTMASTG 4 4
+UTMACMDFLUSH 2 2
+DEPBAR_LE_SB0_0 2 2
+
+The only semantic opcode-count change is removal of the caller BAR.SYNC that
+immediately followed the helper's final source-buffer reuse BAR.SYNC.  Branch
+targets move by 0x10 bytes and alignment padding grows by one NOP.

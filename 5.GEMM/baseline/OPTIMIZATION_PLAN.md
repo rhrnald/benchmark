@@ -146,3 +146,4 @@ warp specialization의 비용을 분리하기 위한 것이다.
 | E1 | incremental stage ring | exact | 184/0 | 1729.041 | 1505.076 | -0.535% / -0.403% | reject |
 | E3.1 | remove pre-fence C-store barriers | exact | 178/0 | 1739.212 | 1508.947 | +0.033% / +0.057% | neutral |
 | E3.2 | TMA store `wait_group.read 0` | exact | 178/0 | 1738.970 | 1508.044 | -0.062% / -0.249% vs E3.1 | neutral/reject |
+| E3.3 | remove duplicate final epilogue barrier | exact | 178/0 | 1737.792 | 1508.663 | -0.039% / -0.123% vs E3.2 | neutral/reject |
