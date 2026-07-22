@@ -993,3 +993,49 @@ Reproduce with:
 All variants passed pattern validation.  Full per-process values, exact
 conditions, logs, and source snapshots are in
 `../results/gemm_partial_reuse_wave_ablation_b200_45481495/`.
+
+### Cluster-order follow-up: preserving B reuse wins
+
+The partial-reuse result suggested prioritizing A, so the two-CTA B multicast
+cluster was preserved while cluster IDs were reordered across N first.  This
+makes different clusters request the same A panels together, but replaces the
+existing cross-cluster B-panel locality.
+
+| local scheduler | CTAs | TFLOP/s |
+|---|---:|---:|
+| existing M-fast 16x16 | 148 | **1783.871 +/- 2.085** |
+| cluster-N-fast 32x8 | 148 | 1756.695 +/- 1.252 |
+| cluster-N-fast 16x16 | 148 | 1754.691 +/- 0.621 |
+| cluster-N-fast 8x32 | 148 | 1690.133 +/- 0.898 |
+| cluster-N-fast 4x64 | 148 | 1615.893 +/- 0.311 |
+| cluster-N-fast explicit 16x9 wave | 144 | 1580.579 +/- 0.705 |
+
+A second sweep used a fixed 16x16 macro and visited only a bounded number of N
+tiles before returning to the next M pair:
+
+| N group | TFLOP/s | versus group 1 |
+|---:|---:|---:|
+| 1 (original M-fast) | **1786.590 +/- 0.364** | baseline |
+| 2 | 1777.966 +/- 1.452 | -0.483% |
+| 4 | 1772.420 +/- 1.278 | -0.793% |
+| 8 | 1757.388 +/- 0.312 | -1.635% |
+| 16 (full N-fast) | 1754.691 +/- 0.621 | -1.786% |
+
+The loss is monotonic with N-group size.  The existing M-fast order is already
+effective at keeping a B panel useful across many clusters; simultaneous A
+requests do not replace that benefit.  Keep N-group 1.  Reaching the A-repeat
+ceiling requires reducing or sharing A transactions without sacrificing the
+current B traversal, rather than reversing the tile order.
+
+Reproduce the two sweeps with:
+
+```bash
+./run_b200_gemm_cluster_nfast_ablation.sh \
+  /workspace/benchmark/5.GEMM /workspace/gemm_cluster_nfast_ablation
+./run_b200_gemm_cluster_ngroup_ablation.sh \
+  /workspace/benchmark/5.GEMM /workspace/gemm_cluster_ngroup_ablation
+```
+
+Full artifacts are in
+`../results/gemm_cluster_nfast_ablation_b200_45481495/` and
+`../results/gemm_cluster_ngroup_ablation_b200_45481495/`.
