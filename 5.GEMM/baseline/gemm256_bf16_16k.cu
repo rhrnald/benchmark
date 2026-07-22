@@ -1,4 +1,5 @@
 #include <cuda.h>
+#include <cuda/ptx>
 #include <cuda_runtime.h>
 
 #include <algorithm>
@@ -355,37 +356,13 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
 #endif
 }
 
-__device__ __forceinline__ void tcgen05_ld_32x32b_x64(uint32_t (&dst)[64],
-                                                      uint32_t taddr) {
+__device__ __forceinline__ void tcgen05_ld_32x32b_x128(uint32_t (&dst)[128],
+                                                       uint32_t taddr) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile(
-      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {"
-      "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, "
-      "%15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, "
-      "%28, %29, %30, %31, %32, %33, %34, %35, %36, %37, %38, %39, %40, "
-      "%41, %42, %43, %44, %45, %46, %47, %48, %49, %50, %51, %52, %53, "
-      "%54, %55, %56, %57, %58, %59, %60, %61, %62, %63}, [%64];"
-      : "=&r"(dst[0]), "=&r"(dst[1]), "=&r"(dst[2]), "=&r"(dst[3]),
-        "=&r"(dst[4]), "=&r"(dst[5]), "=&r"(dst[6]), "=&r"(dst[7]),
-        "=&r"(dst[8]), "=&r"(dst[9]), "=&r"(dst[10]), "=&r"(dst[11]),
-        "=&r"(dst[12]), "=&r"(dst[13]), "=&r"(dst[14]), "=&r"(dst[15]),
-        "=&r"(dst[16]), "=&r"(dst[17]), "=&r"(dst[18]), "=&r"(dst[19]),
-        "=&r"(dst[20]), "=&r"(dst[21]), "=&r"(dst[22]), "=&r"(dst[23]),
-        "=&r"(dst[24]), "=&r"(dst[25]), "=&r"(dst[26]), "=&r"(dst[27]),
-        "=&r"(dst[28]), "=&r"(dst[29]), "=&r"(dst[30]), "=&r"(dst[31]),
-        "=&r"(dst[32]), "=&r"(dst[33]), "=&r"(dst[34]), "=&r"(dst[35]),
-        "=&r"(dst[36]), "=&r"(dst[37]), "=&r"(dst[38]), "=&r"(dst[39]),
-        "=&r"(dst[40]), "=&r"(dst[41]), "=&r"(dst[42]), "=&r"(dst[43]),
-        "=&r"(dst[44]), "=&r"(dst[45]), "=&r"(dst[46]), "=&r"(dst[47]),
-        "=&r"(dst[48]), "=&r"(dst[49]), "=&r"(dst[50]), "=&r"(dst[51]),
-        "=&r"(dst[52]), "=&r"(dst[53]), "=&r"(dst[54]), "=&r"(dst[55]),
-        "=&r"(dst[56]), "=&r"(dst[57]), "=&r"(dst[58]), "=&r"(dst[59]),
-        "=&r"(dst[60]), "=&r"(dst[61]), "=&r"(dst[62]), "=&r"(dst[63])
-      : "r"(taddr)
-      : "memory");
+  cuda::ptx::tcgen05_ld_32x32b(dst, taddr);
 #else
   (void)taddr;
-  for (int i = 0; i < 64; ++i)
+  for (int i = 0; i < 128; ++i)
     dst[i] = 0;
 #endif
 }
@@ -442,7 +419,7 @@ stage_float_c_chunk(uint32_t tmem_base, uint32_t *c_smem, int chunk_m,
   const int selected_warp_base = 0;
   if (warp_id >= selected_warp_base &&
       warp_id < selected_warp_base + kCStoreWarps) {
-    uint32_t r[64];
+    uint32_t r[128];
     const int local_warp = warp_id - selected_warp_base;
     const uint32_t row_base = static_cast<uint32_t>(local_warp * 32);
     const int local_row = local_warp * 32 + lane;
@@ -451,21 +428,18 @@ stage_float_c_chunk(uint32_t tmem_base, uint32_t *c_smem, int chunk_m,
          ++tile_n_part) {
       const int pipe = chunk_n * kCStoreTilesPerChunkN + tile_n_part;
       const int tile = chunk_m * 2 + pipe;
+      const uint32_t col_base =
+          static_cast<uint32_t>(tile_n_part * kMmaN);
+      const uint32_t row_taddr =
+          tmem_base + tile * kTmemTileStride + (row_base << 16) + col_base;
+      tcgen05_ld_32x32b_x128(r, row_taddr);
+      tcgen05_wait_ld();
+      const int col_offset = tile_n_part * kMmaN;
 #pragma unroll
-      for (int load = 0; load < kMmaN / 64; ++load) {
-        const uint32_t col_base =
-            static_cast<uint32_t>(tile_n_part * kMmaN + load * 64);
-        const uint32_t row_taddr =
-            tmem_base + tile * kTmemTileStride + (row_base << 16) + col_base;
-        tcgen05_ld_32x32b_x64(r, row_taddr);
-        tcgen05_wait_ld();
-        const int col_offset = tile_n_part * kMmaN + load * 64;
-#pragma unroll
-        for (int i = 0; i < 64; i += 4) {
-          store_u32x4_smem(
-              c_smem, cstore_sw128_float_word_offset(local_row, col_offset + i),
-              r[i + 0], r[i + 1], r[i + 2], r[i + 3]);
-        }
+      for (int i = 0; i < 128; i += 4) {
+        store_u32x4_smem(
+            c_smem, cstore_sw128_float_word_offset(local_row, col_offset + i),
+            r[i + 0], r[i + 1], r[i + 2], r[i + 3]);
       }
     }
   }
