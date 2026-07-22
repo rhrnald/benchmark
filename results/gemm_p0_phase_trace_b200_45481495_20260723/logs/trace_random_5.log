@@ -1,0 +1,1 @@
+trace_csv=logs/trace_random_5.csv size=16384 input=random ctas=148 block=0 sm=142 tile_iter=8 linear_tile=1210 tile=(26,11) slots=26

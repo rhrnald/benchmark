@@ -149,5 +149,6 @@ warp specialization의 비용을 분리하기 위한 것이다.
 | E3.3 | remove duplicate final epilogue barrier | exact | 178/0 | 1737.792 | 1508.663 | -0.039% / -0.123% vs E3.2 | neutral/reject |
 | P0a | compile-time C-store-off aggressive ceiling | N/A (no C) | 54/0 | 1789.649 | 1549.232 | +2.891% / +2.453% | diagnostic; strict same-binary control required |
 | P0b | same-binary C-store-off strict ceiling | on exact; off no C | 178/0 | 1800.517 | 1560.241 | +3.813% / +3.256% vs dual-on | diagnostic upper bound |
+| P0c | CTA phase trace at tile iteration 8 | exact before trace | 184/0 diagnostic | N/A | N/A | C epilogue 3.598% / 3.624% of tile | prioritize E4; defer E5/E6 |
 | E2a | direct TMEM scalar addressing | exact | 174/0 | 1751.903 | 1518.912 | +0.614% / +0.393% (6 pairs) | promising; retain for E2b |
 | E2b | one shared-address conversion per K stage | exact | 174/0 | 1750.583 | 1516.135 | -0.020% / -0.162% vs E2a | reject |

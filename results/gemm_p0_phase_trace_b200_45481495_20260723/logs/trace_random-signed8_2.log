@@ -1,0 +1,1 @@
+trace_csv=logs/trace_random-signed8_2.csv size=16384 input=random-signed8 ctas=148 block=0 sm=142 tile_iter=8 linear_tile=1233 tile=(17,13) slots=26

@@ -1,0 +1,16 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__4f043a7f_19_gemm256_bf16_16k_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__4f043a7f_19_gemm256_bf16_16k_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.656 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__4f043a7f_19_gemm256_bf16_16k_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__4f043a7f_19_gemm256_bf16_16k_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.862 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__4f043a7f_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_PjiiiPNS_11TraceOutputE' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__4f043a7f_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_PjiiiPNS_11TraceOutputE
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 184 registers, used 1 barriers, 624 bytes smem
+ptxas info    : Compile time = 91.374 ms
