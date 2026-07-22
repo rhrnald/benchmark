@@ -667,6 +667,30 @@ cluster/scheduler overhead from the traffic-saving benefit itself.
 Raw CSVs, validation logs, source snapshots, hashes, and the full analysis are
 in `../results/gemm256_tma_multicast_b_b200_45481495/`.
 
+#### Planned 16K multicast scheduler/swizzle sweep
+
+The first multicast result above retained the pre-cluster 16x16 macroblock
+and dynamic atomic scheduler. To test whether that remains optimal for a
+two-CTA cluster, the 16K-only follow-up compares the full power-of-two
+macroblock cross product M/N in `{8,16,32}`. Every shape is measured with both
+the dynamic cluster-leader atomic scheduler and the fixed grid-stride static
+scheduler. All other kernel, input, output, cluster, and timing conditions are
+held fixed.
+
+This is CUTLASS-inspired but not identical to CUTLASS. Our macroblock is a
+custom two-dimensional ordering layer. CUTLASS's persistent scheduler uses a
+cluster-aware raster/swizzle representation and newer Blackwell kernels may
+use CLC rather than this global-atomic or simple grid-stride implementation.
+
+```bash
+./run_b200_gemm256_multicast_16k_scheduler_sweep.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm256_multicast_16k_scheduler_sweep
+```
+
+Each of the 18 configurations is validated, then measured in three rotated
+one-process runs with warmup 1 and five timed launches.
+
 ### Persistent TMEM epilogue overlap, CTA `128x256` (2026-07-22)
 
 This experiment returns to the repeated-address `128x256` shape before
