@@ -207,6 +207,26 @@ __device__ __forceinline__ void mbarrier_wait(uint64_t *barrier,
 #endif
 }
 
+__device__ __forceinline__ void mbarrier_wait_suspend(uint64_t *barrier,
+                                                      uint32_t phase) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t addr = smem_ptr_u32(barrier);
+  // CUTLASS uses this large suspend hint for waits that may remain blocked.
+  constexpr uint32_t kSuspendTicks = 0x989680u;
+  asm volatile("{ .reg .pred p; "
+               "L_wait_%=: "
+               "mbarrier.try_wait.parity.shared::cta.b64 p, [%0], %1, %2; "
+               "@p bra.uni L_done_%=; "
+               "bra.uni L_wait_%=; "
+               "L_done_%=: }" ::"r"(addr),
+               "r"(phase), "r"(kSuspendTicks)
+               : "memory");
+#else
+  (void)barrier;
+  (void)phase;
+#endif
+}
+
 __device__ __forceinline__ void mbarrier_expect_tx(uint64_t *barrier,
                                                    uint32_t bytes) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
@@ -679,7 +699,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
 #pragma unroll
           for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
+            mbarrier_wait_suspend(&mma_done[mblock][stage], reuse_phase);
           }
         }
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
@@ -699,7 +719,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
 #pragma unroll
           for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
+            mbarrier_wait_suspend(&mma_done[mblock][stage], reuse_phase);
           }
         }
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
