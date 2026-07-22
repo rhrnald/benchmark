@@ -92,6 +92,111 @@ static constexpr int kDynamicSmemPayloadBytes =
 static constexpr int kDynamicSmemBytes = kDynamicSmemPayloadBytes + 1024;
 static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
 static constexpr int kTmemTileStride = 128;
+static constexpr int kTraceTargetTileIter = 8;
+
+// The trace intentionally samples exactly one representative output tile:
+// block 0's ninth valid persistent task.  Each warp writes only its own slots,
+// except for the scheduler atomic/decode slots written by thread 0.
+enum TraceSlot : int {
+  kTraceSchedulerAtomic = 0,
+  kTraceSchedulerBarrierWarp0,
+  kTraceSchedulerBarrierWarp1,
+  kTraceSchedulerBarrierWarp2,
+  kTraceSchedulerBarrierWarp3,
+  kTraceDecode,
+  kTraceProducerWarp0,
+  kTraceProducerWarp1,
+  kTraceConsumerWarp2,
+  kTraceConsumerWarp3,
+  kTraceConsumerWaitAWarp2,
+  kTraceConsumerWaitAWarp3,
+  kTraceConsumerWaitB0Warp2,
+  kTraceConsumerWaitB0Warp3,
+  kTraceConsumerMmaB0Warp2,
+  kTraceConsumerMmaB0Warp3,
+  kTraceConsumerWaitB1Warp2,
+  kTraceConsumerWaitB1Warp3,
+  kTraceConsumerMmaB1Warp2,
+  kTraceConsumerMmaB1Warp3,
+  kTraceConsumerCommitWarp2,
+  kTraceConsumerCommitWarp3,
+  kTraceConsumerFinalDrainWarp2,
+  kTraceConsumerFinalDrainWarp3,
+  kTraceMainloopJoinWarp0,
+  kTraceMainloopJoinWarp1,
+  kTraceMainloopJoinWarp2,
+  kTraceMainloopJoinWarp3,
+  kTraceEpilogueChunk0Warp0,
+  kTraceEpilogueChunk0Warp1,
+  kTraceEpilogueChunk0Warp2,
+  kTraceEpilogueChunk0Warp3,
+  kTraceEpilogueChunk1Warp0,
+  kTraceEpilogueChunk1Warp1,
+  kTraceEpilogueChunk1Warp2,
+  kTraceEpilogueChunk1Warp3,
+  kTraceEpilogueChunk2Warp0,
+  kTraceEpilogueChunk2Warp1,
+  kTraceEpilogueChunk2Warp2,
+  kTraceEpilogueChunk2Warp3,
+  kTraceEpilogueChunk3Warp0,
+  kTraceEpilogueChunk3Warp1,
+  kTraceEpilogueChunk3Warp2,
+  kTraceEpilogueChunk3Warp3,
+  kTraceEpilogueGroup0Warp0,
+  kTraceEpilogueGroup0Warp1,
+  kTraceEpilogueGroup0Warp2,
+  kTraceEpilogueGroup0Warp3,
+  kTraceEpilogueGroup1Warp0,
+  kTraceEpilogueGroup1Warp1,
+  kTraceEpilogueGroup1Warp2,
+  kTraceEpilogueGroup1Warp3,
+  kTraceEpilogueWholeWarp0,
+  kTraceEpilogueWholeWarp1,
+  kTraceEpilogueWholeWarp2,
+  kTraceEpilogueWholeWarp3,
+  kTraceFinalBarrierWarp0,
+  kTraceFinalBarrierWarp1,
+  kTraceFinalBarrierWarp2,
+  kTraceFinalBarrierWarp3,
+  kTraceClockOverheadWarp0,
+  kTraceClockOverheadWarp1,
+  kTraceClockOverheadWarp2,
+  kTraceClockOverheadWarp3,
+  kTraceSlotCount,
+};
+
+static_assert(kTraceSlotCount == 64);
+
+// For contiguous events first/end delimit the interval and total_cycles is
+// end-first.  For repeated events (the consumer inner loop), first/end are the
+// whole envelope while total_cycles is the sum of the individually timed
+// samples.  sample_count is wait calls for wait events and issued MMA/commit
+// instructions for issue events.
+struct alignas(16) TraceRecord {
+  unsigned long long first = 0;
+  unsigned long long end = 0;
+  unsigned long long total_cycles = 0;
+  unsigned long long sample_count = 0;
+};
+
+struct alignas(16) TraceHeader {
+  uint32_t magic = 0;
+  uint32_t sm_id = 0;
+  uint32_t block_idx = 0;
+  uint32_t slot_count = 0;
+  int tile_iter = -1;
+  int linear_tile = -1;
+  int tile_m = -1;
+  int tile_n = -1;
+  unsigned long long base_clock = 0;
+};
+
+struct alignas(16) TraceOutput {
+  TraceHeader header;
+  TraceRecord slots[kTraceSlotCount];
+};
+
+static constexpr uint32_t kTraceMagic = 0x44575452u; // "DWTR".
 
 static_assert(kCtaM == 128 || kCtaM == 256);
 static_assert(kCtaM % kMmaM == 0);
@@ -125,7 +230,41 @@ struct Args {
   bool validate = false;
   int validate_size = 512;
   const char *validate_pattern = "pattern";
+  const char *trace_csv = nullptr;
 };
+
+__device__ __forceinline__ unsigned long long ordered_clock64() {
+#if defined(__CUDA_ARCH__)
+  unsigned long long value;
+  asm volatile("mov.u64 %0, %%clock64;" : "=l"(value) :: "memory");
+  return value;
+#else
+  return 0;
+#endif
+}
+
+__device__ __forceinline__ uint32_t current_sm_id() {
+#if defined(__CUDA_ARCH__)
+  uint32_t value;
+  asm volatile("mov.u32 %0, %%smid;" : "=r"(value) :: "memory");
+  return value;
+#else
+  return 0;
+#endif
+}
+
+__device__ __forceinline__ void trace_store_interval(
+    TraceRecord *records, int slot, unsigned long long start,
+    unsigned long long end) {
+  records[slot] = {start, end, end - start, 1};
+}
+
+__device__ __forceinline__ void trace_store_aggregate(
+    TraceRecord *records, int slot, unsigned long long first,
+    unsigned long long end, unsigned long long total_cycles,
+    unsigned long long sample_count) {
+  records[slot] = {first, end, total_cycles, sample_count};
+}
 
 __device__ __forceinline__ uint32_t smem_ptr_u32(const void *ptr) {
   uint32_t addr;
@@ -512,8 +651,12 @@ issue_float_c_chunk_tma(uint32_t tmem_base, const CUtensorMap *c_map,
 __device__ __forceinline__ void
 store_256x256_float_tile_tma(uint32_t tmem_base,
                              const CUtensorMap *c_map, uint32_t *c_smem,
-                             int row_offset, int col_offset) {
+                             int row_offset, int col_offset,
+                             TraceRecord *trace_records, bool trace_tile) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const int lane = threadIdx.x & 31;
+  const int warp_id = threadIdx.x >> 5;
+  const bool trace_lane = trace_tile && lane == 0;
 #pragma unroll
   for (int group = 0; group < kCStoreChunkCount; group += kCStoreBuffers) {
 #pragma unroll
@@ -524,14 +667,33 @@ store_256x256_float_tile_tma(uint32_t tmem_base,
       const int chunk_n = chunk - chunk_m * kCStoreChunksN;
       const int tile_row = row_offset + chunk_m * kCStoreChunkM;
       const int tile_col = col_offset + chunk_n * kCStoreChunkN;
+      const unsigned long long chunk_start =
+          trace_lane ? ordered_clock64() : 0;
       issue_float_c_chunk_tma(tmem_base, c_map, tile_smem, chunk_m, chunk_n,
                               tile_row, tile_col);
+      if (trace_lane) {
+        const unsigned long long chunk_end = ordered_clock64();
+        trace_store_interval(
+            trace_records,
+            kTraceEpilogueChunk0Warp0 + chunk * kWarps + warp_id,
+            chunk_start, chunk_end);
+      }
     }
+    const unsigned long long group_start =
+        trace_lane ? ordered_clock64() : 0;
     if (threadIdx.x == 0) {
       tma_store_commit_group();
       tma_store_wait_group_0();
     }
     __syncthreads();
+    if (trace_lane) {
+      const unsigned long long group_end = ordered_clock64();
+      trace_store_interval(
+          trace_records,
+          kTraceEpilogueGroup0Warp0 +
+              (group / kCStoreBuffers) * kWarps + warp_id,
+          group_start, group_end);
+    }
   }
 #else
   (void)tmem_base;
@@ -539,6 +701,8 @@ store_256x256_float_tile_tma(uint32_t tmem_base,
   (void)c_smem;
   (void)row_offset;
   (void)col_offset;
+  (void)trace_records;
+  (void)trace_tile;
 #endif
 }
 
@@ -566,7 +730,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     const __grid_constant__ CUtensorMap a_map,
     const __grid_constant__ CUtensorMap b_map,
     const __grid_constant__ CUtensorMap c_map, uint32_t *__restrict__ sink,
-    int ktiles, int mtile_count, int ntile_count) {
+    int ktiles, int mtile_count, int ntile_count,
+    TraceOutput *__restrict__ trace) {
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)a_map;
   (void)b_map;
@@ -575,6 +740,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   (void)ktiles;
   (void)mtile_count;
   (void)ntile_count;
+  (void)trace;
 #else
   extern __shared__ uint32_t smem_raw[];
   const uintptr_t smem_addr = (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) &
@@ -589,6 +755,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
   __shared__ int persistent_task_shared;
+  __shared__ TraceHeader trace_header_shared;
+  __shared__ TraceRecord trace_scratch[kTraceSlotCount];
 
   if (threadIdx.x == 0) {
 #pragma unroll
@@ -640,11 +808,35 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
   int tile_iter = 0;
   while (true) {
+    const bool trace_tile = trace != nullptr && blockIdx.x == 0 &&
+                            tile_iter == kTraceTargetTileIter;
     if (threadIdx.x == 0) {
+      unsigned long long atomic_start = 0;
+      if (trace_tile) {
+        atomic_start = ordered_clock64();
+        trace_header_shared.base_clock = atomic_start;
+      }
       persistent_task_shared =
           static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+      if (trace_tile) {
+        const unsigned long long atomic_end = ordered_clock64();
+        trace_store_interval(trace_scratch, kTraceSchedulerAtomic,
+                             atomic_start, atomic_end);
+      }
     }
+    unsigned long long scheduler_barrier_start = 0;
+    if (trace_tile && lane0)
+      scheduler_barrier_start = ordered_clock64();
     __syncthreads();
+    if (trace_tile && lane0) {
+      const unsigned long long scheduler_barrier_end = ordered_clock64();
+      trace_store_interval(trace_scratch,
+                           kTraceSchedulerBarrierWarp0 + warp_id,
+                           scheduler_barrier_start, scheduler_barrier_end);
+    }
+    unsigned long long decode_start = 0;
+    if (trace_tile && threadIdx.x == 0)
+      decode_start = ordered_clock64();
     const int linear_tile = persistent_task_shared;
     if (linear_tile >= persistent_task_count)
       break;
@@ -663,10 +855,28 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       __syncthreads();
       continue;
     }
+    if (trace_tile && threadIdx.x == 0) {
+      // Keep coordinate arithmetic inside the measured decode interval.
+      asm volatile("" : : "r"(linear_tile), "r"(tile_m), "r"(tile_n)
+                   : "memory");
+      const unsigned long long decode_end = ordered_clock64();
+      trace_store_interval(trace_scratch, kTraceDecode, decode_start,
+                           decode_end);
+      trace_header_shared.magic = kTraceMagic;
+      trace_header_shared.sm_id = current_sm_id();
+      trace_header_shared.block_idx = blockIdx.x;
+      trace_header_shared.slot_count = kTraceSlotCount;
+      trace_header_shared.tile_iter = tile_iter;
+      trace_header_shared.linear_tile = linear_tile;
+      trace_header_shared.tile_m = tile_m;
+      trace_header_shared.tile_n = tile_n;
+    }
     const int ntile = ntile_count;
     const int stage_epoch_base = tile_iter * ktiles;
 
     if (warp_id == 0 && lane0) {
+      const unsigned long long producer_start =
+          trace_tile ? ordered_clock64() : 0;
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
@@ -686,9 +896,16 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
                                   kt, 1);
       }
+      if (trace_tile) {
+        const unsigned long long producer_end = ordered_clock64();
+        trace_store_interval(trace_scratch, kTraceProducerWarp0,
+                             producer_start, producer_end);
+      }
     }
 
     if (warp_id == 1 && lane0) {
+      const unsigned long long producer_start =
+          trace_tile ? ordered_clock64() : 0;
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
@@ -705,10 +922,29 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                                   kt, 0);
       }
+      if (trace_tile) {
+        const unsigned long long producer_end = ordered_clock64();
+        trace_store_interval(trace_scratch, kTraceProducerWarp1,
+                             producer_start, producer_end);
+      }
     }
 
     if ((warp_id == 2 || warp_id == 3) && lane0) {
       const int mblock = warp_id - 2;
+      const unsigned long long consumer_start =
+          trace_tile ? ordered_clock64() : 0;
+      unsigned long long wait_a_first = 0, wait_a_end = 0;
+      unsigned long long wait_a_total = 0, wait_a_count = 0;
+      unsigned long long wait_b0_first = 0, wait_b0_end = 0;
+      unsigned long long wait_b0_total = 0, wait_b0_count = 0;
+      unsigned long long mma_b0_first = 0, mma_b0_end = 0;
+      unsigned long long mma_b0_total = 0, mma_b0_count = 0;
+      unsigned long long wait_b1_first = 0, wait_b1_end = 0;
+      unsigned long long wait_b1_total = 0, wait_b1_count = 0;
+      unsigned long long mma_b1_first = 0, mma_b1_end = 0;
+      unsigned long long mma_b1_total = 0, mma_b1_count = 0;
+      unsigned long long commit_first = 0, commit_end = 0;
+      unsigned long long commit_total = 0, commit_count = 0;
 #pragma unroll 1
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
@@ -719,8 +955,28 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords;
 
+        unsigned long long segment_start =
+            trace_tile ? ordered_clock64() : 0;
         mbarrier_wait(&a_ready[stage], tma_phase);
+        if (trace_tile) {
+          const unsigned long long segment_end = ordered_clock64();
+          if (wait_a_count == 0)
+            wait_a_first = segment_start;
+          wait_a_end = segment_end;
+          wait_a_total += segment_end - segment_start;
+          ++wait_a_count;
+        }
+        segment_start = trace_tile ? ordered_clock64() : 0;
         mbarrier_wait(&b_ready[0][stage], tma_phase);
+        if (trace_tile) {
+          const unsigned long long segment_end = ordered_clock64();
+          if (wait_b0_count == 0)
+            wait_b0_first = segment_start;
+          wait_b0_end = segment_end;
+          wait_b0_total += segment_end - segment_start;
+          ++wait_b0_count;
+        }
+        segment_start = trace_tile ? ordered_clock64() : 0;
 #pragma unroll
         for (int kk = 0; kk < kBK16PerProducerPart; ++kk) {
           const uint32_t b0 = smem_ptr_u32(b_smem);
@@ -732,7 +988,25 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               tmem_base + mblock * 2 * kTmemTileStride;
           tcgen05_mma_bf16_ss(c_taddr, a_desc, b0_desc, idesc, input_d);
         }
+        if (trace_tile) {
+          const unsigned long long segment_end = ordered_clock64();
+          if (mma_b0_count == 0)
+            mma_b0_first = segment_start;
+          mma_b0_end = segment_end;
+          mma_b0_total += segment_end - segment_start;
+          mma_b0_count += kBK16PerProducerPart;
+        }
+        segment_start = trace_tile ? ordered_clock64() : 0;
         mbarrier_wait(&b_ready[1][stage], tma_phase);
+        if (trace_tile) {
+          const unsigned long long segment_end = ordered_clock64();
+          if (wait_b1_count == 0)
+            wait_b1_first = segment_start;
+          wait_b1_end = segment_end;
+          wait_b1_total += segment_end - segment_start;
+          ++wait_b1_count;
+        }
+        segment_start = trace_tile ? ordered_clock64() : 0;
 #pragma unroll
         for (int kk = kBK16PerProducerPart;
              kk < kStageK / kMmaK; ++kk) {
@@ -745,15 +1019,76 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               tmem_base + mblock * 2 * kTmemTileStride;
           tcgen05_mma_bf16_ss(c_taddr, a_desc, b0_desc, idesc, input_d);
         }
+        if (trace_tile) {
+          const unsigned long long segment_end = ordered_clock64();
+          if (mma_b1_count == 0)
+            mma_b1_first = segment_start;
+          mma_b1_end = segment_end;
+          mma_b1_total += segment_end - segment_start;
+          mma_b1_count += kStageK / kMmaK - kBK16PerProducerPart;
+        }
+        segment_start = trace_tile ? ordered_clock64() : 0;
         tcgen05_commit(&mma_done[mblock][stage]);
+        if (trace_tile) {
+          const unsigned long long segment_end = ordered_clock64();
+          if (commit_count == 0)
+            commit_first = segment_start;
+          commit_end = segment_end;
+          commit_total += segment_end - segment_start;
+          ++commit_count;
+        }
       }
       const int last_stage_epoch = stage_epoch_base + ktiles - 1;
       const int last_stage = last_stage_epoch % kStages;
       const uint32_t last_phase =
           static_cast<uint32_t>((last_stage_epoch / kStages) & 1);
+      const unsigned long long final_drain_start =
+          trace_tile ? ordered_clock64() : 0;
       mbarrier_wait(&mma_done[mblock][last_stage], last_phase);
+      if (trace_tile) {
+        const unsigned long long final_drain_end = ordered_clock64();
+        trace_store_interval(trace_scratch,
+                             kTraceConsumerFinalDrainWarp2 + mblock,
+                             final_drain_start, final_drain_end);
+        trace_store_aggregate(trace_scratch,
+                              kTraceConsumerWaitAWarp2 + mblock,
+                              wait_a_first, wait_a_end, wait_a_total,
+                              wait_a_count);
+        trace_store_aggregate(trace_scratch,
+                              kTraceConsumerWaitB0Warp2 + mblock,
+                              wait_b0_first, wait_b0_end, wait_b0_total,
+                              wait_b0_count);
+        trace_store_aggregate(trace_scratch,
+                              kTraceConsumerMmaB0Warp2 + mblock,
+                              mma_b0_first, mma_b0_end, mma_b0_total,
+                              mma_b0_count);
+        trace_store_aggregate(trace_scratch,
+                              kTraceConsumerWaitB1Warp2 + mblock,
+                              wait_b1_first, wait_b1_end, wait_b1_total,
+                              wait_b1_count);
+        trace_store_aggregate(trace_scratch,
+                              kTraceConsumerMmaB1Warp2 + mblock,
+                              mma_b1_first, mma_b1_end, mma_b1_total,
+                              mma_b1_count);
+        trace_store_aggregate(trace_scratch,
+                              kTraceConsumerCommitWarp2 + mblock,
+                              commit_first, commit_end, commit_total,
+                              commit_count);
+        trace_store_interval(trace_scratch,
+                             kTraceConsumerWarp2 + mblock, consumer_start,
+                             final_drain_end);
+      }
     }
+    unsigned long long mainloop_join_start = 0;
+    if (trace_tile && lane0)
+      mainloop_join_start = ordered_clock64();
     __syncthreads();
+    if (trace_tile && lane0) {
+      const unsigned long long mainloop_join_end = ordered_clock64();
+      trace_store_interval(trace_scratch,
+                           kTraceMainloopJoinWarp0 + warp_id,
+                           mainloop_join_start, mainloop_join_end);
+    }
 
     const uint32_t acc = static_cast<uint32_t>(threadIdx.x + 0x9e3779b9u);
     if (lane0)
@@ -762,10 +1097,17 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
+    const unsigned long long epilogue_start =
+        trace_tile && lane0 ? ordered_clock64() : 0;
     store_256x256_float_tile_tma(tmem_base, &c_map, c_store_smem,
                                  global_row_base,
-                                 global_col_base);
+                                 global_col_base, trace_scratch, trace_tile);
     __syncthreads();
+    if (trace_tile && lane0) {
+      const unsigned long long epilogue_end = ordered_clock64();
+      trace_store_interval(trace_scratch, kTraceEpilogueWholeWarp0 + warp_id,
+                           epilogue_start, epilogue_end);
+    }
 
     if (threadIdx.x == 0) {
       uint32_t tile_sink = tmem_base ^ static_cast<uint32_t>(ktiles);
@@ -774,7 +1116,30 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         tile_sink ^= warp_sinks[w];
       sink[tile_m * ntile + tile_n] = tile_sink;
     }
+    unsigned long long final_barrier_start = 0;
+    if (trace_tile && lane0)
+      final_barrier_start = ordered_clock64();
     __syncthreads();
+    if (trace_tile && lane0) {
+      const unsigned long long final_barrier_end = ordered_clock64();
+      trace_store_interval(trace_scratch,
+                           kTraceFinalBarrierWarp0 + warp_id,
+                           final_barrier_start, final_barrier_end);
+      const unsigned long long overhead_start = ordered_clock64();
+      const unsigned long long overhead_end = ordered_clock64();
+      trace_store_interval(trace_scratch,
+                           kTraceClockOverheadWarp0 + warp_id,
+                           overhead_start, overhead_end);
+    }
+
+    if (trace_tile) {
+      // Export only after all timed work, preserving the measured intervals.
+      __syncthreads();
+      if (threadIdx.x < kTraceSlotCount)
+        trace->slots[threadIdx.x] = trace_scratch[threadIdx.x];
+      if (threadIdx.x == 0)
+        trace->header = trace_header_shared;
+    }
 
     ++tile_iter;
   } // persistent output-tile loop
@@ -866,6 +1231,7 @@ const char *input_init_mode_name(int mode) {
 void usage(const char *argv0) {
   std::printf("Usage: %s [--device N] [--warmup W] [--iters I] [--csv PATH] "
               "[--input-init memset|formula|random|random-signed8] "
+              "[--trace-csv PATH] "
               "[--validate] [--validate-size N] "
               "[--validate-pattern pattern|ones]\n",
               argv0);
@@ -890,6 +1256,8 @@ Args parse_args(int argc, char **argv) {
       args.iters = std::atoi(need_arg("--iters"));
     } else if (std::strcmp(argv[i], "--csv") == 0) {
       args.csv = need_arg("--csv");
+    } else if (std::strcmp(argv[i], "--trace-csv") == 0) {
+      args.trace_csv = need_arg("--trace-csv");
     } else if (std::strcmp(argv[i], "--input-init") == 0) {
       const char *mode = need_arg("--input-init");
       if (std::strcmp(mode, "memset") == 0) {
@@ -1047,9 +1415,10 @@ void set_gemm_kernel_attribute() {
 
 void launch_gemm_kernel(dim3 grid, const CUtensorMap &a_map,
                         const CUtensorMap &b_map, const CUtensorMap &c_map,
-                        uint32_t *d_sink, int ktiles, int mtile, int ntile) {
+                        uint32_t *d_sink, int ktiles, int mtile, int ntile,
+                        TraceOutput *trace = nullptr) {
   gemm256_bf16_16k_kernel<<<grid, kThreads, kDynamicSmemBytes>>>(
-      a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
+      a_map, b_map, c_map, d_sink, ktiles, mtile, ntile, trace);
 }
 struct CaseResult {
   int size = 0;
@@ -1160,6 +1529,214 @@ CaseResult run_case(int warmup, int iters, int input_init_mode) {
   cuda_check(cudaFree(d_sink));
   cuda_check(cudaFree(d_c));
   return result;
+}
+
+const char *trace_slot_name(int slot) {
+  if (slot == kTraceSchedulerAtomic)
+    return "scheduler_atomic";
+  if (slot >= kTraceSchedulerBarrierWarp0 &&
+      slot <= kTraceSchedulerBarrierWarp3)
+    return "scheduler_barrier";
+  if (slot == kTraceDecode)
+    return "scheduler_decode";
+  if (slot >= kTraceProducerWarp0 && slot <= kTraceProducerWarp1)
+    return "producer_reuse_wait_and_tma_issue_loop";
+  if (slot >= kTraceConsumerWarp2 && slot <= kTraceConsumerWarp3)
+    return "consumer_mainloop_and_final_drain";
+  if (slot >= kTraceConsumerWaitAWarp2 &&
+      slot <= kTraceConsumerWaitAWarp3)
+    return "consumer_wait_a";
+  if (slot >= kTraceConsumerWaitB0Warp2 &&
+      slot <= kTraceConsumerWaitB0Warp3)
+    return "consumer_wait_b0";
+  if (slot >= kTraceConsumerMmaB0Warp2 &&
+      slot <= kTraceConsumerMmaB0Warp3)
+    return "consumer_mma_b0_issue";
+  if (slot >= kTraceConsumerWaitB1Warp2 &&
+      slot <= kTraceConsumerWaitB1Warp3)
+    return "consumer_wait_b1";
+  if (slot >= kTraceConsumerMmaB1Warp2 &&
+      slot <= kTraceConsumerMmaB1Warp3)
+    return "consumer_mma_b1_issue";
+  if (slot >= kTraceConsumerCommitWarp2 &&
+      slot <= kTraceConsumerCommitWarp3)
+    return "consumer_mma_commit";
+  if (slot >= kTraceConsumerFinalDrainWarp2 &&
+      slot <= kTraceConsumerFinalDrainWarp3)
+    return "consumer_final_mma_drain";
+  if (slot >= kTraceMainloopJoinWarp0 &&
+      slot <= kTraceMainloopJoinWarp3)
+    return "mainloop_join_barrier";
+  if (slot >= kTraceEpilogueChunk0Warp0 &&
+      slot <= kTraceEpilogueChunk0Warp3)
+    return "epilogue_chunk_0_stage_and_tma_issue";
+  if (slot >= kTraceEpilogueChunk1Warp0 &&
+      slot <= kTraceEpilogueChunk1Warp3)
+    return "epilogue_chunk_1_stage_and_tma_issue";
+  if (slot >= kTraceEpilogueChunk2Warp0 &&
+      slot <= kTraceEpilogueChunk2Warp3)
+    return "epilogue_chunk_2_stage_and_tma_issue";
+  if (slot >= kTraceEpilogueChunk3Warp0 &&
+      slot <= kTraceEpilogueChunk3Warp3)
+    return "epilogue_chunk_3_stage_and_tma_issue";
+  if (slot >= kTraceEpilogueGroup0Warp0 &&
+      slot <= kTraceEpilogueGroup0Warp3)
+    return "epilogue_group_0_commit_wait_and_barrier";
+  if (slot >= kTraceEpilogueGroup1Warp0 &&
+      slot <= kTraceEpilogueGroup1Warp3)
+    return "epilogue_group_1_commit_wait_and_barrier";
+  if (slot >= kTraceEpilogueWholeWarp0 &&
+      slot <= kTraceEpilogueWholeWarp3)
+    return "epilogue_complete";
+  if (slot >= kTraceFinalBarrierWarp0 &&
+      slot <= kTraceFinalBarrierWarp3)
+    return "final_tile_barrier";
+  return "clock_overhead";
+}
+
+int trace_slot_warp(int slot) {
+  if (slot == kTraceSchedulerAtomic || slot == kTraceDecode)
+    return 0;
+  if (slot >= kTraceSchedulerBarrierWarp0 &&
+      slot <= kTraceSchedulerBarrierWarp3)
+    return slot - kTraceSchedulerBarrierWarp0;
+  if (slot >= kTraceProducerWarp0 && slot <= kTraceProducerWarp1)
+    return slot - kTraceProducerWarp0;
+  if (slot >= kTraceConsumerWarp2 &&
+      slot <= kTraceConsumerFinalDrainWarp3)
+    return 2 + ((slot - kTraceConsumerWarp2) & 1);
+  if (slot >= kTraceMainloopJoinWarp0 && slot < kTraceSlotCount)
+    return (slot - kTraceMainloopJoinWarp0) & 3;
+  return -1;
+}
+
+bool trace_slot_is_aggregate(int slot) {
+  return slot >= kTraceConsumerWaitAWarp2 &&
+         slot <= kTraceConsumerCommitWarp3;
+}
+
+void run_trace_case(const char *trace_csv, int input_init_mode) {
+  constexpr int size = kBenchmarkSize;
+  const int m = size;
+  const int n = size;
+  const int k = size;
+  const int mtile = m / kCtaM;
+  const int ntile = n / kCtaN;
+  const int ktiles = k / kStageK;
+  const int ctas = mtile * ntile;
+  const size_t a_words = static_cast<size_t>(m) * k / 2;
+  const size_t b_words = static_cast<size_t>(k) * n / 2;
+
+  uint32_t *d_a = nullptr;
+  uint32_t *d_b = nullptr;
+  uint32_t *d_sink = nullptr;
+  float *d_c = nullptr;
+  TraceOutput *d_trace = nullptr;
+  cuda_check(cudaMalloc(&d_a, a_words * sizeof(uint32_t)));
+  cuda_check(cudaMalloc(&d_b, b_words * sizeof(uint32_t)));
+  cuda_check(
+      cudaMalloc(&d_sink, (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
+  cuda_check(cudaMalloc(&d_c, static_cast<size_t>(m) * n * sizeof(float)));
+  cuda_check(cudaMalloc(&d_trace, sizeof(TraceOutput)));
+  cuda_check(cudaMemset(d_c, 0, static_cast<size_t>(m) * n * sizeof(float)));
+  initialize_bf16_inputs(d_a, a_words, d_b, b_words, input_init_mode);
+  cuda_check(cudaMemset(d_sink, 0,
+                        (static_cast<size_t>(ctas) + 1) * sizeof(uint32_t)));
+  cuda_check(cudaMemset(d_trace, 0, sizeof(TraceOutput)));
+  cuda_check(cudaDeviceSynchronize());
+
+  CUtensorMap a_map{}, b_map{}, c_map{};
+  encode_a_row_major_sw128_tma_map(&a_map, d_a, m, k);
+  encode_b_row_major_sw128_k16_tma_map(&b_map, d_b, k, n);
+  encode_c_row_major_float_tma_map(&c_map, d_c, m, n);
+  set_gemm_kernel_attribute();
+
+  const dim3 grid(std::min(kPersistentCtas, ctas), 1, 1);
+  auto launch = [&](TraceOutput *trace) {
+    cuda_check(cudaMemsetAsync(d_sink + ctas, 0, sizeof(uint32_t)));
+    launch_gemm_kernel(grid, a_map, b_map, c_map, d_sink, ktiles, mtile,
+                       ntile, trace);
+    cuda_check(cudaGetLastError());
+  };
+
+  // Preserve the established policy: one full untraced warmup, then exactly
+  // one traced launch.  The trace branch does not alter the GEMM operations.
+  launch(nullptr);
+  cuda_check(cudaDeviceSynchronize());
+  cuda_check(cudaMemset(d_trace, 0, sizeof(TraceOutput)));
+  launch(d_trace);
+  cuda_check(cudaDeviceSynchronize());
+
+  TraceOutput result{};
+  cuda_check(cudaMemcpy(&result, d_trace, sizeof(result),
+                        cudaMemcpyDeviceToHost));
+  if (result.header.magic != kTraceMagic ||
+      result.header.slot_count != kTraceSlotCount) {
+    std::fprintf(stderr,
+                 "trace target was not recorded: magic=%08x slots=%u\n",
+                 result.header.magic, result.header.slot_count);
+    std::exit(EXIT_FAILURE);
+  }
+
+  unsigned long long first_clock = ~0ull;
+  for (int slot = 0; slot < kTraceSlotCount; ++slot) {
+    const TraceRecord &record = result.slots[slot];
+    if (record.end > record.first)
+      first_clock = std::min(first_clock, record.first);
+  }
+  if (first_clock == ~0ull) {
+    std::fprintf(stderr, "trace contains no valid records\n");
+    std::exit(EXIT_FAILURE);
+  }
+
+  FILE *csv = std::fopen(trace_csv, "w");
+  if (!csv) {
+    std::perror(trace_csv);
+    std::exit(EXIT_FAILURE);
+  }
+  std::fprintf(
+      csv,
+      "size,input,sm_id,block_idx,tile_iter,linear_tile,tile_m,tile_n,"
+      "slot,event,warp,kind,start_raw,end_raw,start_rel,end_rel,"
+      "envelope_cycles,total_cycles,sample_count,avg_cycles_per_sample\n");
+  for (int slot = 0; slot < kTraceSlotCount; ++slot) {
+    const TraceRecord &record = result.slots[slot];
+    if (record.end <= record.first)
+      continue;
+    const unsigned long long envelope = record.end - record.first;
+    const double average = record.sample_count == 0
+                               ? 0.0
+                               : static_cast<double>(record.total_cycles) /
+                                     record.sample_count;
+    std::fprintf(
+        csv,
+        "%d,%s,%u,%u,%d,%d,%d,%d,%d,%s,%d,%s,%llu,%llu,%llu,%llu,"
+        "%llu,%llu,%llu,%.6f\n",
+        size, input_init_mode_name(input_init_mode), result.header.sm_id,
+        result.header.block_idx, result.header.tile_iter,
+        result.header.linear_tile, result.header.tile_m,
+        result.header.tile_n, slot, trace_slot_name(slot),
+        trace_slot_warp(slot),
+        trace_slot_is_aggregate(slot) ? "aggregate" : "interval",
+        record.first, record.end, record.first - first_clock,
+        record.end - first_clock, envelope, record.total_cycles,
+        record.sample_count, average);
+  }
+  std::fclose(csv);
+
+  std::printf("trace_csv=%s size=%d input=%s ctas=%d block=%u sm=%u "
+              "tile_iter=%d linear_tile=%d tile=(%d,%d) slots=%u\n",
+              trace_csv, size, input_init_mode_name(input_init_mode),
+              kPersistentCtas, result.header.block_idx, result.header.sm_id,
+              result.header.tile_iter, result.header.linear_tile,
+              result.header.tile_m, result.header.tile_n,
+              result.header.slot_count);
+
+  cuda_check(cudaFree(d_a));
+  cuda_check(cudaFree(d_b));
+  cuda_check(cudaFree(d_sink));
+  cuda_check(cudaFree(d_c));
+  cuda_check(cudaFree(d_trace));
 }
 
 uint16_t float_to_bf16_bits_host(float value) {
@@ -1330,6 +1907,11 @@ int main(int argc, char **argv) {
     std::fprintf(stderr, "This benchmark requires SM100+; got sm_%d%d\n",
                  prop.major, prop.minor);
     return 77;
+  }
+
+  if (args.trace_csv != nullptr) {
+    run_trace_case(args.trace_csv, args.input_init_mode);
+    return 0;
   }
 
   if (args.validate) {
