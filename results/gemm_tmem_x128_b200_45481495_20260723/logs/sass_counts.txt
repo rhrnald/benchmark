@@ -1,0 +1,7 @@
+metric baseline tmem_x128
+LDTM.x64 8 0
+LDTM.x128 0 4
+UTCHMMA 8 8
+UTMALDG 21 21
+UTMASTG 4 4
+ST.E.128 128 128

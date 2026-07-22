@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	baseline	tmem_x128
+random	2	tmem_x128	baseline
+random	3	baseline	tmem_x128
+random-signed8	1	tmem_x128	baseline
+random-signed8	2	baseline	tmem_x128
+random-signed8	3	tmem_x128	baseline
