@@ -754,7 +754,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     const int global_col_base = tile_n * kCtaN;
     store_256x256_float_tile_tma(c_taddr, &c_map, c_store_smem, global_row_base,
                                  global_col_base);
-    __syncthreads();
 
     if (threadIdx.x == 0) {
       uint32_t tile_sink = tmem_base ^ static_cast<uint32_t>(ktiles);
