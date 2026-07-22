@@ -1,0 +1,26 @@
+gemm256_bf16_16k.cu(575): warning #177-D: variable "c_store_smem" was declared but never referenced
+    uint32_t *c_store_smem = smem;
+              ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+gemm256_bf16_16k.cu(506): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(const uint32_t (&c_taddr)[4],
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__61b94ad8_19_gemm256_bf16_16k_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__61b94ad8_19_gemm256_bf16_16k_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.237 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__61b94ad8_19_gemm256_bf16_16k_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__61b94ad8_19_gemm256_bf16_16k_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.779 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__61b94ad8_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__61b94ad8_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    16 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 54 registers, used 1 barriers, 16 bytes cumulative stack size, 160 bytes smem
+ptxas info    : Compile time = 55.871 ms

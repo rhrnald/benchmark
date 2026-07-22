@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	baseline	store_off
+random	2	store_off	baseline
+random	3	baseline	store_off
+random-signed8	1	store_off	baseline
+random-signed8	2	baseline	store_off
+random-signed8	3	store_off	baseline

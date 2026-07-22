@@ -1,0 +1,18 @@
+metric clean_baseline compile_time_store_off
+registers 178 54
+stack_bytes 16 16
+spill_bytes 0 0
+static_text_slots 1936 1640
+UTMALDG 21 21
+UTCHMMA 8 8
+SYNCS_PHASECHK 48 48
+LDTM 8 0
+UTMASTG 4 0
+UTMACMDFLUSH 2 0
+CCTL_IVALL 2 0
+BAR_SYNC 20 9
+
+The A/B TMA-load, MMA, commit/final-wait mainloop remains.  Compile-time
+removal also drops the epilogue's 124-register TMEM load payload, so this is an
+aggressive ceiling that includes both executed epilogue work and its compiled
+register-pressure/code-layout effects.
