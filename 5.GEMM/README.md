@@ -29,7 +29,7 @@ Current kernel shape:
   - warp 3 lane 0 issues MMA for C01/C11.
   - stage reuse is fenced by each pipe's `mma_done` barrier from three K stages earlier.
 - The default dense kernel launches 148 persistent CTAs. Its macroblocks are
-  `16 x 16` at 8K/16K and `8 x 18` at 32K, with local M-fast and macro N-fast
+  `12 x 12` at 8K/32K and `16 x 16` at 16K, with local M-fast and macro N-fast
   traversal. A/B TMA promotion is disabled and the effective pipe-1 TMA/MMA
   phase is `0/0` at all three target sizes. Generic phase constants printed in
   the configuration header are fallback values, not the selected dense
@@ -558,6 +558,51 @@ in:
 - `results/gemm_fixed_overhead_ablation_b200_45465499/`
 - `results/gemm_phase_resweep_b200_45465499/`
 - `results/gemm_wide_b_ablation_b200_45465499/`
+
+### Matched same-address to dense-address and focused L2 sweep (2026-07-22)
+
+The reproduced `256x256x64` same-address pipeline was converted to a dense
+end-to-end GEMM by changing only `GEMM_REPEAT_INPUT=1 -> 0`.  The matched
+persistent baseline retained the repeat-tuned phases and 8K promotion, while
+all other pipeline, math, and FP32 C-store settings stayed fixed:
+
+| variant | 8K | 16K | 32K |
+|---|---:|---:|---:|
+| grouped grid | 1694.096 +/- 1.724 | 1761.240 +/- 1.007 | 1585.165 +/- 3.710 |
+| persistent tile reuse | **1712.740 +/- 0.306** | **1780.463 +/- 0.734** | 1572.202 +/- 22.749 |
+
+Persistent macroblock ordering improves the stable 8K and 16K cases by
+1.10% and 1.09%.  The third 32K persistent process was an isolated 1546.066
+TFLOP/s slowdown, so a paired control was carried into the focused sweep.
+
+The focused sweep then compared the repeat-tuned control against dense phase
+`0/0`, no A/B promotion, and three balanced 144-tile macroblocks.  Each entry
+is the mean and sample standard deviation of three one-warmup/five-timed
+processes:
+
+| configuration | 8K | 16K | 32K |
+|---|---:|---:|---:|
+| paired control | 1714.039 +/- 0.363 | 1781.433 +/- 0.168 | 1576.632 +/- 9.325 |
+| `8x18` | 1716.684 +/- 1.872 | 1781.543 +/- 0.792 | 1601.834 +/- 14.392 |
+| `9x16` | 1713.532 +/- 0.946 | same binary as `8x18` | 1594.414 +/- 3.484 |
+| `12x12` | **1717.398 +/- 1.343** | same binary as `8x18` | **1601.945 +/- 4.035** |
+
+The selected schedule is `12x12` at 8K/32K and `16x16` at 16K, with local
+M-fast, macro N-fast, phase `0/0`, no A/B promotion, a dynamic work queue, and
+148 resident workers.  Relative to the paired control it gains 0.20% at 8K,
+is neutral at 16K, and gains 1.61% at 32K.  `12x12` is selected over `8x18`
+because their means are effectively identical at 32K while `12x12` has much
+lower process variance.  All candidates passed the 512 pattern validation
+bit-exactly.
+
+These results show that software L2 ordering recovers only a small part of
+the gap to the 1949.590-TFLOP/s same-address 16K ceiling.  Further material
+improvement requires a stronger valid reuse mechanism such as cluster TMA
+multicast, rather than additional phase or promotion sweeps.  Raw artifacts
+are in:
+
+- `../results/gemm256_dense_matched_baseline_b200_45481495/`
+- `../results/gemm256_dense_l2_focused_sweep_b200_45481495/`
 
 ### Persistent TMEM epilogue overlap, CTA `128x256` (2026-07-22)
 

@@ -24,8 +24,18 @@ TRACE_CSV ?= log/gemm256_trace.csv
 TRACE_SVG ?= log/gemm256_trace.svg
 TRACE_TITLE ?= 5.GEMM pipeline trace size=$(TRACE_SIZE) start=$(TRACE_START) iters=$(TRACE_ITERS)
 
-# Default persistent configuration: the recovered 1777-series scheduler.
+# Default persistent configuration: the selected dense-address L2 schedule.
 PERSISTENT_CONFIG_FLAGS := \
+	-DGEMM_REPEAT_TUNING=1 -DGEMM_DENSE_L2_TUNING=1 \
+	-DGEMM_PERSISTENT_CTA=1 \
+	-DGEMM_PERSISTENT_MACRO_M=16 -DGEMM_PERSISTENT_MACRO_N=16 \
+	-DGEMM_PERSISTENT_8K_MACRO_M=12 -DGEMM_PERSISTENT_8K_MACRO_N=12 \
+	-DGEMM_PERSISTENT_32K_MACRO_M=12 -DGEMM_PERSISTENT_32K_MACRO_N=12 \
+	-DGEMM_PERSISTENT_LOCAL_M_FAST=1 -DGEMM_PERSISTENT_MACRO_N_FAST=1
+
+# Historical 1777-series scheduler.  Keep this independent from the selected
+# default so later L2 tuning cannot silently change the frozen comparison.
+PERSISTENT_1777_CONFIG_FLAGS := \
 	-DGEMM_REPEAT_TUNING=1 -DGEMM_DENSE_L2_TUNING=1 \
 	-DGEMM_PERSISTENT_CTA=1 \
 	-DGEMM_PERSISTENT_MACRO_M=16 -DGEMM_PERSISTENT_MACRO_N=16 \
@@ -67,7 +77,7 @@ build-l2: $(L2_TARGET)
 $(L2_TARGET): $(SRC)
 	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) -DGEMM_REPEAT_TUNING=1 -DGEMM_DENSE_L2_TUNING=1 $(GPU_ARCHS) $< -lcuda -o $@
 
-$(PERSISTENT_TARGET): $(SRC)
+$(PERSISTENT_TARGET): $(SRC) Makefile
 	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(PERSISTENT_CONFIG_FLAGS) $(GPU_ARCHS) $< -lcuda -o $@
 
 build-persistent: $(PERSISTENT_TARGET)
@@ -75,8 +85,8 @@ build-persistent: $(PERSISTENT_TARGET)
 # Freeze the scheduler configuration that produced 1777.128 TFLOP/s at 16K
 # on Vast.ai instance 45378714.  Keep this target separate from subsequent L2
 # tuning so future default changes do not silently alter the paper baseline.
-$(PERSISTENT_1777_TARGET): $(SRC)
-	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(PERSISTENT_CONFIG_FLAGS) $(GPU_ARCHS) $< -lcuda -o $@
+$(PERSISTENT_1777_TARGET): $(SRC) Makefile
+	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(PERSISTENT_1777_CONFIG_FLAGS) $(GPU_ARCHS) $< -lcuda -o $@
 
 build-persistent-1777: $(PERSISTENT_1777_TARGET)
 
