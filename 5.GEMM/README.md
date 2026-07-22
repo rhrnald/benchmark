@@ -942,3 +942,54 @@ Reproduce with:
   /workspace/benchmark/5.GEMM \
   /workspace/gemm_multicast_pipeline_epilogue_ablation
 ```
+
+### 16K partial input reuse and wave-aligned scheduling
+
+To identify whether the remaining gap to the same-address ceiling comes from
+A or B, the selected 256x256 B-multicast kernel was rerun while independently
+repeating each operand's TMA source coordinates.  Math, K-loop count,
+wait/commit protocol, output addresses, and full FP32 C store remained intact.
+Each number is three rotated one-process measurements using BF16 random
+`[0,1)`, warmup 1, and five timed launches.
+
+| A addresses | B addresses | TFLOP/s | versus dense |
+|---|---|---:|---:|
+| dense | dense | 1783.283 +/- 1.060 | baseline |
+| repeated | dense | 1899.555 +/- 1.821 | +6.520% |
+| dense | repeated | 1812.678 +/- 1.047 | +1.648% |
+| repeated | repeated | **1956.014 +/- 1.943** | +9.686% |
+
+Of the 172.731 TFLOP/s dense-to-full-repeat gap, A-only reuse recovers
+116.272 TFLOP/s while B-only reuse recovers 29.395 TFLOP/s.  The remainder is
+an interaction visible only when both repeat.  A locality is therefore the
+dominant next optimization target; B traffic alone cannot explain or close
+the gap.
+
+The companion scheduler test rejected a literal 144-task wave and cluster 4:
+
+| cluster / scheduler | CTAs | TFLOP/s |
+|---|---:|---:|
+| C2, existing static 16x16 macro | 148 | **1783.283 +/- 1.060** |
+| C2, existing static 16x16 macro | 144 | 1749.012 +/- 0.845 |
+| C2, explicit 16x9 wave | 144 | 1587.562 +/- 2.532 |
+| C2, explicit 12x12 wave | 144 | 1437.077 +/- 0.808 |
+| C4, explicit 16x9 wave | 144 | 933.048 +/- 0.177 |
+| C4, explicit 12x12 wave | 144 | 934.301 +/- 0.944 |
+
+At the same 144 CTA count, explicit 16x9 and 12x12 waves regress 9.23% and
+17.83% versus the old macro traversal.  Cluster 4 loses another 35--41%
+against its cluster-2 counterpart, so reducing B transactions does not repay
+the added multicast/DSM synchronization and producer serialization.  Keep
+cluster 2, 148 CTAs, and the existing static 16x16 task stream.
+
+Reproduce with:
+
+```bash
+./run_b200_gemm_partial_reuse_wave_ablation.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm_partial_reuse_wave_ablation
+```
+
+All variants passed pattern validation.  Full per-process values, exact
+conditions, logs, and source snapshots are in
+`../results/gemm_partial_reuse_wave_ablation_b200_45481495/`.
