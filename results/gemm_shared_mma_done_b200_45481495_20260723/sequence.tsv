@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	dual_wide_clean	shared_mma_done
+random	2	shared_mma_done	dual_wide_clean
+random	3	dual_wide_clean	shared_mma_done
+random-signed8	1	shared_mma_done	dual_wide_clean
+random-signed8	2	dual_wide_clean	shared_mma_done
+random-signed8	3	shared_mma_done	dual_wide_clean

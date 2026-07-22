@@ -189,3 +189,4 @@ B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
 | E7b | compiler auto-unroll of dual-wide consumer K loop | exact | 172/0 | 1772.807 | 1527.173 | -0.027% / -0.209% vs dual-wide u1 | reject; all pairs favor u1 |
 | P1a | E7a same-binary C-store-off strict ceiling | on exact; off no C | 172/0 | 1830.992 | 1580.081 | +3.191% / +3.298% vs store-on | diagnostic upper bound; epilogue alone cannot close gap |
 | P1b | E7a block-0 tile-8 phase trace, five processes | exact before trace | 186/0 diagnostic | N/A | N/A | epilogue 3.607% / 3.638%; scheduler 0.300% / 0.290% | prioritize readiness/completion barrier ablations |
+| E8a | shared stage `mma_done`, arrival count 2 | exact, pattern/ones x3 | 170/0 | 1769.467 | 1530.390 | -0.079% / +0.043% vs dual-wide u1 | neutral/reject; producer waits are off critical path |

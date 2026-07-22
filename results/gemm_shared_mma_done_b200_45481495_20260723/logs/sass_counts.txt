@@ -1,0 +1,9 @@
+metric dual_wide_clean shared_mma_done
+instructions 4192 3968
+UTCHMMA 4 4
+UTMALDG.2D 7 7
+UTMALDG.4D 14 14
+UTMASTG.4D 4 4
+UTCBAR 1 1
+BAR.SYNC 20 20
+SYNCS.PHASECHK 64 36

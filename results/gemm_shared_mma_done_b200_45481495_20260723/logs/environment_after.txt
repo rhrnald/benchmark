@@ -1,0 +1,2 @@
+name, uuid, driver_version, temperature.gpu, power.limit [W], clocks.current.sm [MHz], clocks.max.sm [MHz]
+NVIDIA B200, GPU-a941a3b8-3a18-b964-8594-bd271f99115d, 580.126.09, 39, 1000.00 W, 1965 MHz, 1965 MHz
