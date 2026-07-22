@@ -582,8 +582,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   uint32_t *smem = reinterpret_cast<uint32_t *>(smem_addr);
   uint32_t *c_store_smem = smem;
 
-  __shared__ uint64_t ab0_ready[kStages];
-  __shared__ uint64_t b1_ready[kStages];
+  __shared__ uint64_t a_ready[kStages];
+  __shared__ uint64_t b_ready[kBProducerParts][kStages];
   __shared__ uint64_t mma_done[kMBlocks][kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
@@ -593,8 +593,11 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   if (threadIdx.x == 0) {
 #pragma unroll
     for (int s = 0; s < kStages; ++s) {
-      mbarrier_init(&ab0_ready[s], 2);
-      mbarrier_init(&b1_ready[s], 1);
+      mbarrier_init(&a_ready[s], 1);
+#pragma unroll
+      for (int part = 0; part < kBProducerParts; ++part) {
+        mbarrier_init(&b_ready[part][s], 1);
+      }
     }
 #pragma unroll
     for (int mblock = 0; mblock < kMBlocks; ++mblock) {
@@ -679,8 +682,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
             mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
           }
         }
-        issue_a_stage_tma(&a_map, a_smem, &ab0_ready[stage], tile_m, kt);
-        issue_b_producer_part_tma(&b_map, b_smem, &b1_ready[stage], tile_n,
+        issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
+        issue_b_producer_part_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
                                   kt, 1);
       }
     }
@@ -699,7 +702,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
             mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
           }
         }
-        issue_b_producer_part_tma(&b_map, b_smem, &ab0_ready[stage], tile_n,
+        issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                                   kt, 0);
       }
     }
@@ -716,7 +719,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords;
 
-        mbarrier_wait(&ab0_ready[stage], tma_phase);
+        mbarrier_wait(&a_ready[stage], tma_phase);
+        mbarrier_wait(&b_ready[0][stage], tma_phase);
 #pragma unroll
         for (int kk = 0; kk < kBK16PerProducerPart; ++kk) {
           const uint32_t b0 = smem_ptr_u32(b_smem);
@@ -728,7 +732,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               tmem_base + mblock * 2 * kTmemTileStride;
           tcgen05_mma_bf16_ss(c_taddr, a_desc, b0_desc, idesc, input_d);
         }
-        mbarrier_wait(&b1_ready[stage], tma_phase);
+        mbarrier_wait(&b_ready[1][stage], tma_phase);
 #pragma unroll
         for (int kk = kBK16PerProducerPart;
              kk < kStageK / kMmaK; ++kk) {
