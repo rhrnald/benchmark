@@ -567,10 +567,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   (void)mtile_count;
   (void)ntile_count;
 #else
-  extern __shared__ uint32_t smem_raw[];
-  const uintptr_t smem_addr = (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) &
-                              ~static_cast<uintptr_t>(1023u);
-  uint32_t *smem = reinterpret_cast<uint32_t *>(smem_addr);
+  extern __shared__ __align__(1024) uint32_t smem[];
   uint32_t *c_store_smem = smem;
 
   __shared__ uint64_t a_ready[kStages];
