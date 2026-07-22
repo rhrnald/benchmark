@@ -1,0 +1,7 @@
+input	pass	order
+random	1	clean,dual_on,dual_off
+random	2	dual_on,dual_off,clean
+random	3	dual_off,clean,dual_on
+random-signed8	1	dual_off,dual_on,clean
+random-signed8	2	clean,dual_off,dual_on
+random-signed8	3	dual_on,clean,dual_off

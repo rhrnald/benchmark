@@ -1,0 +1,18 @@
+metric clean_baseline dual_mode_binary
+registers 178 178
+stack_bytes 16 16
+spill_bytes 0 0
+static_text_slots 1936 1936
+UTMALDG 21 21
+UTCHMMA 8 8
+SYNCS_PHASECHK 48 48
+LDTM 8 8
+UTMASTG 4 4
+UTMACMDFLUSH 2 2
+CCTL_IVALL 2 2
+BAR_SYNC 20 20
+
+The dual-mode cubin retains the complete store path and has the same resource
+usage and key opcode counts as the clean baseline.  Store-on and store-off are
+selected by one uniform runtime kernel argument, so their register allocation
+and code layout are identical.

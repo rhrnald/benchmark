@@ -148,3 +148,4 @@ warp specialization의 비용을 분리하기 위한 것이다.
 | E3.2 | TMA store `wait_group.read 0` | exact | 178/0 | 1738.970 | 1508.044 | -0.062% / -0.249% vs E3.1 | neutral/reject |
 | E3.3 | remove duplicate final epilogue barrier | exact | 178/0 | 1737.792 | 1508.663 | -0.039% / -0.123% vs E3.2 | neutral/reject |
 | P0a | compile-time C-store-off aggressive ceiling | N/A (no C) | 54/0 | 1789.649 | 1549.232 | +2.891% / +2.453% | diagnostic; strict same-binary control required |
+| P0b | same-binary C-store-off strict ceiling | on exact; off no C | 178/0 | 1800.517 | 1560.241 | +3.813% / +3.256% vs dual-on | diagnostic upper bound |
