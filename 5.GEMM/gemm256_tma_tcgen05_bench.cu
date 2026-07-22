@@ -21,6 +21,16 @@
 #define GEMM_REPEAT_INPUT 0
 #endif
 
+// Operand-specific address controls for diagnosing which input benefits from
+// L2 reuse.  The legacy switch remains the default for both operands.
+#ifndef GEMM_REPEAT_A_INPUT
+#define GEMM_REPEAT_A_INPUT GEMM_REPEAT_INPUT
+#endif
+
+#ifndef GEMM_REPEAT_B_INPUT
+#define GEMM_REPEAT_B_INPUT GEMM_REPEAT_INPUT
+#endif
+
 // Keep address selection independent from the pipeline/epilogue tuning.  This
 // lets the dense-address kernel use the settings established by the
 // same-address ceiling experiment.
@@ -39,6 +49,10 @@
 #define GEMM_TMA_MULTICAST_B 0
 #endif
 
+#ifndef GEMM_TMA_MULTICAST_B_CLUSTER_SIZE
+#define GEMM_TMA_MULTICAST_B_CLUSTER_SIZE 2
+#endif
+
 // Two CTAs share the same M tile and rank 0 multicasts each A stage.  This is
 // the N-direction counterpart to GEMM_TMA_MULTICAST_B: it transfers the same
 // 32-KiB payload per CTA pair with one A transaction instead of two 128-wide
@@ -51,6 +65,17 @@
 // fixed-cost optimization can be measured against the recovered baseline.
 #ifndef GEMM_PERSISTENT_STATIC_SCHEDULER
 #define GEMM_PERSISTENT_STATIC_SCHEDULER 0
+#endif
+
+// Optional explicit wave.  Unlike a clipped edge macroblock, every wave has
+// a fixed padded extent, so a 144-CTA launch advances one whole 16x9 or 12x12
+// locality window at a time.
+#ifndef GEMM_PERSISTENT_WAVE_M
+#define GEMM_PERSISTENT_WAVE_M 0
+#endif
+
+#ifndef GEMM_PERSISTENT_WAVE_N
+#define GEMM_PERSISTENT_WAVE_N 0
 #endif
 
 #ifndef GEMM_FUSED_CSTORE_STAGING
@@ -413,6 +438,16 @@ static constexpr int kStages = GEMM_STAGES;
 static constexpr int kPipes = kCtaN / kMmaN;
 static constexpr int kMBlocks = kCtaM / kMmaM;
 static constexpr bool kRepeatBBroadcast = GEMM_REPEAT_B_BROADCAST != 0;
+static constexpr bool kRepeatAInput = GEMM_REPEAT_A_INPUT != 0;
+static constexpr bool kRepeatBInput = GEMM_REPEAT_B_INPUT != 0;
+static constexpr int kBMulticastClusterSize =
+    GEMM_TMA_MULTICAST_B ? GEMM_TMA_MULTICAST_B_CLUSTER_SIZE : 1;
+static constexpr bool kExplicitPersistentWave =
+    GEMM_PERSISTENT_WAVE_M > 0 && GEMM_PERSISTENT_WAVE_N > 0;
+static constexpr int kPersistentWaveM =
+    kExplicitPersistentWave ? GEMM_PERSISTENT_WAVE_M : 1;
+static constexpr int kPersistentWaveN =
+    kExplicitPersistentWave ? GEMM_PERSISTENT_WAVE_N : 1;
 static constexpr bool kTmaMulticast =
     GEMM_TMA_MULTICAST_A != 0 || GEMM_TMA_MULTICAST_B != 0;
 static_assert(GEMM_EPILOGUE_MODE >= 0 && GEMM_EPILOGUE_MODE <= 2,
@@ -517,6 +552,20 @@ static_assert(kCtaM == 128 || kCtaM == 256);
 static_assert(kCtaM % kMmaM == 0);
 static_assert(!(GEMM_TMA_MULTICAST_A && GEMM_TMA_MULTICAST_B),
               "select at most one multicast operand");
+static_assert((GEMM_PERSISTENT_WAVE_M == 0) ==
+                  (GEMM_PERSISTENT_WAVE_N == 0),
+              "set both persistent wave dimensions or neither");
+static_assert(!kExplicitPersistentWave || GEMM_PERSISTENT_CTA,
+              "an explicit wave requires persistent CTAs");
+static_assert(!kExplicitPersistentWave || GEMM_PERSISTENT_STATIC_SCHEDULER,
+              "an explicit wave requires the static scheduler");
+static_assert(!GEMM_TMA_MULTICAST_B ||
+                  (kBMulticastClusterSize == 2 ||
+                   kBMulticastClusterSize == 4),
+              "B multicast cluster size must be 2 or 4");
+static_assert(!GEMM_TMA_MULTICAST_B || !kExplicitPersistentWave ||
+                  GEMM_PERSISTENT_WAVE_M % kBMulticastClusterSize == 0,
+              "B multicast requires wave M divisible by cluster size");
 static_assert(!GEMM_TMA_MULTICAST_A || GEMM_PERSISTENT_CTA,
               "A multicast requires the paired persistent scheduler");
 static_assert(!GEMM_TMA_MULTICAST_A || GEMM_CTA_M == 256,
@@ -542,7 +591,7 @@ static_assert(!GEMM_TMA_MULTICAST_B ||
                    GEMM_PERSISTENT_32K_MACRO_M % 2 == 0),
               "paired scheduling requires even M macro sizes");
 static_assert(kRepeatBBroadcast || kPipes * kBPipeWords == kBStageWords);
-static_assert(!kRepeatBBroadcast || GEMM_REPEAT_INPUT,
+static_assert(!kRepeatBBroadcast || kRepeatBInput,
               "B broadcast is only valid for the repeated-input control");
 static_assert(!kRepeatBBroadcast ||
                   (kCtaM == 128 && kCtaN == 256 && kStageK == 128),
@@ -1566,11 +1615,14 @@ __device__ __forceinline__ void issue_b_pipe_stage_tma_multicast(
     int pipe) {
   // Rank 0 owns the transaction.  Arrive/expect is applied to the matching
   // barrier address in both CTAs before the multicast can complete.
-  mbarrier_arrive_expect_tx_remote(ready, kBPipeBytes, 0);
-  mbarrier_arrive_expect_tx_remote(ready, kBPipeBytes, 1);
+#pragma unroll
+  for (int rank = 0; rank < kBMulticastClusterSize; ++rank) {
+    mbarrier_arrive_expect_tx_remote(ready, kBPipeBytes, rank);
+  }
   const int b_col_words = tile_n * (kCtaN / 2) + pipe * (kMmaN / 2);
   const int b_k16 = ktile * (kStageK / kMmaK);
-  tma_load_4d_multicast(b_map, smem_ptr_u32(b_smem), ready, 0x3u,
+  tma_load_4d_multicast(b_map, smem_ptr_u32(b_smem), ready,
+                        static_cast<uint16_t>((1u << kBMulticastClusterSize) - 1u),
                         b_col_words, 0, 0, b_k16);
 }
 
@@ -1594,11 +1646,14 @@ __device__ __forceinline__ void issue_b_stage_tma_multicast(
     uint64_t* ready,
     int tile_n,
     int ktile) {
-  mbarrier_arrive_expect_tx_remote(ready, kBStageBytes, 0);
-  mbarrier_arrive_expect_tx_remote(ready, kBStageBytes, 1);
+#pragma unroll
+  for (int rank = 0; rank < kBMulticastClusterSize; ++rank) {
+    mbarrier_arrive_expect_tx_remote(ready, kBStageBytes, rank);
+  }
   const int b_col_words = tile_n * (kCtaN / 2);
   const int b_k16 = ktile * (kStageK / kMmaK);
-  tma_load_4d_multicast(b_map, smem_ptr_u32(b_smem), ready, 0x3u,
+  tma_load_4d_multicast(b_map, smem_ptr_u32(b_smem), ready,
+                        static_cast<uint16_t>((1u << kBMulticastClusterSize) - 1u),
                         b_col_words, 0, 0, b_k16);
 }
 
@@ -1628,7 +1683,8 @@ __device__ __forceinline__ void issue_b_stage_tma(
 }
 
 #if GEMM_TMA_MULTICAST_B
-#define GEMM_CLUSTER_ATTRIBUTE __cluster_dims__(2, 1, 1)
+#define GEMM_CLUSTER_ATTRIBUTE \
+  __cluster_dims__(GEMM_TMA_MULTICAST_B_CLUSTER_SIZE, 1, 1)
 #elif GEMM_TMA_MULTICAST_A
 #define GEMM_CLUSTER_ATTRIBUTE __cluster_dims__(1, 2, 1)
 #else
@@ -1715,7 +1771,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       for (int s = 0; s < kStages; ++s) {
         mbarrier_init(&mma_done[p][s], 1);
         if constexpr (kTmaMulticast) {
-          mbarrier_init(&b_reuse_ready[p][s], 2);
+          mbarrier_init(&b_reuse_ready[p][s],
+                        GEMM_TMA_MULTICAST_B
+                            ? kBMulticastClusterSize
+                            : 2);
         }
       }
     }
@@ -1786,8 +1845,19 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const int persistent_groups_n =
       (ntile_count + persistent_macro_n - 1) / persistent_macro_n;
   const int persistent_macro_tiles = persistent_macro_m * persistent_macro_n;
-  const int persistent_task_count =
-      persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
+  const int persistent_wave_groups_m = kExplicitPersistentWave
+      ? (mtile_count + kPersistentWaveM - 1) / kPersistentWaveM
+      : 0;
+  const int persistent_wave_groups_n = kExplicitPersistentWave
+      ? (ntile_count + kPersistentWaveN - 1) / kPersistentWaveN
+      : 0;
+  const int persistent_wave_tiles = kExplicitPersistentWave
+      ? kPersistentWaveM * kPersistentWaveN
+      : 0;
+  const int persistent_task_count = kExplicitPersistentWave
+      ? persistent_wave_groups_m * persistent_wave_groups_n *
+            persistent_wave_tiles
+      : persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
   int tile_iter = 0;
   int task_iter = 0;
   int previous_tile_m = 0;
@@ -1810,8 +1880,11 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
           // M-fast for B multicast and N-fast for A multicast.
           cluster.sync();
           if (threadIdx.x == 0 && cluster_rank == 0) {
-            persistent_task_shared =
-                static_cast<int>(atomicAdd(sink + total_tiles, 2u));
+            persistent_task_shared = static_cast<int>(atomicAdd(
+                sink + total_tiles,
+                static_cast<unsigned int>(GEMM_TMA_MULTICAST_B
+                                              ? kBMulticastClusterSize
+                                              : 2)));
           }
           cluster.sync();
           int* leader_task =
@@ -1834,26 +1907,38 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     int tile_m = 0;
     int tile_n = 0;
     if constexpr (GEMM_PERSISTENT_CTA) {
-      const int macro_id = linear_tile / persistent_macro_tiles;
-      const int local = linear_tile - macro_id * persistent_macro_tiles;
-      const int macro_n = GEMM_PERSISTENT_MACRO_N_FAST
-                              ? macro_id % persistent_groups_n
-                              : macro_id / persistent_groups_m;
-      const int macro_m = GEMM_PERSISTENT_MACRO_N_FAST
-                              ? macro_id / persistent_groups_n
-                              : macro_id % persistent_groups_m;
-      const int local_m = GEMM_TMA_MULTICAST_A
-                              ? local / persistent_macro_n
-                              : (GEMM_PERSISTENT_LOCAL_M_FAST
-                                     ? local % persistent_macro_m
-                                     : local / persistent_macro_n);
-      const int local_n = GEMM_TMA_MULTICAST_A
-                              ? local % persistent_macro_n
-                              : (GEMM_PERSISTENT_LOCAL_M_FAST
-                                     ? local / persistent_macro_m
-                                     : local % persistent_macro_n);
-      tile_m = macro_m * persistent_macro_m + local_m;
-      tile_n = macro_n * persistent_macro_n + local_n;
+      if constexpr (kExplicitPersistentWave) {
+        const int wave_id = linear_tile / persistent_wave_tiles;
+        const int local = linear_tile - wave_id * persistent_wave_tiles;
+        const int wave_m = wave_id / persistent_wave_groups_n;
+        const int wave_n_sequence = wave_id % persistent_wave_groups_n;
+        const int wave_n = (wave_m & 1)
+            ? persistent_wave_groups_n - 1 - wave_n_sequence
+            : wave_n_sequence;
+        tile_m = wave_m * kPersistentWaveM + local % kPersistentWaveM;
+        tile_n = wave_n * kPersistentWaveN + local / kPersistentWaveM;
+      } else {
+        const int macro_id = linear_tile / persistent_macro_tiles;
+        const int local = linear_tile - macro_id * persistent_macro_tiles;
+        const int macro_n = GEMM_PERSISTENT_MACRO_N_FAST
+                                ? macro_id % persistent_groups_n
+                                : macro_id / persistent_groups_m;
+        const int macro_m = GEMM_PERSISTENT_MACRO_N_FAST
+                                ? macro_id / persistent_groups_n
+                                : macro_id % persistent_groups_m;
+        const int local_m = GEMM_TMA_MULTICAST_A
+                                ? local / persistent_macro_n
+                                : (GEMM_PERSISTENT_LOCAL_M_FAST
+                                       ? local % persistent_macro_m
+                                       : local / persistent_macro_n);
+        const int local_n = GEMM_TMA_MULTICAST_A
+                                ? local % persistent_macro_n
+                                : (GEMM_PERSISTENT_LOCAL_M_FAST
+                                       ? local / persistent_macro_m
+                                       : local % persistent_macro_n);
+        tile_m = macro_m * persistent_macro_m + local_m;
+        tile_n = macro_n * persistent_macro_n + local_n;
+      }
       // Only edge macroblocks can contain padded tasks.  They consume no
       // barrier epochs, so the next valid tile keeps the expected parity.
       if (tile_m >= mtile_count || tile_n >= ntile_count) {
@@ -1948,36 +2033,37 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       }
       const unsigned long long trace_start =
           clock_trace != nullptr ? clock64() : 0ull;
-      const int source_m = GEMM_REPEAT_INPUT ? 0 : tile_m;
-      const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
-      const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
+      const int source_m = kRepeatAInput ? 0 : tile_m;
+      const int source_n = kRepeatBInput ? 0 : tile_n;
+      const int source_a_kt = kRepeatAInput ? 0 : kt;
+      const int source_b_kt = kRepeatBInput ? 0 : kt;
       if constexpr (GEMM_TMA_MULTICAST_A) {
         if (cluster_rank == 0) {
           issue_a_stage_tma_multicast(&a_map, a_smem, &a_ready[stage],
-                                      source_m, source_kt);
+                                      source_m, source_a_kt);
         }
       } else {
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], source_m,
-                          source_kt);
+                          source_a_kt);
       }
       if constexpr (GEMM_TMA_MULTICAST_B) {
         if (cluster_rank == 0) {
           if constexpr (GEMM_WIDE_B_TMA) {
             issue_b_stage_tma_multicast(
-                &b_map, b_smem, &b_ready[0][stage], source_n, source_kt);
+                &b_map, b_smem, &b_ready[0][stage], source_n, source_b_kt);
           } else {
             issue_b_pipe_stage_tma_multicast(
-                &b_map, b_smem, &b_ready[0][stage], source_n, source_kt, 0);
+                &b_map, b_smem, &b_ready[0][stage], source_n, source_b_kt, 0);
           }
         }
       } else if constexpr ((SinglePipeline != 0 && kSinglePipelineWideMma != 0) ||
                     GEMM_WIDE_B_TMA != 0) {
         issue_b_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
-                          source_kt,
+                          source_b_kt,
                           nullptr, 0, 0, trace_base_shared, 0, 0);
       } else {
         issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], source_n,
-                               source_kt, 0, nullptr, 0, 0,
+                               source_b_kt, 0, nullptr, 0, 0,
                                trace_base_shared, 0, 0);
       }
       if constexpr (SinglePipeline != 0 && kPipes > 1 &&
@@ -1985,7 +2071,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                     kSinglePipelineWideMma == 0) {
         uint32_t* b1_smem = b_smem + kBPipeWords;
         issue_b_pipe_stage_tma(&b_map, b1_smem, &b_ready[1][stage], source_n,
-                               source_kt, 1, nullptr, 0, 0,
+                               source_b_kt, 1, nullptr, 0, 0,
                                trace_base_shared, 1, 0);
       }
       const unsigned long long trace_end =
@@ -2021,8 +2107,8 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
             }
           }
         }
-        const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
-        const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
+        const int source_n = kRepeatBInput ? 0 : tile_n;
+        const int source_kt = kRepeatBInput ? 0 : kt;
         if constexpr (GEMM_TMA_MULTICAST_B && !GEMM_WIDE_B_TMA) {
           if (cluster_rank == 0) {
             issue_b_pipe_stage_tma_multicast(
@@ -3144,7 +3230,11 @@ CaseResult run_case(int size,
   dim3 grid = launch_grid(mtile, ntile, tuning);
   if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
     int launch_ctas = std::min(persistent_ctas, ctas);
-    if (kTmaMulticast) launch_ctas &= ~1;
+    if constexpr (GEMM_TMA_MULTICAST_B) {
+      launch_ctas -= launch_ctas % kBMulticastClusterSize;
+    } else if constexpr (GEMM_TMA_MULTICAST_A) {
+      launch_ctas &= ~1;
+    }
     if (launch_ctas <= 0) {
       std::fprintf(stderr, "multicast requires at least two launch CTAs\n");
       std::exit(EXIT_FAILURE);
@@ -3355,7 +3445,11 @@ ValidateResult run_validation(int size,
   dim3 grid = launch_grid(mtile, ntile, tuning);
   if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
     int launch_ctas = std::min(persistent_ctas, ctas);
-    if (kTmaMulticast) launch_ctas &= ~1;
+    if constexpr (GEMM_TMA_MULTICAST_B) {
+      launch_ctas -= launch_ctas % kBMulticastClusterSize;
+    } else if constexpr (GEMM_TMA_MULTICAST_A) {
+      launch_ctas &= ~1;
+    }
     if (launch_ctas <= 0) {
       std::fprintf(stderr, "multicast requires at least two launch CTAs\n");
       std::exit(EXIT_FAILURE);
@@ -3380,16 +3474,17 @@ ValidateResult run_validation(int size,
     for (int col = 0; col < n; ++col) {
       double ref = 0.0;
       for (int kk = 0; kk < k; ++kk) {
-        const int source_row = GEMM_REPEAT_INPUT ? row % kCtaM : row;
+        const int source_row = kRepeatAInput ? row % kCtaM : row;
         const int source_col =
-            GEMM_REPEAT_INPUT
+            kRepeatBInput
                 ? col % (kRepeatBBroadcast ? kMmaN : kCtaN)
                 : col;
-        const int source_k = GEMM_REPEAT_INPUT ? kk % kStageK : kk;
+        const int source_a_k = kRepeatAInput ? kk % kStageK : kk;
+        const int source_b_k = kRepeatBInput ? kk % kStageK : kk;
         ref += static_cast<double>(
-                   a_ref[static_cast<size_t>(source_row) * k + source_k]) *
+                   a_ref[static_cast<size_t>(source_row) * k + source_a_k]) *
                static_cast<double>(
-                   b_ref[static_cast<size_t>(source_k) * n + source_col]);
+                   b_ref[static_cast<size_t>(source_b_k) * n + source_col]);
       }
       const double actual = got[static_cast<size_t>(row) * n + col];
       const double abs_err = std::abs(actual - ref);
@@ -3637,7 +3732,7 @@ int main(int argc, char** argv) {
               "single_pipeline=%d single_pipeline_ntile_128=%d "
               "single_pipeline_wide_mma=%d "
               "single_pipeline_split_tma=%d single_pipeline_interleave_pipes=%d "
-              "wide_b_tma=%d repeat_b_broadcast=%d "
+              "wide_b_tma=%d repeat_b_broadcast=%d repeat_a=%d repeat_b=%d "
               "input_init=%s formula_scale=%g "
               "persistent_ctas=%d "
               "persistent_kernel=%d "
@@ -3645,7 +3740,8 @@ int main(int argc, char** argv) {
               "persistent_macro=%dx%d persistent_8k_macro=%dx%d "
               "persistent_32k_macro=%dx%d "
               "persistent_order_local_m_fast=%d macro_n_fast=%d "
-              "persistent_static_scheduler=%d fused_cstore_staging=%d "
+              "persistent_static_scheduler=%d persistent_wave=%dx%d "
+              "fused_cstore_staging=%d "
               "elide_dense_sink=%d epilogue_mode=%d epilogue_warps=%d "
               "store_mode=%s c_type=%s\n",
               kCtaM, kCtaN, kStageK, kStages, kPipes,
@@ -3682,16 +3778,22 @@ int main(int argc, char** argv) {
               kSinglePipelineWideMma, kSinglePipelineSplitTma,
               kSinglePipelineInterleavePipes,
               GEMM_WIDE_B_TMA, static_cast<int>(kRepeatBBroadcast),
+              static_cast<int>(kRepeatAInput),
+              static_cast<int>(kRepeatBInput),
               input_init_mode_name(args.input_init_mode), kFormulaInitScale,
               args.persistent_ctas,
               GEMM_PERSISTENT_CTA,
-              kTmaMulticast ? 2 : 1, GEMM_TMA_MULTICAST_A,
+              GEMM_TMA_MULTICAST_B
+                  ? kBMulticastClusterSize
+                  : (GEMM_TMA_MULTICAST_A ? 2 : 1),
+              GEMM_TMA_MULTICAST_A,
               GEMM_TMA_MULTICAST_B,
               GEMM_PERSISTENT_MACRO_M, GEMM_PERSISTENT_MACRO_N,
               GEMM_PERSISTENT_8K_MACRO_M, GEMM_PERSISTENT_8K_MACRO_N,
               GEMM_PERSISTENT_32K_MACRO_M, GEMM_PERSISTENT_32K_MACRO_N,
               GEMM_PERSISTENT_LOCAL_M_FAST, GEMM_PERSISTENT_MACRO_N_FAST,
               GEMM_PERSISTENT_STATIC_SCHEDULER,
+              GEMM_PERSISTENT_WAVE_M, GEMM_PERSISTENT_WAVE_N,
               GEMM_FUSED_CSTORE_STAGING, GEMM_ELIDE_DENSE_SINK,
               GEMM_EPILOGUE_MODE, kEpilogueWarps,
               store_mode_name(kStoreTma),
