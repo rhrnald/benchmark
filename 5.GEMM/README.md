@@ -903,3 +903,42 @@ Temperature peaked at only 51 C, while median power at 100% utilization was
 disabled reproduced the values, so NVML polling was not responsible for the
 lower 16K result. Full per-process values and logs are in
 `results/gemm_custom_only_single_case_b200_45455808/summary.md`.
+
+### 16K multicast operand, transaction width, K-stage, and epilogue sweep
+
+The selected static 16x16 two-CTA kernel was tested along four optimization
+directions at 16K: multicast A instead of B, merge the two B multicast
+transactions, use K32 with four or five stages, and overlap a dense 128x256
+epilogue using TMEM ping-pong. Every case used BF16 random `[0,1)`, complete
+FP32 C output, 148 persistent CTAs, effective phase shift 0/0, and three
+rotated processes with warmup 1 and five timed launches. All variants passed
+the 512 pattern validation bit-exactly.
+
+| 256x256 mainloop | TFLOP/s | change from selected |
+|---|---:|---:|
+| B multicast, split `64x128`, K64/S3 | **1783.800 +/- 1.301** | baseline |
+| A multicast, `256x64`, K64/S3 | 1730.416 +/- 0.424 | -2.993% |
+| B multicast, wide `64x256`, K64/S3 | 1740.478 +/- 0.338 | -2.429% |
+| B multicast, split, K32/S4 | 1593.331 +/- 0.583 | -10.678% |
+| B multicast, split, K32/S5 | 1664.468 +/- 1.057 | -6.690% |
+| A multicast, K32/S4 | 1544.366 +/- 0.329 | -10.752% vs A K64/S3 |
+| A multicast, K32/S5 | 1646.775 +/- 0.623 | -4.834% vs A K64/S3 |
+
+For the separate dense 128x256 epilogue comparison, serialized TMA store
+measured `1379.437 +/- 4.295 TFLOP/s`; four-warp TMEM ping-pong/direct-store
+overlap measured `1342.131 +/- 1.264 TFLOP/s`, a 2.704% regression.
+
+The selected kernel therefore remains split-B multicast, K64/S3, static
+16x16, and phase shift 0/0. The A direction loses locality and/or favorable
+cluster orientation, wide B loses useful two-producer issue parallelism, and
+K32 pays twice as many stage/barrier epochs. Full conditions, interpretation,
+raw CSVs, validation logs, and source snapshots are in
+`../results/gemm_multicast_pipeline_epilogue_ablation_b200_45481495/`.
+
+Reproduce with:
+
+```bash
+./run_b200_gemm_multicast_pipeline_epilogue_ablation.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm_multicast_pipeline_epilogue_ablation
+```
