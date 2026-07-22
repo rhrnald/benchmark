@@ -749,9 +749,11 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       warp_sinks[warp_id] = acc;
     __syncthreads();
 
-    // Diagnostic upper-bound control: retain the final MMA completion wait and
-    // scheduler/sink work, but omit all TMEM-to-SMEM staging and global C TMA
-    // stores.  This source is not an end-to-end GEMM result.
+    const int global_row_base = tile_m * kCtaM;
+    const int global_col_base = tile_n * kCtaN;
+    store_256x256_float_tile_tma(c_taddr, &c_map, c_store_smem, global_row_base,
+                                 global_col_base);
+    __syncthreads();
 
     if (threadIdx.x == 0) {
       uint32_t tile_sink = tmem_base ^ static_cast<uint32_t>(ktiles);
