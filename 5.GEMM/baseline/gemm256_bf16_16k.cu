@@ -69,6 +69,7 @@ static constexpr int kBProducerPartWords = kBStageWords / kBProducerParts;
 static constexpr int kStageWords = kAStageWords + kBStageWords;
 static constexpr int kAStageBytes =
     kAStageWords * static_cast<int>(sizeof(uint32_t));
+static constexpr int kAProducerPartBytes = kAStageBytes / kMBlocks;
 static constexpr int kBProducerPartBytes =
     kBProducerPartWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kStageBytes =
@@ -99,6 +100,7 @@ static_assert(kMBlocks == 2);
 static_assert(kWideMmaN == 256);
 static_assert(kStageK % (kMmaK * kBProducerParts) == 0);
 static_assert(kBProducerParts * kBProducerPartWords == kBStageWords);
+static_assert(kAProducerPartBytes * kMBlocks == kAStageBytes);
 static_assert(kMmaM % kCStoreChunkM == 0);
 static_assert(kCtaM % kCStoreChunkM == 0);
 static_assert(kCStoreChunkN % kMmaN == 0);
@@ -542,14 +544,15 @@ store_256x256_float_tile_tma(uint32_t tmem_base,
 #endif
 }
 
-__device__ __forceinline__ void issue_a_stage_tma(const CUtensorMap *a_map,
-                                                  uint32_t *a_smem,
-                                                  uint64_t *ready, int tile_m,
-                                                  int ktile) {
-  mbarrier_expect_tx(ready, kAStageBytes);
-  const int a_row = tile_m * kCtaM;
+__device__ __forceinline__ void
+issue_a_producer_part_tma(const CUtensorMap *a_map, uint32_t *a_smem,
+                          uint64_t *ready, int tile_m, int ktile,
+                          int mblock) {
+  mbarrier_expect_tx(ready, kAProducerPartBytes);
+  const int a_row = tile_m * kCtaM + mblock * kMmaM;
   const int a_col_words = ktile * (kStageK / 2);
-  tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
+  uint32_t *a_part_smem = a_smem + mblock * kHalfTileWords;
+  tma_load_2d(a_map, smem_ptr_u32(a_part_smem), ready, a_col_words, a_row);
 }
 
 __device__ __forceinline__ void
@@ -582,7 +585,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   uint32_t *smem = reinterpret_cast<uint32_t *>(smem_addr);
   uint32_t *c_store_smem = smem;
 
-  __shared__ uint64_t a_ready[kStages];
+  __shared__ uint64_t a_ready[kMBlocks][kStages];
   __shared__ uint64_t b_ready[kBProducerParts][kStages];
   __shared__ uint64_t mma_done[kMBlocks][kStages];
   __shared__ uint32_t tmem_smem;
@@ -593,7 +596,10 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   if (threadIdx.x == 0) {
 #pragma unroll
     for (int s = 0; s < kStages; ++s) {
-      mbarrier_init(&a_ready[s], 1);
+#pragma unroll
+      for (int mblock = 0; mblock < kMBlocks; ++mblock) {
+        mbarrier_init(&a_ready[mblock][s], 1);
+      }
 #pragma unroll
       for (int part = 0; part < kBProducerParts; ++part) {
         mbarrier_init(&b_ready[part][s], 1);
@@ -682,7 +688,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
             mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
           }
         }
-        issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
+        issue_a_producer_part_tma(&a_map, a_smem, &a_ready[0][stage], tile_m,
+                                  kt, 0);
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
                                   kt, 1);
       }
@@ -693,6 +700,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
         uint32_t *stage_smem = smem + stage * kStageWords;
+        uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords;
         if (stage_epoch >= kStages) {
           const uint32_t reuse_phase =
@@ -704,6 +712,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         }
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                                   kt, 0);
+        issue_a_producer_part_tma(&a_map, a_smem, &a_ready[1][stage],
+                                  tile_m, kt, 1);
       }
     }
 
@@ -719,7 +729,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords;
 
-        mbarrier_wait(&a_ready[stage], tma_phase);
+        mbarrier_wait(&a_ready[mblock][stage], tma_phase);
         mbarrier_wait(&b_ready[0][stage], tma_phase);
 #pragma unroll
         for (int kk = 0; kk < kBK16PerProducerPart; ++kk) {
@@ -796,7 +806,7 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap *map, void *base,
   const cuuint64_t cols_words = cols_bf16 / 2;
   const cuuint64_t global_dim[2] = {cols_words, rows};
   const cuuint64_t global_stride[1] = {cols_words * sizeof(uint32_t)};
-  const cuuint32_t box_dim[2] = {kStageK / 2, kCtaM};
+  const cuuint32_t box_dim[2] = {kStageK / 2, kMmaM};
   const cuuint32_t elem_stride[2] = {1, 1};
   driver_check(cuTensorMapEncodeTiled(
                    map, CU_TENSOR_MAP_DATA_TYPE_UINT32, 2, base, global_dim,
