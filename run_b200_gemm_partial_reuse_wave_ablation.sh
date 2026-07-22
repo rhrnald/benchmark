@@ -74,8 +74,14 @@ ctas_for() {
 for variant in "${variants[@]}"; do
   binary=$(binary_for "$variant")
   validation_ctas=2
-  if [[ $variant == c4_* ]]; then validation_ctas=4; fi
-  "$out_dir/bin/$binary" --validate --validate-size 512 \
+  validation_size=512
+  if [[ $variant == c4_* ]]; then
+    validation_ctas=4
+    # Four multicast ranks must take the same valid/padded branch.  M=1024
+    # gives four 256-row tiles; M=512 would leave half the cluster out.
+    validation_size=1024
+  fi
+  "$out_dir/bin/$binary" --validate --validate-size "$validation_size" \
     --validate-pattern pattern --persistent-ctas "$validation_ctas" \
     > "$out_dir/validate_${variant}.log" 2>&1
 done
