@@ -89,9 +89,22 @@ means that the experiment did not use the square-size benchmark interface.
 
 All values are TFLOP/s.  The 2026-07-20 `1955.753` same-address result is the
 right historical target for a valid `256x256` repeated-tile pipeline, but it
-has not yet been rerun under the current warmup-1/timed-5/three-process
-standard.  It should therefore be reproduced before using it as a paper
-ablation anchor.
+was originally only one recorded process per case.
+
+It was reproduced on 2026-07-22 under the current warmup-1/timed-5,
+three-process standard:
+
+| variant | 8K | 16K | 32K |
+|---|---:|---:|---:|
+| normal | 1807.666 +/- 0.955 | 1945.916 +/- 2.176 | 1779.193 +/- 4.920 |
+| persistent, 148 CTAs | **1813.887 +/- 0.655** | **1949.590 +/- 1.080** | **1782.437 +/- 2.072** |
+
+The central persistent 16K result is only 0.315% below the historical
+1955.753 value, and 32K is within 0.153%.  Both are reproduced.  The new 8K
+mean is 3.243% below the old single sample, so only the new three-process mean
+should be used for that size.  Both variants passed the 512 pattern validation
+bit-exactly.  Exact artifacts are in
+`../results/gemm256_same_address_repro_b200_45481495/`.
 
 The current `128x256` result is not an apples-to-apples regression from that
 1956 result.  At K=64, a valid `128x256` tile performs 4,194,304 FLOP from
