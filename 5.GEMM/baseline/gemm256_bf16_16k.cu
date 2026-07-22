@@ -287,9 +287,9 @@ __device__ __forceinline__ void tma_store_commit_group() {
 #endif
 }
 
-__device__ __forceinline__ void tma_store_wait_group_read_0() {
+__device__ __forceinline__ void tma_store_wait_group_0() {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  asm volatile("cp.async.bulk.wait_group.read 0;" ::: "memory");
+  asm volatile("cp.async.bulk.wait_group 0;" ::: "memory");
 #endif
 }
 
@@ -484,8 +484,7 @@ issue_float_c_chunk_tma(const uint32_t (&c_taddr)[4], const CUtensorMap *c_map,
                         int row_offset, int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   stage_float_c_chunk(c_taddr, c_smem, chunk_m, chunk_n);
-  // Every writer orders its generic SMEM stores into the async proxy before
-  // the CTA barrier lets thread 0 issue the TMA read.
+  __syncthreads();
   tma_store_fence_shared();
   __syncthreads();
   if (threadIdx.x == 0) {
@@ -523,7 +522,7 @@ store_256x256_float_tile_tma(const uint32_t (&c_taddr)[4],
     }
     if (threadIdx.x == 0) {
       tma_store_commit_group();
-      tma_store_wait_group_read_0();
+      tma_store_wait_group_0();
     }
     __syncthreads();
   }
@@ -754,6 +753,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     const int global_col_base = tile_n * kCtaN;
     store_256x256_float_tile_tma(c_taddr, &c_map, c_store_smem, global_row_base,
                                  global_col_base);
+    __syncthreads();
 
     if (threadIdx.x == 0) {
       uint32_t tile_sink = tmem_base ^ static_cast<uint32_t>(ktiles);
