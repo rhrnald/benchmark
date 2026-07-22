@@ -259,6 +259,28 @@ residency being more important under this traversal.  These are not
 unconditional single-factor effects, and L2/DRAM counters were unavailable;
 record the result as a throughput-based inference, not measured traffic.
 
+## Experiment H: isolated `evict_first` controls (next)
+
+Experiment G's negative symmetric controls are conditional contrasts: adding
+A `evict_first` while B is fixed at `evict_last` cost `19.575%`, whereas
+adding B `evict_first` while A is fixed at `evict_last` cost `1.567%`.
+Because both symmetric endpoints change both operands, they do not establish
+the unconditional single-factor effect.  For a paper-quality ablation, run
+only these three cases:
+
+| Variant | A policy | B policy | Status |
+|---|---|---|---|
+| `baseline` | none | none | pending |
+| `a_first` | evict_first | none | pending |
+| `b_first` | none | evict_first | pending |
+
+Keep every other compile flag and logical memory request identical to
+Experiment G.  Use three cyclic Latin-order process passes so every variant
+occupies each sequence position exactly once, with W1/I5 and exact 512
+validation.  This is a causal diagnostic only: none of these policies can be
+promoted over the already-rejected positive-hint candidates.  Do not extend it
+to other sizes or a full policy cross-product.
+
 ## Decision gates
 
 1. Always validate before timing; discard timing from a failing binary.
@@ -285,6 +307,7 @@ from TFLOP/s alone.
 | 2026-07-22 | `ac71b14` | F: six-pair `order_mn`/`order_nm` confirmation | both GPU checks exact; expanded host coverage passed | paired `+0.077%`, 95% CI `[-0.822%, +0.976%]` | reject promotion; keep `order_mn` |
 | 2026-07-22 | analysis at `2dfb872` | E: K-outer two-full-output capacity audit | source/PTX resource proof; no GPU run | 1024 TMEM columns required, 512 available | close as infeasible; no GPU spend |
 | 2026-07-22 | `1bb691b` | G: A/B TMA eviction-priority sweep | all 5 GPU checks exact; host coverage passed | `a_last` `1771.192 +/- 1.539`, paired `+0.113%`; negative controls `-1.456%`/`-19.552%` | reject promotion; keep no hint |
+| 2026-07-22 | pending definition commit | H: isolated A/B `evict_first` controls | pending | pending | pending |
 
 Round-one artifacts are in
 `../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
@@ -302,7 +325,8 @@ Eviction-priority artifacts are in
 - Cross-CTA phase shifting
 - More multicast, cluster-4, or wide-B variants
 - More K32/K128 or L2-promotion sweeps
-- More TMA eviction-policy sweeps; the best policy missed the effect-size gate
+- More performance-oriented TMA eviction-policy sweeps; the best policy missed
+  the effect-size gate
 - Morton/Z-order and exhaustive group-size search
 - Broad fixed-wave/cohort sweep; the ownership behavior was already tested
 - Stream-K/Split-K
