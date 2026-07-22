@@ -646,8 +646,26 @@ make run-multicast-b SIZES=8192,16384,32768 WARMUP=1 ITERS=5 \
   PERSISTENT_CTAS=148
 ```
 
-The result table and artifact path will be added after B200 validation and
-measurement.
+On B200 instance `45481495`, both variants passed the 512 pattern validation
+bit-exactly. Event throughput is the mean and sample standard deviation of
+three independent processes:
+
+| size | 1-CTA control | 2-CTA B multicast | change |
+|---:|---:|---:|---:|
+| 8K | 1716.333 +/- 0.592 | 1663.976 +/- 2.356 | -3.051% |
+| 16K | 1780.809 +/- 0.799 | 1771.340 +/- 0.639 | -0.532% |
+| 32K | 1590.538 +/- 7.000 | **1633.041 +/- 3.877** | **+2.672%** |
+
+Thus the 25% reduction in pair-level A+B input payload is useful only at 32K
+in this first implementation. At 8K the selected M-fast schedule already
+keeps B hot in L2 and the short kernel exposes cluster/pair synchronization
+overhead; at 16K the two effects nearly balance. At 32K, where the moving
+working set creates more L2/DRAM pressure, multicast gives a stable 2.67%
+gain. A two-CTA clustered non-multicast control is still needed to split the
+cluster/scheduler overhead from the traffic-saving benefit itself.
+
+Raw CSVs, validation logs, source snapshots, hashes, and the full analysis are
+in `../results/gemm256_tma_multicast_b_b200_45481495/`.
 
 ### Persistent TMEM epilogue overlap, CTA `128x256` (2026-07-22)
 
