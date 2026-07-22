@@ -74,6 +74,13 @@
 #define GEMM_PERSISTENT_CLUSTER_N_FAST 0
 #endif
 
+// Hybrid form of cluster-N-fast: visit this many adjacent N tiles for one M
+// pair, then move to the next M pair.  A value of 1 reproduces cluster-level
+// M-fast order; the full macro N reproduces cluster-N-fast order.
+#ifndef GEMM_PERSISTENT_CLUSTER_N_GROUP
+#define GEMM_PERSISTENT_CLUSTER_N_GROUP 0
+#endif
+
 // Optional explicit wave.  Unlike a clipped edge macroblock, every wave has
 // a fixed padded extent, so a 144-CTA launch advances one whole 16x9 or 12x12
 // locality window at a time.
@@ -453,6 +460,10 @@ static constexpr bool kExplicitPersistentWave =
     GEMM_PERSISTENT_WAVE_M > 0 && GEMM_PERSISTENT_WAVE_N > 0;
 static constexpr bool kPersistentClusterNFast =
     GEMM_PERSISTENT_CLUSTER_N_FAST != 0;
+static constexpr int kPersistentClusterNGroup =
+    GEMM_PERSISTENT_CLUSTER_N_GROUP;
+static constexpr bool kPersistentClusterGrouped =
+    kPersistentClusterNFast || kPersistentClusterNGroup > 0;
 static constexpr int kPersistentWaveM =
     kExplicitPersistentWave ? GEMM_PERSISTENT_WAVE_M : 1;
 static constexpr int kPersistentWaveN =
@@ -568,13 +579,20 @@ static_assert(!kExplicitPersistentWave || GEMM_PERSISTENT_CTA,
               "an explicit wave requires persistent CTAs");
 static_assert(!kExplicitPersistentWave || GEMM_PERSISTENT_STATIC_SCHEDULER,
               "an explicit wave requires the static scheduler");
-static_assert(!kPersistentClusterNFast || GEMM_TMA_MULTICAST_B,
-              "cluster-N-fast order requires B multicast");
-static_assert(!kPersistentClusterNFast || GEMM_PERSISTENT_CTA,
-              "cluster-N-fast order requires persistent CTAs");
-static_assert(!kPersistentClusterNFast ||
+static_assert(!kPersistentClusterGrouped || GEMM_TMA_MULTICAST_B,
+              "cluster-grouped order requires B multicast");
+static_assert(!kPersistentClusterGrouped || GEMM_PERSISTENT_CTA,
+              "cluster-grouped order requires persistent CTAs");
+static_assert(kPersistentClusterNGroup >= 0,
+              "cluster N group must be nonnegative");
+static_assert(!kPersistentClusterGrouped ||
                   GEMM_PERSISTENT_MACRO_M % kBMulticastClusterSize == 0,
-              "cluster-N-fast order requires cluster-aligned macro M");
+              "cluster-grouped order requires cluster-aligned macro M");
+static_assert(kPersistentClusterNGroup == 0 ||
+                  GEMM_PERSISTENT_MACRO_N % kPersistentClusterNGroup == 0,
+              "cluster N group must divide macro N");
+static_assert(kPersistentClusterNGroup == 0 || !kExplicitPersistentWave,
+              "explicit waves currently use only full cluster-N-fast order");
 static_assert(!GEMM_TMA_MULTICAST_B ||
                   (kBMulticastClusterSize == 2 ||
                    kBMulticastClusterSize == 4),
@@ -1954,17 +1972,25 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                                 : macro_id % persistent_groups_m;
         const int local_cluster = local / kBMulticastClusterSize;
         const int local_rank = local % kBMulticastClusterSize;
-        const int local_m = kPersistentClusterNFast
-            ? (local_cluster / persistent_macro_n) *
-                      kBMulticastClusterSize +
-                  local_rank
+        const int cluster_n_group = kPersistentClusterNFast
+            ? persistent_macro_n
+            : (kPersistentClusterNGroup > 0 ? kPersistentClusterNGroup : 1);
+        const int clusters_m = persistent_macro_m / kBMulticastClusterSize;
+        const int cluster_group_tiles = clusters_m * cluster_n_group;
+        const int cluster_group_n = local_cluster / cluster_group_tiles;
+        const int cluster_group_local =
+            local_cluster - cluster_group_n * cluster_group_tiles;
+        const int local_m = kPersistentClusterGrouped
+            ? (cluster_group_local / cluster_n_group) *
+                      kBMulticastClusterSize + local_rank
             : (GEMM_TMA_MULTICAST_A
                    ? local / persistent_macro_n
                    : (GEMM_PERSISTENT_LOCAL_M_FAST
                           ? local % persistent_macro_m
                           : local / persistent_macro_n));
-        const int local_n = kPersistentClusterNFast
-            ? local_cluster % persistent_macro_n
+        const int local_n = kPersistentClusterGrouped
+            ? cluster_group_n * cluster_n_group +
+                  cluster_group_local % cluster_n_group
             : (GEMM_TMA_MULTICAST_A
                    ? local % persistent_macro_n
                    : (GEMM_PERSISTENT_LOCAL_M_FAST
@@ -3774,7 +3800,7 @@ int main(int argc, char** argv) {
               "persistent_macro=%dx%d persistent_8k_macro=%dx%d "
               "persistent_32k_macro=%dx%d "
               "persistent_order_local_m_fast=%d macro_n_fast=%d "
-              "cluster_n_fast=%d "
+              "cluster_n_fast=%d cluster_n_group=%d "
               "persistent_static_scheduler=%d persistent_wave=%dx%d "
               "fused_cstore_staging=%d "
               "elide_dense_sink=%d epilogue_mode=%d epilogue_warps=%d "
@@ -3828,6 +3854,7 @@ int main(int argc, char** argv) {
               GEMM_PERSISTENT_32K_MACRO_M, GEMM_PERSISTENT_32K_MACRO_N,
               GEMM_PERSISTENT_LOCAL_M_FAST, GEMM_PERSISTENT_MACRO_N_FAST,
               GEMM_PERSISTENT_CLUSTER_N_FAST,
+              GEMM_PERSISTENT_CLUSTER_N_GROUP,
               GEMM_PERSISTENT_STATIC_SCHEDULER,
               GEMM_PERSISTENT_WAVE_M, GEMM_PERSISTENT_WAVE_N,
               GEMM_FUSED_CSTORE_STAGING, GEMM_ELIDE_DENSE_SINK,
