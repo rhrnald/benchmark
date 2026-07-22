@@ -8,6 +8,8 @@ REPEAT_TARGET := gemm256_tma_tcgen05_repeat
 L2_TARGET := gemm256_tma_tcgen05_l2
 PERSISTENT_TARGET := gemm256_tma_tcgen05_persistent
 MULTICAST_B_TARGET := gemm256_tma_tcgen05_multicast_b
+MULTICAST_A_TARGET := gemm256_tma_tcgen05_multicast_a
+MULTICAST_B_WIDE_TARGET := gemm256_tma_tcgen05_multicast_b_wide
 PERSISTENT_1777_TARGET := gemm256_tma_tcgen05_persistent_1777
 REPEAT_128X256_TARGET := gemm128x256_tma_tcgen05_repeat_broadcast
 TRACE_TARGET := gemm256_tma_tcgen05_trace
@@ -54,7 +56,7 @@ REPEAT_128X256_FLAGS := \
 	-DGEMM_PERSISTENT_32K_MACRO_M=8 -DGEMM_PERSISTENT_32K_MACRO_N=18 \
 	-DGEMM_PERSISTENT_LOCAL_M_FAST=1 -DGEMM_PERSISTENT_MACRO_N_FAST=1
 
-.PHONY: all build build-repeat build-repeat-128x256 build-l2 build-persistent build-multicast-b build-persistent-1777 run run-repeat run-repeat-128x256 run-l2 run-persistent run-multicast-b run-persistent-1777 plot clean
+.PHONY: all build build-repeat build-repeat-128x256 build-l2 build-persistent build-multicast-a build-multicast-b build-multicast-b-wide build-persistent-1777 run run-repeat run-repeat-128x256 run-l2 run-persistent run-multicast-a run-multicast-b run-multicast-b-wide run-persistent-1777 plot clean
 
 all: build-persistent
 
@@ -90,6 +92,21 @@ $(MULTICAST_B_TARGET): $(SRC) Makefile
 
 build-multicast-b: $(MULTICAST_B_TARGET)
 
+$(MULTICAST_A_TARGET): $(SRC) Makefile
+	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(PERSISTENT_CONFIG_FLAGS) \
+		-DGEMM_TMA_MULTICAST_A=1 -DGEMM_PERSISTENT_STATIC_SCHEDULER=1 \
+		$(GPU_ARCHS) $< -lcuda -o $@
+
+build-multicast-a: $(MULTICAST_A_TARGET)
+
+$(MULTICAST_B_WIDE_TARGET): $(SRC) Makefile
+	$(NVCC) $(CXXFLAGS) $(EXTRA_NVCCFLAGS) $(PERSISTENT_CONFIG_FLAGS) \
+		-DGEMM_TMA_MULTICAST_B=1 -DGEMM_WIDE_B_TMA=1 \
+		-DGEMM_PERSISTENT_STATIC_SCHEDULER=1 \
+		$(GPU_ARCHS) $< -lcuda -o $@
+
+build-multicast-b-wide: $(MULTICAST_B_WIDE_TARGET)
+
 # Freeze the scheduler configuration that produced 1777.128 TFLOP/s at 16K
 # on Vast.ai instance 45378714.  Keep this target separate from subsequent L2
 # tuning so future default changes do not silently alter the paper baseline.
@@ -120,6 +137,12 @@ run-persistent: $(PERSISTENT_TARGET)
 run-multicast-b: $(MULTICAST_B_TARGET)
 	./$(MULTICAST_B_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --persistent-ctas $(PERSISTENT_CTAS) --csv gemm256_tma_tcgen05_multicast_b.csv
 
+run-multicast-a: $(MULTICAST_A_TARGET)
+	./$(MULTICAST_A_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --persistent-ctas $(PERSISTENT_CTAS) --csv gemm256_tma_tcgen05_multicast_a.csv
+
+run-multicast-b-wide: $(MULTICAST_B_WIDE_TARGET)
+	./$(MULTICAST_B_WIDE_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --persistent-ctas $(PERSISTENT_CTAS) --csv gemm256_tma_tcgen05_multicast_b_wide.csv
+
 run-persistent-1777: $(PERSISTENT_1777_TARGET)
 	./$(PERSISTENT_1777_TARGET) --device $(DEVICE) --sizes $(SIZES) --warmup $(WARMUP) --iters $(ITERS) --input-init random --persistent-ctas $(PERSISTENT_CTAS) --csv gemm256_tma_tcgen05_persistent_1777.csv
 
@@ -129,4 +152,4 @@ plot: $(TRACE_TARGET)
 	$(PYTHON) plot_gemm_trace.py --trace $(TRACE_CSV) --svg $(TRACE_SVG) --title "$(TRACE_TITLE)"
 
 clean:
-	rm -f $(TARGET) $(REPEAT_TARGET) $(REPEAT_128X256_TARGET) $(L2_TARGET) $(PERSISTENT_TARGET) $(MULTICAST_B_TARGET) $(PERSISTENT_1777_TARGET) $(TRACE_TARGET) *.csv
+	rm -f $(TARGET) $(REPEAT_TARGET) $(REPEAT_128X256_TARGET) $(L2_TARGET) $(PERSISTENT_TARGET) $(MULTICAST_A_TARGET) $(MULTICAST_B_TARGET) $(MULTICAST_B_WIDE_TARGET) $(PERSISTENT_1777_TARGET) $(TRACE_TARGET) *.csv

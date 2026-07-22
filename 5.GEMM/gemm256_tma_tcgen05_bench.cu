@@ -39,6 +39,14 @@
 #define GEMM_TMA_MULTICAST_B 0
 #endif
 
+// Two CTAs share the same M tile and rank 0 multicasts each A stage.  This is
+// the N-direction counterpart to GEMM_TMA_MULTICAST_B: it transfers the same
+// 32-KiB payload per CTA pair with one A transaction instead of two 128-wide
+// B transactions.
+#ifndef GEMM_TMA_MULTICAST_A
+#define GEMM_TMA_MULTICAST_A 0
+#endif
+
 // Optional persistent/epilogue ablations.  Keep these independent so each
 // fixed-cost optimization can be measured against the recovered baseline.
 #ifndef GEMM_PERSISTENT_STATIC_SCHEDULER
@@ -405,6 +413,8 @@ static constexpr int kStages = GEMM_STAGES;
 static constexpr int kPipes = kCtaN / kMmaN;
 static constexpr int kMBlocks = kCtaM / kMmaM;
 static constexpr bool kRepeatBBroadcast = GEMM_REPEAT_B_BROADCAST != 0;
+static constexpr bool kTmaMulticast =
+    GEMM_TMA_MULTICAST_A != 0 || GEMM_TMA_MULTICAST_B != 0;
 static_assert(GEMM_EPILOGUE_MODE >= 0 && GEMM_EPILOGUE_MODE <= 2,
               "GEMM_EPILOGUE_MODE must be 0, 1, or 2");
 static_assert(GEMM_EPILOGUE_MODE != 2 || GEMM_EPILOGUE_WARPS == 4,
@@ -505,14 +515,25 @@ static constexpr int kTuningTag32K = 32;
 
 static_assert(kCtaM == 128 || kCtaM == 256);
 static_assert(kCtaM % kMmaM == 0);
+static_assert(!(GEMM_TMA_MULTICAST_A && GEMM_TMA_MULTICAST_B),
+              "select at most one multicast operand");
+static_assert(!GEMM_TMA_MULTICAST_A || GEMM_PERSISTENT_CTA,
+              "A multicast requires the paired persistent scheduler");
+static_assert(!GEMM_TMA_MULTICAST_A || GEMM_CTA_M == 256,
+              "the A multicast ablation targets the 256x256 CTA");
+static_assert(!GEMM_TMA_MULTICAST_A || GEMM_REPEAT_INPUT == 0,
+              "A multicast is a dense-address GEMM ablation");
+static_assert(!GEMM_TMA_MULTICAST_A ||
+                  (GEMM_PERSISTENT_MACRO_N % 2 == 0 &&
+                   GEMM_PERSISTENT_8K_MACRO_N % 2 == 0 &&
+                   GEMM_PERSISTENT_32K_MACRO_N % 2 == 0),
+              "A-paired scheduling requires even N macro sizes");
 static_assert(!GEMM_TMA_MULTICAST_B || GEMM_PERSISTENT_CTA,
               "B multicast requires the paired persistent scheduler");
 static_assert(!GEMM_TMA_MULTICAST_B || GEMM_CTA_M == 256,
               "the first multicast ablation targets the 256x256 CTA");
 static_assert(!GEMM_TMA_MULTICAST_B || GEMM_SINGLE_PIPELINE == 0,
               "B multicast currently requires the two-issuer pipeline");
-static_assert(!GEMM_TMA_MULTICAST_B || GEMM_WIDE_B_TMA == 0,
-              "B multicast currently uses two 128-wide B transactions");
 static_assert(!GEMM_TMA_MULTICAST_B || GEMM_REPEAT_B_BROADCAST == 0,
               "B multicast is a dense-address GEMM ablation");
 static_assert(!GEMM_TMA_MULTICAST_B ||
@@ -924,6 +945,33 @@ __device__ __forceinline__ void tma_load_4d_multicast(
   (void)c1;
   (void)c2;
   (void)c3;
+#endif
+}
+
+__device__ __forceinline__ void tma_load_2d_multicast(
+    const CUtensorMap* map,
+    uint32_t dst_smem,
+    uint64_t* barrier,
+    uint16_t multicast_mask,
+    int c,
+    int r) {
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
+  const uint32_t bar = smem_ptr_u32(barrier);
+  asm volatile(
+      "cp.async.bulk.tensor.2d.shared::cluster.global.tile."
+      "mbarrier::complete_tx::bytes.multicast::cluster"
+      " [%0], [%1, {%4, %5}], [%2], %3;"
+      :
+      : "r"(dst_smem), "l"(map), "r"(bar), "h"(multicast_mask),
+        "r"(c), "r"(r)
+      : "memory");
+#else
+  (void)map;
+  (void)dst_smem;
+  (void)barrier;
+  (void)multicast_mask;
+  (void)c;
+  (void)r;
 #endif
 }
 
@@ -1509,6 +1557,34 @@ __device__ __forceinline__ void issue_b_pipe_stage_tma_multicast(
                         b_col_words, 0, 0, b_k16);
 }
 
+__device__ __forceinline__ void issue_a_stage_tma_multicast(
+    const CUtensorMap* a_map,
+    uint32_t* a_smem,
+    uint64_t* ready,
+    int tile_m,
+    int ktile) {
+  mbarrier_arrive_expect_tx_remote(ready, kAStageBytes, 0);
+  mbarrier_arrive_expect_tx_remote(ready, kAStageBytes, 1);
+  const int a_col_words = ktile * (kStageK / 2);
+  const int a_row = tile_m * kCtaM;
+  tma_load_2d_multicast(a_map, smem_ptr_u32(a_smem), ready, 0x3u,
+                        a_col_words, a_row);
+}
+
+__device__ __forceinline__ void issue_b_stage_tma_multicast(
+    const CUtensorMap* b_map,
+    uint32_t* b_smem,
+    uint64_t* ready,
+    int tile_n,
+    int ktile) {
+  mbarrier_arrive_expect_tx_remote(ready, kBStageBytes, 0);
+  mbarrier_arrive_expect_tx_remote(ready, kBStageBytes, 1);
+  const int b_col_words = tile_n * (kCtaN / 2);
+  const int b_k16 = ktile * (kStageK / kMmaK);
+  tma_load_4d_multicast(b_map, smem_ptr_u32(b_smem), ready, 0x3u,
+                        b_col_words, 0, 0, b_k16);
+}
+
 __device__ __forceinline__ void issue_b_stage_tma(
     const CUtensorMap* b_map,
     uint32_t* b_smem,
@@ -1536,6 +1612,8 @@ __device__ __forceinline__ void issue_b_stage_tma(
 
 #if GEMM_TMA_MULTICAST_B
 #define GEMM_CLUSTER_ATTRIBUTE __cluster_dims__(2, 1, 1)
+#elif GEMM_TMA_MULTICAST_A
+#define GEMM_CLUSTER_ATTRIBUTE __cluster_dims__(1, 2, 1)
 #else
 #define GEMM_CLUSTER_ATTRIBUTE
 #endif
@@ -1587,6 +1665,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   __shared__ uint64_t a_ready[kStages];
   __shared__ uint64_t b_ready[kPipes][kStages];
   __shared__ uint64_t mma_done[kPipes][kStages];
+  __shared__ uint64_t a_reuse_ready[kStages];
   __shared__ uint64_t b_reuse_ready[kPipes][kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
@@ -1595,7 +1674,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   __shared__ int persistent_task_shared;
 
   auto cluster = cooperative_groups::this_cluster();
-#if GEMM_TMA_MULTICAST_B
+#if GEMM_TMA_MULTICAST_A || GEMM_TMA_MULTICAST_B
   const uint32_t cluster_rank = cluster.block_rank();
 #else
   constexpr uint32_t cluster_rank = 0;
@@ -1605,6 +1684,9 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 #pragma unroll
     for (int s = 0; s < kStages; ++s) {
       mbarrier_init(&a_ready[s], 1);
+      if constexpr (GEMM_TMA_MULTICAST_A) {
+        mbarrier_init(&a_reuse_ready[s], 2);
+      }
 #pragma unroll
       for (int p = 0; p < kPipes; ++p) {
         mbarrier_init(&b_ready[p][s], 1);
@@ -1615,7 +1697,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 #pragma unroll
       for (int s = 0; s < kStages; ++s) {
         mbarrier_init(&mma_done[p][s], 1);
-        if constexpr (GEMM_TMA_MULTICAST_B) {
+        if constexpr (kTmaMulticast) {
           mbarrier_init(&b_reuse_ready[p][s], 2);
         }
       }
@@ -1624,7 +1706,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
   __syncthreads();
-#if GEMM_TMA_MULTICAST_B
+#if GEMM_TMA_MULTICAST_A || GEMM_TMA_MULTICAST_B
   // Remote mbarrier operations and multicast may begin only after every CTA
   // in the cluster has published its barrier initialization.
   cluster.sync();
@@ -1656,9 +1738,14 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   // This preserves locality even when persistent CTAs progress at different
   // rates; the former blockIdx + iteration * gridDim schedule did not.
   const int total_tiles = mtile_count * ntile_count;
+#if GEMM_TMA_MULTICAST_A
+  const int linear_block = static_cast<int>(blockIdx.x) * 2 +
+                           static_cast<int>(cluster_rank);
+#else
   const int linear_block = static_cast<int>(blockIdx.y) *
                                static_cast<int>(gridDim.x) +
                            static_cast<int>(blockIdx.x);
+#endif
   const bool persistent_8k =
       GEMM_DENSE_L2_TUNING && mtile_count == 8192 / kCtaM &&
       ntile_count == 8192 / kCtaN;
@@ -1701,9 +1788,9 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
                       task_iter * static_cast<int>(gridDim.x * gridDim.y);
         ++task_iter;
       } else {
-        if constexpr (GEMM_TMA_MULTICAST_B) {
-          // One atomic allocation per cluster.  Rank 0/1 receive consecutive
-          // M-fast tasks, hence the same N tile and two adjacent M tiles.
+        if constexpr (kTmaMulticast) {
+          // One atomic allocation per cluster.  Consecutive tasks are mapped
+          // M-fast for B multicast and N-fast for A multicast.
           cluster.sync();
           if (threadIdx.x == 0 && cluster_rank == 0) {
             persistent_task_shared =
@@ -1738,12 +1825,16 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       const int macro_m = GEMM_PERSISTENT_MACRO_N_FAST
                               ? macro_id / persistent_groups_n
                               : macro_id % persistent_groups_m;
-      const int local_m = GEMM_PERSISTENT_LOCAL_M_FAST
-                              ? local % persistent_macro_m
-                              : local / persistent_macro_n;
-      const int local_n = GEMM_PERSISTENT_LOCAL_M_FAST
-                              ? local / persistent_macro_m
-                              : local % persistent_macro_n;
+      const int local_m = GEMM_TMA_MULTICAST_A
+                              ? local / persistent_macro_n
+                              : (GEMM_PERSISTENT_LOCAL_M_FAST
+                                     ? local % persistent_macro_m
+                                     : local / persistent_macro_n);
+      const int local_n = GEMM_TMA_MULTICAST_A
+                              ? local % persistent_macro_n
+                              : (GEMM_PERSISTENT_LOCAL_M_FAST
+                                     ? local / persistent_macro_m
+                                     : local % persistent_macro_n);
       tile_m = macro_m * persistent_macro_m + local_m;
       tile_n = macro_n * persistent_macro_n + local_n;
       // Only edge macroblocks can contain padded tasks.  They consume no
@@ -1821,6 +1912,14 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         for (int p = 0; p < kPipes; ++p) {
           mbarrier_wait(&mma_done[p][stage], reuse_phase);
         }
+        if constexpr (GEMM_TMA_MULTICAST_A) {
+          // A is consumed by both local MMA pipes.  Each CTA reports only
+          // after both commits complete; rank 0 then owns the next overwrite.
+          mbarrier_arrive_remote(&a_reuse_ready[stage], 0);
+          if (cluster_rank == 0) {
+            mbarrier_wait(&a_reuse_ready[stage], reuse_phase);
+          }
+        }
         if constexpr (GEMM_TMA_MULTICAST_B) {
           // Both consumers report that pipe 0 no longer reads this stage.
           // Rank 0 waits locally before it overwrites both CTA destinations.
@@ -1835,11 +1934,24 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
       const int source_m = GEMM_REPEAT_INPUT ? 0 : tile_m;
       const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
       const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
-      issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], source_m, source_kt);
+      if constexpr (GEMM_TMA_MULTICAST_A) {
+        if (cluster_rank == 0) {
+          issue_a_stage_tma_multicast(&a_map, a_smem, &a_ready[stage],
+                                      source_m, source_kt);
+        }
+      } else {
+        issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], source_m,
+                          source_kt);
+      }
       if constexpr (GEMM_TMA_MULTICAST_B) {
         if (cluster_rank == 0) {
-          issue_b_pipe_stage_tma_multicast(
-              &b_map, b_smem, &b_ready[0][stage], source_n, source_kt, 0);
+          if constexpr (GEMM_WIDE_B_TMA) {
+            issue_b_stage_tma_multicast(
+                &b_map, b_smem, &b_ready[0][stage], source_n, source_kt);
+          } else {
+            issue_b_pipe_stage_tma_multicast(
+                &b_map, b_smem, &b_ready[0][stage], source_n, source_kt, 0);
+          }
         }
       } else if constexpr ((SinglePipeline != 0 && kSinglePipelineWideMma != 0) ||
                     GEMM_WIDE_B_TMA != 0) {
@@ -1885,7 +1997,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
           const uint32_t reuse_phase = static_cast<uint32_t>(
               ((stage_epoch - kStages) / kStages) & 1);
           mbarrier_wait(&mma_done[1][stage], reuse_phase);
-          if constexpr (GEMM_TMA_MULTICAST_B) {
+          if constexpr (GEMM_TMA_MULTICAST_B && !GEMM_WIDE_B_TMA) {
             mbarrier_arrive_remote(&b_reuse_ready[1][stage], 0);
             if (cluster_rank == 0) {
               mbarrier_wait(&b_reuse_ready[1][stage], reuse_phase);
@@ -1894,7 +2006,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         }
         const int source_n = GEMM_REPEAT_INPUT ? 0 : tile_n;
         const int source_kt = GEMM_REPEAT_INPUT ? 0 : kt;
-        if constexpr (GEMM_TMA_MULTICAST_B) {
+        if constexpr (GEMM_TMA_MULTICAST_B && !GEMM_WIDE_B_TMA) {
           if (cluster_rank == 0) {
             issue_b_pipe_stage_tma_multicast(
                 &b_map, b_smem, &b_ready[1][stage], source_n, source_kt, 1);
@@ -3013,12 +3125,13 @@ CaseResult run_case(int size,
   dim3 grid = launch_grid(mtile, ntile, tuning);
   if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
     int launch_ctas = std::min(persistent_ctas, ctas);
-    if (GEMM_TMA_MULTICAST_B) launch_ctas &= ~1;
+    if (kTmaMulticast) launch_ctas &= ~1;
     if (launch_ctas <= 0) {
-      std::fprintf(stderr, "B multicast requires at least two launch CTAs\n");
+      std::fprintf(stderr, "multicast requires at least two launch CTAs\n");
       std::exit(EXIT_FAILURE);
     }
-    grid = dim3(launch_ctas, 1, 1);
+    grid = GEMM_TMA_MULTICAST_A ? dim3(launch_ctas / 2, 2, 1)
+                                : dim3(launch_ctas, 1, 1);
   }
   dim3 block(kThreads, 1, 1);
   auto launch_gemm = [&]() {
@@ -3223,12 +3336,13 @@ ValidateResult run_validation(int size,
   dim3 grid = launch_grid(mtile, ntile, tuning);
   if (GEMM_PERSISTENT_CTA && persistent_ctas > 0) {
     int launch_ctas = std::min(persistent_ctas, ctas);
-    if (GEMM_TMA_MULTICAST_B) launch_ctas &= ~1;
+    if (kTmaMulticast) launch_ctas &= ~1;
     if (launch_ctas <= 0) {
-      std::fprintf(stderr, "B multicast requires at least two launch CTAs\n");
+      std::fprintf(stderr, "multicast requires at least two launch CTAs\n");
       std::exit(EXIT_FAILURE);
     }
-    grid = dim3(launch_ctas, 1, 1);
+    grid = GEMM_TMA_MULTICAST_A ? dim3(launch_ctas / 2, 2, 1)
+                                : dim3(launch_ctas, 1, 1);
   }
   dim3 block(kThreads, 1, 1);
   launch_gemm_kernel(tuning, grid, block, a_map, b_map, c_map, d_sink, d_c,
@@ -3508,7 +3622,7 @@ int main(int argc, char** argv) {
               "input_init=%s formula_scale=%g "
               "persistent_ctas=%d "
               "persistent_kernel=%d "
-              "cluster_size=%d tma_multicast_b=%d "
+              "cluster_size=%d tma_multicast_a=%d tma_multicast_b=%d "
               "persistent_macro=%dx%d persistent_8k_macro=%dx%d "
               "persistent_32k_macro=%dx%d "
               "persistent_order_local_m_fast=%d macro_n_fast=%d "
@@ -3552,7 +3666,8 @@ int main(int argc, char** argv) {
               input_init_mode_name(args.input_init_mode), kFormulaInitScale,
               args.persistent_ctas,
               GEMM_PERSISTENT_CTA,
-              GEMM_TMA_MULTICAST_B ? 2 : 1, GEMM_TMA_MULTICAST_B,
+              kTmaMulticast ? 2 : 1, GEMM_TMA_MULTICAST_A,
+              GEMM_TMA_MULTICAST_B,
               GEMM_PERSISTENT_MACRO_M, GEMM_PERSISTENT_MACRO_N,
               GEMM_PERSISTENT_8K_MACRO_M, GEMM_PERSISTENT_8K_MACRO_N,
               GEMM_PERSISTENT_32K_MACRO_M, GEMM_PERSISTENT_32K_MACRO_N,
