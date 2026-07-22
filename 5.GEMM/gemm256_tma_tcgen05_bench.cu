@@ -136,6 +136,18 @@
 #define GEMM_PERSISTENT_MACRO_N_FAST 1
 #endif
 
+// Non-multicast dynamic-scheduler ablations.  Snake mode 1 reverses the
+// macro-N traversal on odd macro-M rows; mode 2 reverses local N as well.
+#ifndef GEMM_PERSISTENT_SNAKE_MODE
+#define GEMM_PERSISTENT_SNAKE_MODE 0
+#endif
+
+// Number of consecutive N output tiles owned by one dynamic work item.  The
+// same CTA keeps M fixed while walking the strip; S=1 is the baseline mapping.
+#ifndef GEMM_PERSISTENT_N_STRIP
+#define GEMM_PERSISTENT_N_STRIP 1
+#endif
+
 #ifndef GEMM_SINGLE_PIPELINE
 #define GEMM_SINGLE_PIPELINE 0
 #endif
@@ -462,8 +474,12 @@ static constexpr bool kPersistentClusterNFast =
     GEMM_PERSISTENT_CLUSTER_N_FAST != 0;
 static constexpr int kPersistentClusterNGroup =
     GEMM_PERSISTENT_CLUSTER_N_GROUP;
+static constexpr int kPersistentClusterNGroupDivisor =
+    kPersistentClusterNGroup > 0 ? kPersistentClusterNGroup : 1;
 static constexpr bool kPersistentClusterGrouped =
     kPersistentClusterNFast || kPersistentClusterNGroup > 0;
+static constexpr int kPersistentSnakeMode = GEMM_PERSISTENT_SNAKE_MODE;
+static constexpr int kPersistentNStrip = GEMM_PERSISTENT_N_STRIP;
 static constexpr int kPersistentWaveM =
     kExplicitPersistentWave ? GEMM_PERSISTENT_WAVE_M : 1;
 static constexpr int kPersistentWaveN =
@@ -579,6 +595,28 @@ static_assert(!kExplicitPersistentWave || GEMM_PERSISTENT_CTA,
               "an explicit wave requires persistent CTAs");
 static_assert(!kExplicitPersistentWave || GEMM_PERSISTENT_STATIC_SCHEDULER,
               "an explicit wave requires the static scheduler");
+static_assert(kPersistentSnakeMode >= 0 && kPersistentSnakeMode <= 2,
+              "persistent snake mode must be 0, 1, or 2");
+static_assert(kPersistentSnakeMode == 0 ||
+                  (GEMM_PERSISTENT_CTA &&
+                   !GEMM_PERSISTENT_STATIC_SCHEDULER && !kTmaMulticast &&
+                   !kExplicitPersistentWave &&
+                   GEMM_PERSISTENT_MACRO_N_FAST &&
+                   GEMM_PERSISTENT_LOCAL_M_FAST),
+              "snake ablation requires dynamic non-multicast M-fast/N-fast");
+static_assert(kPersistentNStrip == 1 || kPersistentNStrip == 2 ||
+                  kPersistentNStrip == 4 || kPersistentNStrip == 8,
+              "persistent N strip must be 1, 2, 4, or 8");
+static_assert(kPersistentNStrip == 1 ||
+                  (GEMM_PERSISTENT_CTA &&
+                   !GEMM_PERSISTENT_STATIC_SCHEDULER && !kTmaMulticast &&
+                   !kExplicitPersistentWave &&
+                   GEMM_PERSISTENT_MACRO_N_FAST &&
+                   GEMM_PERSISTENT_LOCAL_M_FAST &&
+                   !kPersistentClusterGrouped),
+              "N strips require dynamic non-multicast M-fast/N-fast");
+static_assert(kPersistentNStrip == 1 || kPersistentSnakeMode == 0,
+              "measure snake and N-strip ownership independently");
 static_assert(!kPersistentClusterGrouped || GEMM_TMA_MULTICAST_B,
               "cluster-grouped order requires B multicast");
 static_assert(!kPersistentClusterGrouped || GEMM_PERSISTENT_CTA,
@@ -589,7 +627,9 @@ static_assert(!kPersistentClusterGrouped ||
                   GEMM_PERSISTENT_MACRO_M % kBMulticastClusterSize == 0,
               "cluster-grouped order requires cluster-aligned macro M");
 static_assert(kPersistentClusterNGroup == 0 ||
-                  GEMM_PERSISTENT_MACRO_N % kPersistentClusterNGroup == 0,
+                  GEMM_PERSISTENT_MACRO_N %
+                          kPersistentClusterNGroupDivisor ==
+                      0,
               "cluster N group must divide macro N");
 static_assert(kPersistentClusterNGroup == 0 || !kExplicitPersistentWave,
               "explicit waves currently use only full cluster-N-fast order");
@@ -1879,6 +1919,10 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const int persistent_groups_n =
       (ntile_count + persistent_macro_n - 1) / persistent_macro_n;
   const int persistent_macro_tiles = persistent_macro_m * persistent_macro_n;
+  const int persistent_macro_strips_n =
+      (persistent_macro_n + kPersistentNStrip - 1) / kPersistentNStrip;
+  const int persistent_macro_work_items =
+      persistent_macro_m * persistent_macro_strips_n;
   const int persistent_wave_groups_m = kExplicitPersistentWave
       ? (mtile_count + kPersistentWaveM - 1) / kPersistentWaveM
       : 1;
@@ -1891,9 +1935,13 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
   const int persistent_task_count = kExplicitPersistentWave
       ? persistent_wave_groups_m * persistent_wave_groups_n *
             persistent_wave_tiles
-      : persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
+      : persistent_groups_m * persistent_groups_n *
+            (kPersistentNStrip > 1 ? persistent_macro_work_items
+                                   : persistent_macro_tiles);
   int tile_iter = 0;
   int task_iter = 0;
+  int active_strip_work = 0;
+  int strip_offset = 0;
   int previous_tile_m = 0;
   int previous_tile_n = 0;
   bool have_previous_tile = false;
@@ -1925,12 +1973,24 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
               cluster.map_shared_rank(&persistent_task_shared, 0);
           linear_tile = *leader_task + static_cast<int>(cluster_rank);
         } else {
-          if (threadIdx.x == 0) {
-            persistent_task_shared =
-                static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+          if constexpr (kPersistentNStrip > 1) {
+            if (strip_offset == 0) {
+              if (threadIdx.x == 0) {
+                persistent_task_shared =
+                    static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+              }
+              __syncthreads();
+              active_strip_work = persistent_task_shared;
+            }
+            linear_tile = active_strip_work;
+          } else {
+            if (threadIdx.x == 0) {
+              persistent_task_shared =
+                  static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+            }
+            __syncthreads();
+            linear_tile = persistent_task_shared;
           }
-          __syncthreads();
-          linear_tile = persistent_task_shared;
         }
       }
       if (linear_tile >= persistent_task_count) break;
@@ -1940,6 +2000,7 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
 
     int tile_m = 0;
     int tile_n = 0;
+    bool tile_in_macro = true;
     if constexpr (GEMM_PERSISTENT_CTA) {
       if constexpr (kExplicitPersistentWave) {
         const int wave_id = linear_tile / persistent_wave_tiles;
@@ -1962,14 +2023,22 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
           tile_n = wave_n * kPersistentWaveN + local / kPersistentWaveM;
         }
       } else {
-        const int macro_id = linear_tile / persistent_macro_tiles;
-        const int local = linear_tile - macro_id * persistent_macro_tiles;
-        const int macro_n = GEMM_PERSISTENT_MACRO_N_FAST
-                                ? macro_id % persistent_groups_n
-                                : macro_id / persistent_groups_m;
+        const int macro_work_items = kPersistentNStrip > 1
+            ? persistent_macro_work_items
+            : persistent_macro_tiles;
+        const int macro_id = linear_tile / macro_work_items;
+        const int local = linear_tile - macro_id * macro_work_items;
+        const int macro_n_sequence = GEMM_PERSISTENT_MACRO_N_FAST
+                                         ? macro_id % persistent_groups_n
+                                         : macro_id / persistent_groups_m;
         const int macro_m = GEMM_PERSISTENT_MACRO_N_FAST
                                 ? macro_id / persistent_groups_n
                                 : macro_id % persistent_groups_m;
+        const bool reverse_n =
+            kPersistentSnakeMode != 0 && ((macro_m & 1) != 0);
+        const int macro_n = reverse_n
+            ? persistent_groups_n - 1 - macro_n_sequence
+            : macro_n_sequence;
         const int local_cluster = local / kBMulticastClusterSize;
         const int local_rank = local % kBMulticastClusterSize;
         const int cluster_n_group = kPersistentClusterNFast
@@ -1980,28 +2049,40 @@ void gemm256_tma_tcgen05_kernel(const __grid_constant__ CUtensorMap a_map,
         const int cluster_group_n = local_cluster / cluster_group_tiles;
         const int cluster_group_local =
             local_cluster - cluster_group_n * cluster_group_tiles;
-        const int local_m = kPersistentClusterGrouped
+        const int local_m = kPersistentNStrip > 1
+            ? local % persistent_macro_m
+            : (kPersistentClusterGrouped
             ? (cluster_group_local / cluster_n_group) *
                       kBMulticastClusterSize + local_rank
             : (GEMM_TMA_MULTICAST_A
                    ? local / persistent_macro_n
                    : (GEMM_PERSISTENT_LOCAL_M_FAST
                           ? local % persistent_macro_m
-                          : local / persistent_macro_n));
-        const int local_n = kPersistentClusterGrouped
+                          : local / persistent_macro_n)));
+        const int local_n_sequence = kPersistentNStrip > 1
+            ? (local / persistent_macro_m) * kPersistentNStrip + strip_offset
+            : (kPersistentClusterGrouped
             ? cluster_group_n * cluster_n_group +
                   cluster_group_local % cluster_n_group
             : (GEMM_TMA_MULTICAST_A
                    ? local % persistent_macro_n
                    : (GEMM_PERSISTENT_LOCAL_M_FAST
                           ? local / persistent_macro_m
-                          : local % persistent_macro_n));
+                          : local % persistent_macro_n)));
+        const int local_n = kPersistentSnakeMode == 2 && reverse_n
+            ? persistent_macro_n - 1 - local_n_sequence
+            : local_n_sequence;
+        tile_in_macro = local_n >= 0 && local_n < persistent_macro_n;
         tile_m = macro_m * persistent_macro_m + local_m;
         tile_n = macro_n * persistent_macro_n + local_n;
       }
+      if constexpr (kPersistentNStrip > 1) {
+        ++strip_offset;
+        if (strip_offset == kPersistentNStrip) strip_offset = 0;
+      }
       // Only edge macroblocks can contain padded tasks.  They consume no
       // barrier epochs, so the next valid tile keeps the expected parity.
-      if (tile_m >= mtile_count || tile_n >= ntile_count) {
+      if (!tile_in_macro || tile_m >= mtile_count || tile_n >= ntile_count) {
         __syncthreads();
         continue;
       }
@@ -3761,7 +3842,9 @@ int main(int argc, char** argv) {
   }
   std::fprintf(csv,
                "size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,launch_ctas,"
-               "warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
+               "warmup,iters,persistent_local_m_fast,persistent_macro_n_fast,"
+               "persistent_snake_mode,persistent_n_strip,"
+               "grid_swizzle,group_m,group_n,pipe1_phase_cycles,"
                "pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,"
                "cstore_swizzle_128b,single_pipeline,single_pipeline_ntile_128,"
                "single_pipeline_wide_mma,single_pipeline_split_tma,"
@@ -3801,6 +3884,7 @@ int main(int argc, char** argv) {
               "persistent_32k_macro=%dx%d "
               "persistent_order_local_m_fast=%d macro_n_fast=%d "
               "cluster_n_fast=%d cluster_n_group=%d "
+              "persistent_snake_mode=%d persistent_n_strip=%d "
               "persistent_static_scheduler=%d persistent_wave=%dx%d "
               "fused_cstore_staging=%d "
               "elide_dense_sink=%d epilogue_mode=%d epilogue_warps=%d "
@@ -3855,6 +3939,7 @@ int main(int argc, char** argv) {
               GEMM_PERSISTENT_LOCAL_M_FAST, GEMM_PERSISTENT_MACRO_N_FAST,
               GEMM_PERSISTENT_CLUSTER_N_FAST,
               GEMM_PERSISTENT_CLUSTER_N_GROUP,
+              GEMM_PERSISTENT_SNAKE_MODE, GEMM_PERSISTENT_N_STRIP,
               GEMM_PERSISTENT_STATIC_SCHEDULER,
               GEMM_PERSISTENT_WAVE_M, GEMM_PERSISTENT_WAVE_N,
               GEMM_FUSED_CSTORE_STAGING, GEMM_ELIDE_DENSE_SINK,
@@ -3889,11 +3974,16 @@ int main(int argc, char** argv) {
                 store_mode_name(r.store_mode), r.event_ms, r.wall_ms,
                 r.event_tflops, r.wall_tflops, r.checksum);
     std::fprintf(csv,
-                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%.6f,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,"
+                 "%d,%d,%d,%d,"
+                 "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,%.6f,"
                  "%.6f,%.3f,%.3f,%08x,%s\n",
                  r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK,
                  r.mtile, r.ntile, r.ktiles, r.ctas, r.launch_ctas,
                  args.warmup, args.iters,
+                 GEMM_PERSISTENT_LOCAL_M_FAST,
+                 GEMM_PERSISTENT_MACRO_N_FAST,
+                 GEMM_PERSISTENT_SNAKE_MODE, GEMM_PERSISTENT_N_STRIP,
                  r.grid_swizzle, r.group_m, r.group_n, r.pipe1_phase_cycles,
                  r.pipe1_tma_phase_cycles, r.pipe1_mma_phase_cycles,
                  r.cstore_swizzle_128b, kSinglePipeline,

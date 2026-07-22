@@ -57,13 +57,13 @@ tile_n   = macro_n * 16 + local / 16
 | Dynamic versus static grid-stride | Dynamic selected; static was `-0.44%` at 16K and much worse at 32K |
 | Local and macro M/N order | Local M-fast plus macro N-fast selected |
 | Macro shapes / worker counts | Broad sweeps completed; 16x16 and 148 workers selected at 16K |
-| K stage / depth | K64/S3 selected; K32/S4/S5 slower; K128 prevents useful multistage buffering for 256x256 |
+| K stage / depth | K64/S3 selected; K32/S4/S5 was slower in the multicast path; K128 multistage infeasibility for 256x256 follows from SMEM capacity |
 | Wide B | One `64x256` TMA was about 3% slower than split `64x128` streams |
 | TMA L2 promotion | 128B/256B promotion was neutral or negative; this is not an eviction-priority test |
 | B multicast | Useful traffic reduction, but did not beat peak non-multicast at 16K |
 | A multicast | Slower than B multicast |
 | Cluster 4 | Large regression |
-| Dedicated epilogue warpgroup | Regression |
+| Dedicated epilogue warpgroup | Regression in the 128x256 path; 256x256 already occupies all four 128x128 TMEM regions |
 | Simple N-first/global-wave ordering | Regression |
 | Cross-CTA phase shift | Explicitly excluded from the current plan |
 | Nsight Compute counters | Unavailable on the rented host due to permission |
@@ -93,7 +93,7 @@ stream, so a large effect is unlikely.
 | Variant | Mapping | Status |
 |---|---|---|
 | `snake_0` | Existing monotonic macro N and local N | pending |
-| `snake_1` | Reverse macro-N order on odd macro-M rows | pending |
+| `snake_1` | Reverse only macro-N order; incomplete/likely-negative decomposition control | pending |
 | `snake_2` | Reverse both macro N and local N on odd macro-M rows | pending |
 
 At 16K, full snake changes the boundary from `(M15,N63)->(M16,N0)` to
@@ -105,6 +105,11 @@ Validation requirements:
 - Existing 512 pattern validation for numerical correctness
 - Host-side mapping test on a 64x64 tile grid: exactly 4096 unique in-range
   coordinates and the expected snake boundary coordinates
+
+The 512 numerical test clips the macro to 2x2 and has only one macro group, so
+it does not execute the odd-row snake branch.  Scheduler permutation/coverage
+is established by the host mapping test; GPU validation establishes that the
+unchanged tile math and store remain correct.
 
 ## Experiment C: dynamic N-strip ownership (primary new hypothesis)
 
@@ -185,6 +190,11 @@ sequential accumulator strategy.
 4. Keep baseline behavior as the compile-time default until a winner passes.
 5. Extend only the winning 16K candidate to 8K/32K; do not spend GPU time on
    a full cross-product at all sizes.
+
+Snake and strip do not change logical TMA count or requested A/B payload
+(`16 MiB` per 16K output tile before cache reuse).  Without profiler
+permission, report L2/HBM traffic as unmeasured and do not infer byte savings
+from TFLOP/s alone.
 
 ## Execution ledger
 
