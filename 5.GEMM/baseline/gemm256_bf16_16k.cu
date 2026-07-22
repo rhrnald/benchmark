@@ -672,8 +672,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         const int stage = stage_epoch % kStages;
         uint32_t *stage_smem = smem + stage * kStageWords;
         uint32_t *a_smem = stage_smem;
-        uint32_t *b_smem =
-            stage_smem + kAStageWords + kBProducerPartWords;
         if (stage_epoch >= kStages) {
           const uint32_t reuse_phase =
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
@@ -683,8 +681,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           }
         }
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
-        issue_b_producer_part_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
-                                  kt, 1);
       }
     }
 
@@ -704,6 +700,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         }
         issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
                                   kt, 0);
+        issue_b_producer_part_tma(&b_map, b_smem + kBProducerPartWords,
+                                  &b_ready[1][stage], tile_n, kt, 1);
       }
     }
 
