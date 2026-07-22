@@ -1,0 +1,7 @@
+pair,position,timestamp,uuid,temp_c,power_w,sm_clock_mhz,gpu_util_pct
+1,before,2026/07/22 12:38:27.752, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 30, 188.14, 1965, 0
+2,before,2026/07/22 12:38:30.004, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 31, 221.24, 1965, 0
+3,before,2026/07/22 12:38:32.228, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 31, 226.99, 1965, 0
+4,before,2026/07/22 12:38:34.501, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 31, 220.49, 1965, 0
+5,before,2026/07/22 12:38:36.782, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 31, 222.67, 1965, 0
+6,before,2026/07/22 12:38:39.044, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 31, 218.76, 1965, 0

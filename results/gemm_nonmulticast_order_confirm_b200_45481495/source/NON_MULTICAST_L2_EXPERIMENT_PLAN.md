@@ -55,7 +55,7 @@ tile_n   = macro_n * 16 + local / 16
 |---|---|
 | Persistent versus normal | Persistent selected |
 | Dynamic versus static grid-stride | Dynamic selected; static was `-0.44%` at 16K and much worse at 32K |
-| Local and macro M/N order | Keep local M-fast plus macro N-fast; the opposite cross-order gained `+0.559%` in round one but only `+0.077%` in the focused confirmation and failed its gate |
+| Local and macro M/N order | Local M-fast plus macro N-fast was the historical selection; round one found local N-fast plus macro M-fast `+0.559%`, pending confirmation |
 | Macro shapes / worker counts | Broad sweeps completed; 16x16 and 148 workers selected at 16K |
 | K stage / depth | K64/S3 selected; K32/S4/S5 was slower in the multicast path; K128 multistage infeasibility for 256x256 follows from SMEM capacity |
 | Wide B | One `64x256` TMA was about 3% slower than split `64x128` streams |
@@ -78,7 +78,7 @@ latest source before introducing new ownership logic.
 | `order_mn` | M-fast | N-fast | complete: `1769.017 +/- 1.387`, paired baseline |
 | `order_mm` | M-fast | M-fast | complete: `1740.880 +/- 0.838` (`-1.590%`) |
 | `order_nn` | N-fast | N-fast | complete: `1756.834 +/- 1.140` (`-0.689%`) |
-| `order_nm` | N-fast | M-fast | round-one candidate: `+0.559%`; confirmation rejected promotion |
+| `order_nm` | N-fast | M-fast | candidate: `1778.907 +/- 2.584` (`+0.559%`) |
 
 Contrary to the initial expectation, `order_nm` won all three paired passes
 by `+0.400%`, `+0.747%`, and `+0.530%`.  The gain is just above the selection
@@ -182,7 +182,7 @@ current 256x256 output already occupies four 128x128 accumulator regions, so
 two simultaneous outputs may require a different CTA shape, staged spill, or
 sequential accumulator strategy.
 
-## Experiment F: focused order confirmation (complete)
+## Experiment F: focused order confirmation (next)
 
 Rerun only the existing default (`order_mn`, local M-fast plus macro N-fast)
 and the round-one candidate (`order_nm`, local N-fast plus macro M-fast).
@@ -196,15 +196,7 @@ paired gain is at least 0.5%, both AB-first and BA-first subgroup means are
 positive, and the two-sided paired 95% confidence interval excludes zero.
 Otherwise retain the current default.  Treat each process-level W1/I5 result
 as one sample, not its five timed launches as five independent observations.
-This confirmation was required before either macro-shape retuning or the
-K-outer redesign.
-
-Result: complete.  The six paired changes were `+0.494%`, `+0.215%`,
-`+0.375%`, `-1.654%`, `+0.469%`, and `+0.565%`.  Their mean was `+0.077%`
-with sample SD `0.857%` and paired 95% interval `[-0.822%, +0.976%]`.
-AB-first and BA-first subgroup means were `-0.230%` and `+0.385%`.  The
-candidate failed the all-positive, 0.5%, both-subgroup, and confidence-interval
-gates.  Keep `order_mn`; do not retune macro shapes for `order_nm`.
+This confirmation precedes both macro-shape retuning and the K-outer redesign.
 
 ## Decision gates
 
@@ -229,15 +221,12 @@ from TFLOP/s alone.
 | Date | Definition commit | Experiment | Validation | Result | Decision |
 |---|---|---|---|---|---|
 | 2026-07-22 | `f669b6f` | A/B/C S=1/2/4 combined first sweep | all 8 GPU checks exact; host coverage passed | `order_nm` `1778.907 +/- 2.584`, `+0.559%` | confirm `order_nm`; reject snake and strip 2/4 |
-| 2026-07-22 | `ac71b14` | F: six-pair `order_mn`/`order_nm` confirmation | both GPU checks exact; expanded host coverage passed | paired `+0.077%`, 95% CI `[-0.822%, +0.976%]` | reject promotion; keep `order_mn` |
+| 2026-07-22 | pending definition commit | F: six-pair `order_mn`/`order_nm` confirmation | pending | pending | pending |
 
 Round-one artifacts are in
 `../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
 payload is invariant; hardware L2/DRAM traffic remains unmeasured because
 performance-counter permission is unavailable.
-
-Focused confirmation artifacts are in
-`../results/gemm_nonmulticast_order_confirm_b200_45481495/`.
 
 ## Deferred / out of scope
 

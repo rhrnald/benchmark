@@ -1083,3 +1083,23 @@ DEFINITION_COMMIT=f669b6f ./run_b200_gemm_nonmulticast_l2_round1.sh \
   /workspace/benchmark/5.GEMM \
   /workspace/gemm_nonmulticast_l2_round1
 ```
+
+The required focused confirmation did not reproduce a selectable 0.5% gain.
+Six adjacent, counterbalanced AB/BA pairs produced:
+
+| pair | `order_mn` | `order_nm` | paired change |
+|---:|---:|---:|---:|
+| 1 | 1773.511 | 1782.280 | +0.494% |
+| 2 | 1776.562 | 1780.378 | +0.215% |
+| 3 | 1771.703 | 1778.346 | +0.375% |
+| 4 | 1773.644 | 1744.313 | -1.654% |
+| 5 | 1770.290 | 1778.597 | +0.469% |
+| 6 | 1773.211 | 1783.224 | +0.565% |
+
+The paired mean was `+0.077% +/- 0.857%`, with a 95% interval of
+`[-0.822%, +0.976%]`.  Five pairs favored `order_nm`, but it failed the
+predeclared all-positive and 0.5% gates; even the non-decisive five-positive
+sensitivity mean was only `+0.424%`.  Keep local M-fast plus macro N-fast as
+the default and do not retune macro shapes for the candidate.  Both binaries
+passed the 512 reference bit-exactly.  Exact confirmation artifacts are in
+`../results/gemm_nonmulticast_order_confirm_b200_45481495/`.
