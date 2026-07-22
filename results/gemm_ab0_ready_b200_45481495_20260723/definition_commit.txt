@@ -1,0 +1,1 @@
+77e8900 Define combined A and B0 readiness barrier

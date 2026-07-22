@@ -152,6 +152,7 @@ warp specialization의 비용을 분리하기 위한 것이다.
 | P0c | CTA phase trace at tile iteration 8 | exact before trace | 184/0 diagnostic | N/A | N/A | C epilogue 3.598% / 3.624% of tile | prioritize E4; defer E5/E6 |
 | E2a | direct TMEM scalar addressing | exact | 174/0 | 1751.903 | 1518.912 | +0.614% / +0.393% (6 pairs, all positive) | adopt as clean working default |
 | E2b | one shared-address conversion per K stage | exact | 174/0 | 1750.583 | 1516.135 | -0.020% / -0.162% vs E2a | reject |
+| E2c | combine A+B0 readiness barrier | exact | 174/0 | 1737.873 | 1491.975 | -0.615% / -1.723% vs macro-free E2a | reject; extra pipe-1 dependency |
 | E4a | two-buffer, per-chunk C-store commit/read wait | exact | 172/0 | 1740.561 | 1512.396 | -0.457% / -0.162% vs macro-free E2a | reject; all pairs negative |
 | E4b | three-buffer, per-chunk C-store commit/read wait | exact | 172/0 | 1739.175 | 1511.237 | -0.503% / -0.235% vs macro-free E2a | reject; all pairs negative |
 | E4c | aligned dynamic-shared declaration / native shared stores | exact | 166/0 | 1735.996 | 1508.330 | -0.713% / -0.380% vs macro-free E2a | reject; all pairs negative |

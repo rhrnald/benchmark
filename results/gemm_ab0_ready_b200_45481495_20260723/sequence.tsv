@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	baseline	ab0_ready
+random	2	ab0_ready	baseline
+random	3	baseline	ab0_ready
+random-signed8	1	ab0_ready	baseline
+random-signed8	2	baseline	ab0_ready
+random-signed8	3	ab0_ready	baseline
