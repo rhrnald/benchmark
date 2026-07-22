@@ -137,6 +137,12 @@ B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
 5. 이후에 epilogue overlap을 다시 검토한다. task prefetch와 producer 역할
    재배치는 profiler 근거가 생길 때까지 보류한다.
 
+E8d에서는 CUTLASS와 같이 모든 `mbarrier.try_wait`에 `0x989680` suspend
+hint를 넣었다. 두 분포의 여섯 pair가 모두 빨랐지만 +0.285%/+0.241%로
+0.5% gate 아래였다. broad 후보는 채택하지 않고, 짧은 consumer readiness
+wait의 wake-up 비용을 분리하기 위해 producer `mma_done` reuse wait에만
+hint를 적용한 E8e를 비교한다.
+
 ## L2/scheduler 실험
 
 비-L2 실험에서 채택된 변경을 합친 뒤 다음을 진행한다.
@@ -194,3 +200,4 @@ B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
 | E8a | shared stage `mma_done`, arrival count 2 | exact, pattern/ones x3 | 170/0 | 1769.467 | 1530.390 | -0.079% / +0.043% vs dual-wide u1 | neutral/reject; producer waits are off critical path |
 | E8b | shared A+B0 readiness, arrival count 2; B1 independent | exact, pattern/ones x3 | 172/0 | 1773.802 | 1529.112 | +0.228% / +0.062% vs dual-wide u1 | neutral; below 0.5% gate, do not adopt |
 | E8c | producer K loops only `unroll 1` | exact, pattern/ones x1 | 172/0 | 1761.532 | 1526.575 | -0.491% / -0.113% vs dual-wide u1 | reject; producer code size is off critical path |
+| E8d | CUTLASS-style suspend hint on all `mbarrier` waits | exact, pattern/ones x1 | 172/0 | 1774.453 | 1534.989 | +0.285% / +0.241% vs dual-wide u1 | neutral; 6/6 positive but below 0.5% gate |

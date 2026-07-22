@@ -1,0 +1,12 @@
+metric dual_wide_clean suspend_all
+instructions 4192 4384
+main_kernel_instructions 1952 2048
+UTCHMMA 4 4
+UTMALDG.2D 7 7
+UTMALDG.4D 14 14
+UTMASTG.4D 4 4
+UTCBAR 1 1
+BAR.SYNC 20 20
+SYNCS.PHASECHK 64 96
+SYNCS.ARRIVE 21 21
+NANOSLEEP.SYNCS 0 32

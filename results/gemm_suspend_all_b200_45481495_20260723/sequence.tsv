@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	dual_wide_clean	suspend_all
+random	2	suspend_all	dual_wide_clean
+random	3	dual_wide_clean	suspend_all
+random-signed8	1	suspend_all	dual_wide_clean
+random-signed8	2	dual_wide_clean	suspend_all
+random-signed8	3	suspend_all	dual_wide_clean
