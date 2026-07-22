@@ -10,12 +10,13 @@
 #include <cstring>
 #include <vector>
 
-// Frozen 16K dense baseline.
+// Clean 16K dense working default.
 //
-// This is a fixed reconstruction of the configuration that produced the
-// preserved 1806.657-TFLOP/s p0 binary.  The exact measured source was not
-// archived, so p0 remains the performance/codegen oracle.  This file removes
-// experiment switches: no command-line -D can silently change the kernel.
+// The original B0 was reconstructed from the configuration that produced the
+// preserved 1806.657-TFLOP/s p0 binary.  This version also retains the measured
+// E2a TMEM-address cleanup.  The exact p0 source was not archived, so p0 remains
+// a performance/codegen oracle.  There are no tuning macros or experiment
+// switches: no command-line -D can silently change the kernel.
 
 void cuda_check(cudaError_t result) {
   if (result != cudaSuccess) {
@@ -354,35 +355,32 @@ __device__ __forceinline__ void tcgen05_wait_ld() {
 #endif
 }
 
-#define TCGEN05_LD_X64_OUTPUTS(a)                                              \
-  "=&r"(a[0]), "=&r"(a[1]), "=&r"(a[2]), "=&r"(a[3]), "=&r"(a[4]),             \
-      "=&r"(a[5]), "=&r"(a[6]), "=&r"(a[7]), "=&r"(a[8]), "=&r"(a[9]),         \
-      "=&r"(a[10]), "=&r"(a[11]), "=&r"(a[12]), "=&r"(a[13]), "=&r"(a[14]),    \
-      "=&r"(a[15]), "=&r"(a[16]), "=&r"(a[17]), "=&r"(a[18]), "=&r"(a[19]),    \
-      "=&r"(a[20]), "=&r"(a[21]), "=&r"(a[22]), "=&r"(a[23]), "=&r"(a[24]),    \
-      "=&r"(a[25]), "=&r"(a[26]), "=&r"(a[27]), "=&r"(a[28]), "=&r"(a[29]),    \
-      "=&r"(a[30]), "=&r"(a[31]), "=&r"(a[32]), "=&r"(a[33]), "=&r"(a[34]),    \
-      "=&r"(a[35]), "=&r"(a[36]), "=&r"(a[37]), "=&r"(a[38]), "=&r"(a[39]),    \
-      "=&r"(a[40]), "=&r"(a[41]), "=&r"(a[42]), "=&r"(a[43]), "=&r"(a[44]),    \
-      "=&r"(a[45]), "=&r"(a[46]), "=&r"(a[47]), "=&r"(a[48]), "=&r"(a[49]),    \
-      "=&r"(a[50]), "=&r"(a[51]), "=&r"(a[52]), "=&r"(a[53]), "=&r"(a[54]),    \
-      "=&r"(a[55]), "=&r"(a[56]), "=&r"(a[57]), "=&r"(a[58]), "=&r"(a[59]),    \
-      "=&r"(a[60]), "=&r"(a[61]), "=&r"(a[62]), "=&r"(a[63])
-
-#define TCGEN05_LD_X64_OPERANDS                                                \
-  "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, "     \
-  "%16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, %28, %29, "     \
-  "%30, %31, %32, %33, %34, %35, %36, %37, %38, %39, %40, %41, %42, %43, "     \
-  "%44, %45, %46, %47, %48, %49, %50, %51, %52, %53, %54, %55, %56, %57, "     \
-  "%58, %59, %60, %61, %62, %63"
-
 __device__ __forceinline__ void tcgen05_ld_32x32b_x64(uint32_t (&dst)[64],
                                                       uint32_t taddr) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   asm volatile(
-      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {" TCGEN05_LD_X64_OPERANDS
-      "}, [%64];"
-      : TCGEN05_LD_X64_OUTPUTS(dst)
+      "tcgen05.ld.sync.aligned.32x32b.x64.b32 {"
+      "%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, "
+      "%15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, %27, "
+      "%28, %29, %30, %31, %32, %33, %34, %35, %36, %37, %38, %39, %40, "
+      "%41, %42, %43, %44, %45, %46, %47, %48, %49, %50, %51, %52, %53, "
+      "%54, %55, %56, %57, %58, %59, %60, %61, %62, %63}, [%64];"
+      : "=&r"(dst[0]), "=&r"(dst[1]), "=&r"(dst[2]), "=&r"(dst[3]),
+        "=&r"(dst[4]), "=&r"(dst[5]), "=&r"(dst[6]), "=&r"(dst[7]),
+        "=&r"(dst[8]), "=&r"(dst[9]), "=&r"(dst[10]), "=&r"(dst[11]),
+        "=&r"(dst[12]), "=&r"(dst[13]), "=&r"(dst[14]), "=&r"(dst[15]),
+        "=&r"(dst[16]), "=&r"(dst[17]), "=&r"(dst[18]), "=&r"(dst[19]),
+        "=&r"(dst[20]), "=&r"(dst[21]), "=&r"(dst[22]), "=&r"(dst[23]),
+        "=&r"(dst[24]), "=&r"(dst[25]), "=&r"(dst[26]), "=&r"(dst[27]),
+        "=&r"(dst[28]), "=&r"(dst[29]), "=&r"(dst[30]), "=&r"(dst[31]),
+        "=&r"(dst[32]), "=&r"(dst[33]), "=&r"(dst[34]), "=&r"(dst[35]),
+        "=&r"(dst[36]), "=&r"(dst[37]), "=&r"(dst[38]), "=&r"(dst[39]),
+        "=&r"(dst[40]), "=&r"(dst[41]), "=&r"(dst[42]), "=&r"(dst[43]),
+        "=&r"(dst[44]), "=&r"(dst[45]), "=&r"(dst[46]), "=&r"(dst[47]),
+        "=&r"(dst[48]), "=&r"(dst[49]), "=&r"(dst[50]), "=&r"(dst[51]),
+        "=&r"(dst[52]), "=&r"(dst[53]), "=&r"(dst[54]), "=&r"(dst[55]),
+        "=&r"(dst[56]), "=&r"(dst[57]), "=&r"(dst[58]), "=&r"(dst[59]),
+        "=&r"(dst[60]), "=&r"(dst[61]), "=&r"(dst[62]), "=&r"(dst[63])
       : "r"(taddr)
       : "memory");
 #else

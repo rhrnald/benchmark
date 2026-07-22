@@ -1,8 +1,8 @@
-# 16K BF16 dense GEMM baseline
+# 16K BF16 dense GEMM working default
 
-이 디렉터리는 16K 정방 GEMM 최적화를 다시 시작할 때 사용하는 고정
-기준선이다. 실험용 `GEMM_*` 전처리 분기와 다중 커널 specialization을
-제거하고, 현재까지 가장 좋았던 구성 하나만 남겼다.
+이 디렉터리는 16K 정방 GEMM 최적화의 현재 working default다. 실험용
+전처리 분기와 다중 커널 specialization을 제거하고, B0와 codegen이 동등한
+reconstruction에 E2a TMEM 주소 정리를 반영했다.
 
 ## Provenance와 현재 상태
 
@@ -18,18 +18,23 @@
   파일시스템에 없다. 따라서 이 코드는 `p0`의 정확한 원본이라고 주장하지
   않는다. 가장 가까운 Git 이력인 `82206f8`에서 측정 구성을 직접 펼친
   reconstruction이며, `p0`를 성능 및 codegen oracle로 사용한다.
-- 로컬 SM100a 빌드 결과는 `p0`와 동일한 `REG 178`, `STACK 16 B`,
-  static shared `1184 B`, local memory `0 B`이다. 실제 B200 성능 동등성은
-  같은 인스턴스에서 교차 측정해 확정했다.
+- B0 reconstruction은 로컬 SM100a에서 `REG 178`, `STACK 16 B`, static
+  shared `1184 B`, local memory `0 B`였고, 실제 B200에서 `p0`와 동등했다.
 - B0 교차 측정에서 clean은 `[0,1)` 1738.199 TFLOP/s, `p0`는
   1739.110 TFLOP/s로 차이가 -0.0524%였다. `[-8,8)`에서도 -0.2253%로
   0.5% noise gate 안이었다. 상세 결과는
   `results/gemm_clean_b0_b200_45481495_20260723/summary.md`에 있다.
 
-소스에는 `TCGEN05_LD_X64_OUTPUTS`와 `TCGEN05_LD_X64_OPERANDS` 두
-`#define`만 남아 있다. 둘 다 64개 inline-PTX operand 목록을 맞춰 쓰기
-위한 문법용 macro이며 커널 동작이나 tuning을 선택하지 않는다.
-`GEMM_*` tuning macro와 외부 `-D` 옵션은 없다.
+그 위에 TMEM tile 주소 배열을 직접 scalar 주소식으로 바꾼 E2a를 적용했다.
+6쌍 교차 측정에서 `[0,1)`은 1751.903 TFLOP/s로 B0 대비 +0.614%,
+`[-8,8)`은 1518.912 TFLOP/s로 +0.393%였고, 두 분포의 모든 paired delta가
+양수였다. 현재 codegen은 `REG 174`, `STACK 0 B`, spill 0, static shared
+`1184 B`다. 상세 결과는
+`results/gemm_e2a_tmem_scalar_b200_45481495_20260723/summary.md`에 있다.
+
+현재 소스에는 `#define`이 하나도 없다. 64개 inline-PTX output operand도
+함수 본문에 명시적으로 적었으며, macro 제거 전후의 2072개 SASS instruction
+sequence가 동일함을 확인했다. 외부 `-D` 옵션도 사용하지 않는다.
 
 성능 문제 크기 16384와 persistent CTA 수 148도 compile-time constant로
 고정했다. 따라서 이 기준선은 CLI 실수로 32K scheduler나 다른 CTA 수를
