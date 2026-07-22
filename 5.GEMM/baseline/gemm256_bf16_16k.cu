@@ -139,13 +139,6 @@ make_sw128_major_k_smem_desc(uint32_t matrix_start_addr, int mma) {
   return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
 }
 
-__device__ __forceinline__ uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
-                                                           int mblock,
-                                                           int mma) {
-  uint32_t *matrix = a_smem + mblock * kHalfTileWords;
-  return make_sw128_major_k_smem_desc(smem_ptr_u32(matrix), mma);
-}
-
 __host__ __device__ __forceinline__ uint64_t
 make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
   constexpr uint64_t desc_base =
@@ -704,20 +697,23 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         const uint32_t tma_phase =
             static_cast<uint32_t>((stage_epoch / kStages) & 1);
         uint32_t *stage_smem = smem + stage * kStageWords;
-        uint32_t *a_smem = stage_smem;
-        uint32_t *b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
+        const uint32_t stage_smem_addr = smem_ptr_u32(stage_smem);
+        const uint32_t b_smem_addr =
+            stage_smem_addr + kAStageBytes + pipe * kBPipeBytes;
 
         mbarrier_wait(&a_ready[stage], tma_phase);
         mbarrier_wait(&b_ready[pipe][stage], tma_phase);
 
 #pragma unroll
         for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
-          const uint32_t b0 = smem_ptr_u32(b_smem);
-          const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
+          const uint64_t b0_desc =
+              make_sw128_major_mn_smem_desc(b_smem_addr, kk);
           const bool input_d = (kt != 0) || (kk != 0);
 #pragma unroll
           for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            const uint64_t a_desc = make_stage_a_smem_desc(a_smem, mblock, kk);
+            const uint64_t a_desc = make_sw128_major_k_smem_desc(
+                stage_smem_addr + mblock * kHalfTileWords * sizeof(uint32_t),
+                kk);
             const int c_tile = mblock * 2 + pipe;
             tcgen05_mma_bf16_ss(tmem_base + c_tile * kTmemTileStride, a_desc,
                                 b0_desc, idesc, input_d);
