@@ -60,7 +60,6 @@ tile_n   = macro_n * 16 + local / 16
 | K stage / depth | K64/S3 selected; K32/S4/S5 was slower in the multicast path; K128 multistage infeasibility for 256x256 follows from SMEM capacity |
 | Wide B | One `64x256` TMA was about 3% slower than split `64x128` streams |
 | TMA L2 promotion | 128B/256B promotion was neutral or negative; this is not an eviction-priority test |
-| TMA L2 eviction priority | A `evict_last` was stable but only `+0.113%`; asymmetric `evict_first` controls regressed, so keep no hint |
 | B multicast | Useful traffic reduction, but did not beat peak non-multicast at 16K |
 | A multicast | Slower than B multicast |
 | Cluster 4 | Large regression |
@@ -219,7 +218,7 @@ AB-first and BA-first subgroup means were `-0.230%` and `+0.385%`.  The
 candidate failed the all-positive, 0.5%, both-subgroup, and confidence-interval
 gates.  Keep `order_mn`; do not retune macro shapes for `order_nm`.
 
-## Experiment G: TMA L2 eviction-priority hints (complete)
+## Experiment G: TMA L2 eviction-priority hints (next)
 
 Tensor-map L2 promotion widens the DRAM-to-L2 fill granularity; it does not set
 eviction priority.  PTX independently supports
@@ -236,11 +235,11 @@ Compare at 16K under the selected `order_mn` scheduler:
 
 | Variant | A policy | B policy | Purpose | Status |
 |---|---|---|---|---|
-| `baseline` | none | none | paired control | complete: `1769.197 +/- 1.322` |
-| `a_last` | evict_last | none | favor the operand with the larger partial-reuse gap | reject: `1771.192 +/- 1.539`, `+0.113%` |
-| `b_last` | none | evict_last | direction control | reject: `1769.702 +/- 1.211`, `+0.029%` |
-| `a_last_b_first` | evict_last | evict_first | strongest A-priority separation | reject: `1743.439 +/- 1.467`, `-1.456%` |
-| `a_first_b_last` | evict_first | evict_last | symmetric B-priority control | reject: `1423.287 +/- 6.930`, `-19.552%` |
+| `baseline` | none | none | paired control | pending |
+| `a_last` | evict_last | none | favor the operand with the larger partial-reuse gap | pending |
+| `b_last` | none | evict_last | direction control | pending |
+| `a_last_b_first` | evict_last | evict_first | strongest A-priority separation | pending |
+| `a_first_b_last` | evict_first | evict_last | symmetric B-priority control | pending |
 
 Keep tensor-map promotion disabled, logical TMA issue count/payload unchanged,
 and do not apply the policy to C stores.  Use the standard three rotated W1/I5
@@ -248,16 +247,6 @@ process passes and exact 512 validation.  The policy is a hint and may be
 ignored by hardware; without profiler permission, report L2/HBM bytes as
 unmeasured.  Select only a three-for-three gain of at least 0.5%, then confirm
 that candidate separately before changing the default.
-
-Result: all five 512 pattern checks were bit-exact and all three `a_last`
-samples were positive (`+0.128%`, `+0.090%`, and `+0.120%`), but the paired
-mean was only `+0.113%`.  It fails the minimum-effect gate, so no focused
-confirmation or 8K/32K extension is scheduled.  The much larger conditional
-regression from adding A `evict_first` with B fixed at `evict_last` than from
-adding B `evict_first` with A fixed at `evict_last` is consistent with A
-residency being more important under this traversal.  These are not
-unconditional single-factor effects, and L2/DRAM counters were unavailable;
-record the result as a throughput-based inference, not measured traffic.
 
 ## Decision gates
 
@@ -284,7 +273,7 @@ from TFLOP/s alone.
 | 2026-07-22 | `f669b6f` | A/B/C S=1/2/4 combined first sweep | all 8 GPU checks exact; host coverage passed | `order_nm` `1778.907 +/- 2.584`, `+0.559%` | confirm `order_nm`; reject snake and strip 2/4 |
 | 2026-07-22 | `ac71b14` | F: six-pair `order_mn`/`order_nm` confirmation | both GPU checks exact; expanded host coverage passed | paired `+0.077%`, 95% CI `[-0.822%, +0.976%]` | reject promotion; keep `order_mn` |
 | 2026-07-22 | analysis at `2dfb872` | E: K-outer two-full-output capacity audit | source/PTX resource proof; no GPU run | 1024 TMEM columns required, 512 available | close as infeasible; no GPU spend |
-| 2026-07-22 | `1bb691b` | G: A/B TMA eviction-priority sweep | all 5 GPU checks exact; host coverage passed | `a_last` `1771.192 +/- 1.539`, paired `+0.113%`; negative controls `-1.456%`/`-19.552%` | reject promotion; keep no hint |
+| 2026-07-22 | pending definition commit | G: A/B TMA eviction-priority sweep | pending | pending | pending |
 
 Round-one artifacts are in
 `../results/gemm_nonmulticast_l2_round1_b200_45481495/`.  The requested TMA
@@ -294,15 +283,11 @@ performance-counter permission is unavailable.
 Focused confirmation artifacts are in
 `../results/gemm_nonmulticast_order_confirm_b200_45481495/`.
 
-Eviction-priority artifacts are in
-`../results/gemm_nonmulticast_l2_evict_b200_45481495/`.
-
 ## Deferred / out of scope
 
 - Cross-CTA phase shifting
 - More multicast, cluster-4, or wide-B variants
 - More K32/K128 or L2-promotion sweeps
-- More TMA eviction-policy sweeps; the best policy missed the effect-size gate
 - Morton/Z-order and exhaustive group-size search
 - Broad fixed-wave/cohort sweep; the ownership behavior was already tested
 - Stream-K/Split-K

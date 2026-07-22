@@ -1103,3 +1103,38 @@ sensitivity mean was only `+0.424%`.  Keep local M-fast plus macro N-fast as
 the default and do not retune macro shapes for the candidate.  Both binaries
 passed the 512 reference bit-exactly.  Exact confirmation artifacts are in
 `../results/gemm_nonmulticast_order_confirm_b200_45481495/`.
+
+### Non-multicast TMA L2 eviction-priority hints (2026-07-22)
+
+The selected 16K `order_mn` kernel was also tested with per-operand PTX TMA
+L2 eviction hints.  This is distinct from the earlier tensor-map L2 promotion
+sweep: promotion changes fill granularity, while this experiment supplies an
+eviction-priority hint.  All variants kept identical TMA coordinates, logical
+request payload, C store, scheduler, and W1/I5 x three-process protocol.
+
+| variant | A / B policy | TFLOP/s | paired change |
+|---|---|---:|---:|
+| baseline | none / none | 1769.197 +/- 1.322 | baseline |
+| `a_last` | evict_last / none | **1771.192 +/- 1.539** | **+0.113%** |
+| `b_last` | none / evict_last | 1769.702 +/- 1.211 | +0.029% |
+| `a_last_b_first` | evict_last / evict_first | 1743.439 +/- 1.467 | -1.456% |
+| `a_first_b_last` | evict_first / evict_last | 1423.287 +/- 6.930 | -19.552% |
+
+`a_last` was positive in all three paired passes, but its `+0.113%` mean was
+below the predeclared `+0.5%` promotion gate.  No hint remains the default and
+no focused confirmation or 8K/32K extension is planned.  The asymmetric
+negative controls are consistent with A retention being more important under
+this schedule.  They change both operands across the symmetric cases, though:
+an A-first-only/B-first-only control is required for an unconditional claim.
+This is only a throughput-based locality inference because L2/DRAM counters
+were unavailable.  All five 512 pattern validations were bit-exact.
+
+Exact CSVs, validation logs, compile commands, source snapshots, execution
+order, telemetry, and hashes are in
+`../results/gemm_nonmulticast_l2_evict_b200_45481495/`.  Reproduce with:
+
+```bash
+DEFINITION_COMMIT=1bb691b ./run_b200_gemm_nonmulticast_l2_evict.sh \
+  /workspace/benchmark/5.GEMM \
+  /workspace/gemm_nonmulticast_l2_evict
+```

@@ -1,0 +1,4 @@
+pass,timestamp,uuid,temp_c,power_w,sm_clock_mhz,gpu_util_pct
+1,2026/07/22 13:05:28.682, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 31, 188.96, 1965, 0
+2,2026/07/22 13:05:34.222, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 32, 231.93, 1965, 0
+3,2026/07/22 13:05:39.777, GPU-eb98326c-c1dd-1104-c4d7-24decdb06aef, 32, 226.29, 1965, 0
