@@ -436,7 +436,7 @@ __device__ __forceinline__ void store_u32x4_smem(uint32_t *smem,
 }
 
 __device__ __forceinline__ void
-stage_float_c_chunk(const uint32_t (&c_taddr)[4], uint32_t *c_smem, int chunk_m,
+stage_float_c_chunk(uint32_t tmem_base, uint32_t *c_smem, int chunk_m,
                     int chunk_n) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const int lane = threadIdx.x & 31;
@@ -457,7 +457,8 @@ stage_float_c_chunk(const uint32_t (&c_taddr)[4], uint32_t *c_smem, int chunk_m,
       for (int load = 0; load < kMmaN / 64; ++load) {
         const uint32_t col_base =
             static_cast<uint32_t>(tile_n_part * kMmaN + load * 64);
-        const uint32_t row_taddr = c_taddr[tile] + (row_base << 16) + col_base;
+        const uint32_t row_taddr =
+            tmem_base + tile * kTmemTileStride + (row_base << 16) + col_base;
         tcgen05_ld_32x32b_x64(r, row_taddr);
         tcgen05_wait_ld();
         const int col_offset = tile_n_part * kMmaN + load * 64;
@@ -471,7 +472,7 @@ stage_float_c_chunk(const uint32_t (&c_taddr)[4], uint32_t *c_smem, int chunk_m,
     }
   }
 #else
-  (void)c_taddr;
+  (void)tmem_base;
   (void)c_smem;
   (void)chunk_m;
   (void)chunk_n;
@@ -479,11 +480,11 @@ stage_float_c_chunk(const uint32_t (&c_taddr)[4], uint32_t *c_smem, int chunk_m,
 }
 
 __device__ __forceinline__ void
-issue_float_c_chunk_tma(const uint32_t (&c_taddr)[4], const CUtensorMap *c_map,
+issue_float_c_chunk_tma(uint32_t tmem_base, const CUtensorMap *c_map,
                         uint32_t *c_smem, int chunk_m, int chunk_n,
                         int row_offset, int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  stage_float_c_chunk(c_taddr, c_smem, chunk_m, chunk_n);
+  stage_float_c_chunk(tmem_base, c_smem, chunk_m, chunk_n);
   __syncthreads();
   tma_store_fence_shared();
   __syncthreads();
@@ -492,7 +493,7 @@ issue_float_c_chunk_tma(const uint32_t (&c_taddr)[4], const CUtensorMap *c_map,
                  0);
   }
 #else
-  (void)c_taddr;
+  (void)tmem_base;
   (void)c_map;
   (void)c_smem;
   (void)chunk_m;
@@ -503,7 +504,7 @@ issue_float_c_chunk_tma(const uint32_t (&c_taddr)[4], const CUtensorMap *c_map,
 }
 
 __device__ __forceinline__ void
-store_256x256_float_tile_tma(const uint32_t (&c_taddr)[4],
+store_256x256_float_tile_tma(uint32_t tmem_base,
                              const CUtensorMap *c_map, uint32_t *c_smem,
                              int row_offset, int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
@@ -517,7 +518,7 @@ store_256x256_float_tile_tma(const uint32_t (&c_taddr)[4],
       const int chunk_n = chunk - chunk_m * kCStoreChunksN;
       const int tile_row = row_offset + chunk_m * kCStoreChunkM;
       const int tile_col = col_offset + chunk_n * kCStoreChunkN;
-      issue_float_c_chunk_tma(c_taddr, c_map, tile_smem, chunk_m, chunk_n,
+      issue_float_c_chunk_tma(tmem_base, c_map, tile_smem, chunk_m, chunk_n,
                               tile_row, tile_col);
     }
     if (threadIdx.x == 0) {
@@ -527,7 +528,7 @@ store_256x256_float_tile_tma(const uint32_t (&c_taddr)[4],
     __syncthreads();
   }
 #else
-  (void)c_taddr;
+  (void)tmem_base;
   (void)c_map;
   (void)c_smem;
   (void)row_offset;
@@ -613,12 +614,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   __syncthreads();
 
   const uint32_t tmem_base = tmem_base_shared;
-  const uint32_t tmem_tile_addr[4] = {
-      tmem_base + 0u * kTmemTileStride,
-      tmem_base + 1u * kTmemTileStride,
-      tmem_base + 2u * kTmemTileStride,
-      tmem_base + 3u * kTmemTileStride,
-  };
   const uint32_t idesc = make_bf16_idesc() | (1u << 16);
 
   // The dynamic counter hands out one 16x16-macroblock position at a time.
@@ -663,12 +658,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     }
     const int ntile = ntile_count;
     const int stage_epoch_base = tile_iter * ktiles;
-    const uint32_t c_taddr[4] = {
-        tmem_tile_addr[0],
-        tmem_tile_addr[1],
-        tmem_tile_addr[2],
-        tmem_tile_addr[3],
-    };
 
     if (warp_id == 0 && lane0) {
       for (int kt = 0; kt < ktiles; ++kt) {
@@ -730,8 +719,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           for (int mblock = 0; mblock < kMBlocks; ++mblock) {
             const uint64_t a_desc = make_stage_a_smem_desc(a_smem, mblock, kk);
             const int c_tile = mblock * 2 + pipe;
-            tcgen05_mma_bf16_ss(c_taddr[c_tile], a_desc, b0_desc, idesc,
-                                input_d);
+            tcgen05_mma_bf16_ss(tmem_base + c_tile * kTmemTileStride, a_desc,
+                                b0_desc, idesc, input_d);
           }
         }
         tcgen05_commit(&mma_done[pipe][stage]);
@@ -751,7 +740,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
-    store_256x256_float_tile_tma(c_taddr, &c_map, c_store_smem, global_row_base,
+    store_256x256_float_tile_tma(tmem_base, &c_map, c_store_smem,
+                                 global_row_base,
                                  global_col_base);
     __syncthreads();
 
