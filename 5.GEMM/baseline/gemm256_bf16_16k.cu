@@ -709,6 +709,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 
     if ((warp_id == 2 || warp_id == 3) && lane0) {
       const int mblock = warp_id - 2;
+#pragma unroll 1
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
