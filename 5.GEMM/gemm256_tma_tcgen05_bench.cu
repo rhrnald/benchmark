@@ -710,12 +710,29 @@ __host__ __device__ __forceinline__ uint64_t make_sw128_major_k_smem_desc(
   return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
 }
 
+__host__ __device__ __forceinline__ uint64_t make_sw64_major_k_smem_desc(
+    uint32_t matrix_start_addr,
+    int mma) {
+  // PTX canonical K-major 64B swizzle: LBO is assumed to be one 16B unit,
+  // the stride-dimension offset is 512B (encoded as 32), and mode 4 denotes
+  // 64B swizzling. A K32 BF16 row is exactly one 64B swizzle atom.
+  constexpr uint64_t desc_base = (static_cast<uint64_t>(1u) << 16) |
+                                 (static_cast<uint64_t>(32u) << 32) |
+                                 (static_cast<uint64_t>(1u) << 46) |
+                                 (static_cast<uint64_t>(4u) << 61);
+  const uint32_t addr16 = ((matrix_start_addr & ~0xFu) >> 4) +
+                          static_cast<uint32_t>(mma) * (32u >> 4);
+  return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
+}
+
 __device__ __forceinline__ uint64_t make_stage_a_smem_desc(
     uint32_t* a_smem,
     int mblock,
     int mma) {
   uint32_t* matrix = a_smem + mblock * kHalfTileWords;
-  if constexpr (kStageK <= 64) {
+  if constexpr (kStageK == 32) {
+    return make_sw64_major_k_smem_desc(smem_ptr_u32(matrix), mma);
+  } else if constexpr (kStageK <= 64) {
     return make_sw128_major_k_smem_desc(smem_ptr_u32(matrix), mma);
   } else {
     // Wider stages are stored as independent 128x64 SW128 matrices.  Keeping
@@ -2403,7 +2420,9 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap* map,
                                         base, global_dim, global_stride,
                                         box_dim, elem_stride,
                                         CU_TENSOR_MAP_INTERLEAVE_NONE,
-                                        CU_TENSOR_MAP_SWIZZLE_128B,
+                                        kStageK == 32
+                                            ? CU_TENSOR_MAP_SWIZZLE_64B
+                                            : CU_TENSOR_MAP_SWIZZLE_128B,
                                         l2_promotion,
                                         CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
                  "cuTensorMapEncodeTiled(a_row_major_sw128)");
