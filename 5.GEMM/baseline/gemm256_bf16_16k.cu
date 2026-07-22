@@ -193,16 +193,13 @@ __device__ __forceinline__ void mbarrier_wait(uint64_t *barrier,
                                               uint32_t phase) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   const uint32_t addr = smem_ptr_u32(barrier);
-  // Match CUTLASS's transaction-barrier wait: let hardware suspend the warp
-  // between readiness checks instead of continuously polling the barrier.
-  constexpr uint32_t kSuspendTicks = 0x989680u;
   asm volatile("{ .reg .pred p; "
                "L_wait_%=: "
-               "mbarrier.try_wait.parity.shared::cta.b64 p, [%0], %1, %2; "
+               "mbarrier.try_wait.parity.shared::cta.b64 p, [%0], %1; "
                "@p bra.uni L_done_%=; "
                "bra.uni L_wait_%=; "
                "L_done_%=: }" ::"r"(addr),
-               "r"(phase), "r"(kSuspendTicks)
+               "r"(phase)
                : "memory");
 #else
   (void)barrier;
