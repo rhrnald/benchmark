@@ -1,0 +1,7 @@
+input	pass	first	second
+random	1	clean	p0
+random	2	p0	clean
+random	3	clean	p0
+random-signed8	1	p0	clean
+random-signed8	2	clean	p0
+random-signed8	3	p0	clean

@@ -20,7 +20,11 @@
   reconstruction이며, `p0`를 성능 및 codegen oracle로 사용한다.
 - 로컬 SM100a 빌드 결과는 `p0`와 동일한 `REG 178`, `STACK 16 B`,
   static shared `1184 B`, local memory `0 B`이다. 실제 B200 성능 동등성은
-  같은 인스턴스에서 교차 측정한 뒤 확정한다.
+  같은 인스턴스에서 교차 측정해 확정했다.
+- B0 교차 측정에서 clean은 `[0,1)` 1738.199 TFLOP/s, `p0`는
+  1739.110 TFLOP/s로 차이가 -0.0524%였다. `[-8,8)`에서도 -0.2253%로
+  0.5% noise gate 안이었다. 상세 결과는
+  `results/gemm_clean_b0_b200_45481495_20260723/summary.md`에 있다.
 
 소스에는 `TCGEN05_LD_X64_OUTPUTS`와 `TCGEN05_LD_X64_OPERANDS` 두
 `#define`만 남아 있다. 둘 다 64개 inline-PTX operand 목록을 맞춰 쓰기
@@ -113,9 +117,8 @@ reference와 비교한다. validation 크기는 CPU O(N^3) reference가 실수�
 ```
 
 기준선 동등성은 같은 B200에서 clean과 `p0`를 AB/BA 순서로 각각 3회
-측정해 paired ratio로 판단한다. GPU power limit, 온도, clock, 드라이버와
-CUDA 버전을 같이 기록한다. 평균 차이가 1%보다 크면 clean 코드를
-`1806.657 TFLOP/s baseline`이라고 부르지 않고 원인을 먼저 찾는다.
+측정해 통과했다. 후속 후보도 GPU power limit, 온도, clock, 드라이버와
+CUDA 버전을 같이 기록하고 같은 방식의 paired ratio로 판단한다.
 
 후속 실험의 순서와 판정 규칙은 [OPTIMIZATION_PLAN.md](OPTIMIZATION_PLAN.md)에
 고정한다.

@@ -130,4 +130,4 @@ warp specialization의 비용을 분리하기 위한 것이다.
 
 | commit | change | validation | REG/spill | `[0,1)` TFLOP/s | `[-8,8)` TFLOP/s | paired delta | decision |
 |---|---|---|---|---:|---:|---:|---|
-| B0 | clean reconstruction | pending | 178/0 | pending | pending | pending | gate |
+| B0 | clean reconstruction | exact | 178/0 | 1738.199 | 1508.979 | -0.052% / -0.225% vs p0 | pass |
