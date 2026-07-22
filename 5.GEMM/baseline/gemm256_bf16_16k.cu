@@ -484,7 +484,8 @@ issue_float_c_chunk_tma(const uint32_t (&c_taddr)[4], const CUtensorMap *c_map,
                         int row_offset, int col_offset) {
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
   stage_float_c_chunk(c_taddr, c_smem, chunk_m, chunk_n);
-  __syncthreads();
+  // Every writer orders its generic SMEM stores into the async proxy before
+  // the CTA barrier lets thread 0 issue the TMA read.
   tma_store_fence_shared();
   __syncthreads();
   if (threadIdx.x == 0) {
