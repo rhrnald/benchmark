@@ -122,7 +122,6 @@ struct Args {
   int iters = 5;
   const char *csv = "gemm256_bf16_16k.csv";
   int input_init_mode = kInputInitRandom;
-  bool c_store = true;
   bool validate = false;
   int validate_size = 512;
   const char *validate_pattern = "pattern";
@@ -567,7 +566,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     const __grid_constant__ CUtensorMap a_map,
     const __grid_constant__ CUtensorMap b_map,
     const __grid_constant__ CUtensorMap c_map, uint32_t *__restrict__ sink,
-    int ktiles, int mtile_count, int ntile_count, int c_store) {
+    int ktiles, int mtile_count, int ntile_count) {
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)a_map;
   (void)b_map;
@@ -576,7 +575,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   (void)ktiles;
   (void)mtile_count;
   (void)ntile_count;
-  (void)c_store;
 #else
   extern __shared__ uint32_t smem_raw[];
   const uintptr_t smem_addr = (reinterpret_cast<uintptr_t>(smem_raw) + 1023u) &
@@ -762,12 +760,11 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       warp_sinks[warp_id] = acc;
     __syncthreads();
 
-    if (c_store != 0) {
-      const int global_row_base = tile_m * kCtaM;
-      const int global_col_base = tile_n * kCtaN;
-      store_256x256_float_tile_tma(tmem_base, &c_map, c_store_smem,
-                                   global_row_base, global_col_base);
-    }
+    const int global_row_base = tile_m * kCtaM;
+    const int global_col_base = tile_n * kCtaN;
+    store_256x256_float_tile_tma(tmem_base, &c_map, c_store_smem,
+                                 global_row_base,
+                                 global_col_base);
     __syncthreads();
 
     if (threadIdx.x == 0) {
@@ -869,7 +866,6 @@ const char *input_init_mode_name(int mode) {
 void usage(const char *argv0) {
   std::printf("Usage: %s [--device N] [--warmup W] [--iters I] [--csv PATH] "
               "[--input-init memset|formula|random|random-signed8] "
-              "[--no-store-c] "
               "[--validate] [--validate-size N] "
               "[--validate-pattern pattern|ones]\n",
               argv0);
@@ -910,8 +906,6 @@ Args parse_args(int argc, char **argv) {
                      "'random-signed8'\n");
         std::exit(EXIT_FAILURE);
       }
-    } else if (std::strcmp(argv[i], "--no-store-c") == 0) {
-      args.c_store = false;
     } else if (std::strcmp(argv[i], "--validate") == 0) {
       args.validate = true;
     } else if (std::strcmp(argv[i], "--validate-size") == 0) {
@@ -1053,10 +1047,9 @@ void set_gemm_kernel_attribute() {
 
 void launch_gemm_kernel(dim3 grid, const CUtensorMap &a_map,
                         const CUtensorMap &b_map, const CUtensorMap &c_map,
-                        uint32_t *d_sink, int ktiles, int mtile, int ntile,
-                        int c_store) {
+                        uint32_t *d_sink, int ktiles, int mtile, int ntile) {
   gemm256_bf16_16k_kernel<<<grid, kThreads, kDynamicSmemBytes>>>(
-      a_map, b_map, c_map, d_sink, ktiles, mtile, ntile, c_store);
+      a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
 }
 struct CaseResult {
   int size = 0;
@@ -1066,7 +1059,6 @@ struct CaseResult {
   int ctas = 0;
   int launch_ctas = 0;
   int input_init_mode = kInputInitMemset;
-  bool c_store = true;
   float event_ms = 0.0f;
   double wall_ms = 0.0;
   double event_tflops = 0.0;
@@ -1074,7 +1066,7 @@ struct CaseResult {
   uint32_t checksum = 0;
 };
 
-CaseResult run_case(int warmup, int iters, int input_init_mode, bool c_store) {
+CaseResult run_case(int warmup, int iters, int input_init_mode) {
   constexpr int size = kBenchmarkSize;
   const int m = size;
   const int n = size;
@@ -1111,8 +1103,7 @@ CaseResult run_case(int warmup, int iters, int input_init_mode, bool c_store) {
   const dim3 grid(std::min(kPersistentCtas, ctas), 1, 1);
   auto launch_gemm = [&]() {
     cuda_check(cudaMemsetAsync(d_sink + ctas, 0, sizeof(uint32_t)));
-    launch_gemm_kernel(grid, a_map, b_map, c_map, d_sink, ktiles, mtile, ntile,
-                       c_store ? 1 : 0);
+    launch_gemm_kernel(grid, a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
   };
 
   for (int i = 0; i < warmup; ++i) {
@@ -1156,7 +1147,6 @@ CaseResult run_case(int warmup, int iters, int input_init_mode, bool c_store) {
   result.ctas = ctas;
   result.launch_ctas = static_cast<int>(grid.x * grid.y * grid.z);
   result.input_init_mode = input_init_mode;
-  result.c_store = c_store;
   result.event_ms = static_cast<float>(avg_event_ms);
   result.wall_ms = avg_wall_ms;
   result.event_tflops = flops / (avg_event_ms * 1.0e-3) / 1.0e12;
@@ -1283,8 +1273,7 @@ ValidateResult run_validation(int size, const char *pattern) {
   set_gemm_kernel_attribute();
 
   const dim3 grid(std::min(kValidationCtas, ctas), 1, 1);
-  launch_gemm_kernel(grid, a_map, b_map, c_map, d_sink, ktiles, mtile, ntile,
-                     1);
+  launch_gemm_kernel(grid, a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
   cuda_check(cudaGetLastError());
   cuda_check(cudaDeviceSynchronize());
 
@@ -1364,21 +1353,19 @@ int main(int argc, char **argv) {
   }
   std::fprintf(
       csv, "size,m,n,k,cta_m,cta_n,stage_k,stages,mtile,ntile,ktiles,ctas,"
-           "launch_ctas,warmup,iters,input_init,c_store,dynamic_smem_bytes,event_ms,"
+           "launch_ctas,warmup,iters,input_init,dynamic_smem_bytes,event_ms,"
            "wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device\n");
 
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
       "stages=3 b_parts=2 mma=m128n256k16 split=m_split "
       "k_loop=u1 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
-      "phase=0/0 c_store=%s l2_promotion=none "
+      "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,
-      args.c_store ? "tma_fp32_sw128" : "off_runtime_control",
       kDynamicSmemBytes);
 
-  const CaseResult r =
-      run_case(args.warmup, args.iters, args.input_init_mode, args.c_store);
+  const CaseResult r = run_case(args.warmup, args.iters, args.input_init_mode);
   std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d launch_ctas=%d "
               "input_init=%s event_ms=%.6f wall_ms=%.6f "
               "event_TFLOPS=%.3f wall_TFLOPS=%.3f checksum=%08x\n",
@@ -1386,12 +1373,11 @@ int main(int argc, char **argv) {
               input_init_mode_name(r.input_init_mode), r.event_ms, r.wall_ms,
               r.event_tflops, r.wall_tflops, r.checksum);
   std::fprintf(csv,
-               "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%s,%d,"
+               "%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%s,%d,"
                "%.6f,%.6f,%.3f,%.3f,%08x,%s\n",
                r.size, r.size, r.size, r.size, kCtaM, kCtaN, kStageK, kStages,
                r.mtile, r.ntile, r.ktiles, r.ctas, r.launch_ctas, args.warmup,
                args.iters, input_init_mode_name(r.input_init_mode),
-               r.c_store ? "on" : "off",
                kDynamicSmemBytes, r.event_ms, r.wall_ms, r.event_tflops,
                r.wall_tflops, r.checksum, prop.name);
 
