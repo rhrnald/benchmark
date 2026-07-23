@@ -6,6 +6,7 @@ out_dir=${OUT_DIR:-"$repo_dir/results/gemm_env_cublas_reference"}
 p0_bin=${P0_BIN:-"$repo_dir/results/gemm_phase_resweep_b200_45465499/bin/p0"}
 cublas_reference_bin=${CUBLAS_REFERENCE_BIN:-"$repo_dir/6.cuBLAS/cublas_gemm_bench"}
 nvcc_bin=${NVCC:-/usr/local/cuda-12.9/bin/nvcc}
+definition_commit=${DEFINITION_COMMIT:-unknown}
 
 size=16384
 warmup=1
@@ -14,6 +15,7 @@ expected_p0_sha=166044d6690b52dc448befefb79baabb1c9cb56950b16a0536454249d623ff72
 expected_cublas_sha=1f47799b1ffd8d815f457aa908be4ded8c8a3539d6a11fcc8053410612f5148b
 
 mkdir -p -- "$out_dir/bin" "$out_dir/csv" "$out_dir/logs" "$out_dir/source"
+printf '%s\n' "$definition_commit" >"$out_dir/definition_commit.txt"
 
 if [[ ! -x "$p0_bin" ]]; then
   echo "missing executable p0 binary: $p0_bin" >&2
