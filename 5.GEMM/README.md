@@ -2,6 +2,11 @@
 
 Prototype Blackwell GEMM compute benchmark using TMA loads and `tcgen05.mma`.
 
+현재 canonical E7a 구현, benchmark 단계별 해석, library 비교와 software
+version 주의사항은 먼저 [`CURRENT_STATUS.md`](CURRENT_STATUS.md)를 본다.
+아래 문서는 이전 구현을 포함한 전체 실험 기록과 generic benchmark
+interface를 보존한다.
+
 Current kernel shape:
 
 - One CTA computes one logical `256 x 256` C tile.

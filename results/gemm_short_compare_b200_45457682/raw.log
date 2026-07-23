@@ -1,0 +1,198 @@
+BEGIN pass=1 size=8192 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 grid_swizzle=1 group=12x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=0.641141 wall_ms=0.643312 event_TFLOPS=1714.929 wall_TFLOPS=1709.143 checksum=00000000
+END pass=1 size=8192 impl=custom
+BEGIN pass=1 size=8192 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.685 event_avg_ms=0.614219 event_TFLOPS=1790.098
+wall_total_ms=3.699 wall_avg_ms=0.616426 wall_TFLOPS=1783.688
+csv,bf16fp32,8192,8192,8192,6,3,0.614219,1790.098,0.616426,1783.688,NVIDIA B200
+END pass=1 size=8192 impl=cublas
+BEGIN pass=1 size=8192 impl=cutlass
+Stream-K GEMM with Problem Size: 8192x8192x8192 Cluster = (2, 1, 1)
+ Decomposition_mode=Heuristic Split_count=1 Reduction_mode=Deterministic
+--------------------------------------------------------------------------------
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds
+  Problem Size: 8192x8192x8192
+  Avg runtime: 0.671787 ms
+  GFLOPS: 1.6367e+06
+END pass=1 size=8192 impl=cutlass
+BEGIN pass=1 size=16384 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 grid_swizzle=1 group=10x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=4.946315 wall_ms=4.948485 event_TFLOPS=1778.312 wall_TFLOPS=1777.533 checksum=00000000
+END pass=1 size=16384 impl=custom
+BEGIN pass=1 size=16384 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=28.245 event_avg_ms=4.707541 event_TFLOPS=1868.511
+wall_total_ms=28.258 wall_avg_ms=4.709693 wall_TFLOPS=1867.657
+csv,bf16fp32,16384,16384,16384,6,3,4.707541,1868.511,4.709693,1867.657,NVIDIA B200
+END pass=1 size=16384 impl=cublas
+BEGIN pass=1 size=16384 impl=cutlass
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.26799 ms
+  GFLOPS: 1.40333e+06
+END pass=1 size=16384 impl=cutlass
+BEGIN pass=1 size=32768 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 grid_swizzle=1 group=3x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=43.463776 wall_ms=43.465782 event_TFLOPS=1619.021 wall_TFLOPS=1618.946 checksum=00000000
+END pass=1 size=32768 impl=custom
+BEGIN pass=1 size=32768 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=259.432 event_avg_ms=43.238714 event_TFLOPS=1627.448
+wall_total_ms=259.444 wall_avg_ms=43.240722 wall_TFLOPS=1627.372
+csv,bf16fp32,32768,32768,32768,6,3,43.238714,1627.448,43.240722,1627.372,NVIDIA B200
+END pass=1 size=32768 impl=cublas
+BEGIN pass=1 size=32768 impl=cutlass
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 32768x32768x32768
+  Avg runtime: 57.2103 ms
+  GFLOPS: 1.23e+06
+END pass=1 size=32768 impl=cutlass
+BEGIN pass=2 size=32768 impl=cutlass
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 32768x32768x32768
+  Avg runtime: 57.0316 ms
+  GFLOPS: 1.23386e+06
+END pass=2 size=32768 impl=cutlass
+BEGIN pass=2 size=32768 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=259.397 event_avg_ms=43.232773 event_TFLOPS=1627.671
+wall_total_ms=259.410 wall_avg_ms=43.234938 wall_TFLOPS=1627.590
+csv,bf16fp32,32768,32768,32768,6,3,43.232773,1627.671,43.234938,1627.590,NVIDIA B200
+END pass=2 size=32768 impl=cublas
+BEGIN pass=2 size=32768 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 grid_swizzle=1 group=3x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=43.333309 wall_ms=43.335568 event_TFLOPS=1623.895 wall_TFLOPS=1623.810 checksum=00000000
+END pass=2 size=32768 impl=custom
+BEGIN pass=2 size=16384 impl=cutlass
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.19289 ms
+  GFLOPS: 1.42035e+06
+END pass=2 size=16384 impl=cutlass
+BEGIN pass=2 size=16384 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=28.066 event_avg_ms=4.677675 event_TFLOPS=1880.441
+wall_total_ms=28.078 wall_avg_ms=4.679712 wall_TFLOPS=1879.623
+csv,bf16fp32,16384,16384,16384,6,3,4.677675,1880.441,4.679712,1879.623,NVIDIA B200
+END pass=2 size=16384 impl=cublas
+BEGIN pass=2 size=16384 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 grid_swizzle=1 group=10x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=4.935387 wall_ms=4.937404 event_TFLOPS=1782.250 wall_TFLOPS=1781.522 checksum=00000000
+END pass=2 size=16384 impl=custom
+BEGIN pass=2 size=8192 impl=cutlass
+Stream-K GEMM with Problem Size: 8192x8192x8192 Cluster = (2, 1, 1)
+ Decomposition_mode=Heuristic Split_count=1 Reduction_mode=Deterministic
+--------------------------------------------------------------------------------
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds
+  Problem Size: 8192x8192x8192
+  Avg runtime: 0.674005 ms
+  GFLOPS: 1.63131e+06
+END pass=2 size=8192 impl=cutlass
+BEGIN pass=2 size=8192 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.697 event_avg_ms=0.616192 event_TFLOPS=1784.365
+wall_total_ms=3.712 wall_avg_ms=0.618703 wall_TFLOPS=1777.124
+csv,bf16fp32,8192,8192,8192,6,3,0.616192,1784.365,0.618703,1777.124,NVIDIA B200
+END pass=2 size=8192 impl=cublas
+BEGIN pass=2 size=8192 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 grid_swizzle=1 group=12x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=0.642635 wall_ms=0.644636 event_TFLOPS=1710.944 wall_TFLOPS=1705.631 checksum=00000000
+END pass=2 size=8192 impl=custom
+BEGIN pass=3 size=8192 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.690 event_avg_ms=0.615083 event_TFLOPS=1787.584
+wall_total_ms=3.703 wall_avg_ms=0.617187 wall_TFLOPS=1781.488
+csv,bf16fp32,8192,8192,8192,6,3,0.615083,1787.584,0.617187,1781.488,NVIDIA B200
+END pass=3 size=8192 impl=cublas
+BEGIN pass=3 size=8192 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 grid_swizzle=1 group=12x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=0.640800 wall_ms=0.642832 event_TFLOPS=1715.842 wall_TFLOPS=1710.417 checksum=00000000
+END pass=3 size=8192 impl=custom
+BEGIN pass=3 size=8192 impl=cutlass
+Stream-K GEMM with Problem Size: 8192x8192x8192 Cluster = (2, 1, 1)
+ Decomposition_mode=Heuristic Split_count=1 Reduction_mode=Deterministic
+--------------------------------------------------------------------------------
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds
+  Problem Size: 8192x8192x8192
+  Avg runtime: 0.671451 ms
+  GFLOPS: 1.63752e+06
+END pass=3 size=8192 impl=cutlass
+BEGIN pass=3 size=16384 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=28.084 event_avg_ms=4.680629 event_TFLOPS=1879.254
+wall_total_ms=28.096 wall_avg_ms=4.682675 wall_TFLOPS=1878.433
+csv,bf16fp32,16384,16384,16384,6,3,4.680629,1879.254,4.682675,1878.433,NVIDIA B200
+END pass=3 size=16384 impl=cublas
+BEGIN pass=3 size=16384 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 grid_swizzle=1 group=10x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=4.964490 wall_ms=4.966524 event_TFLOPS=1771.802 wall_TFLOPS=1771.076 checksum=00000000
+END pass=3 size=16384 impl=custom
+BEGIN pass=3 size=16384 impl=cutlass
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.21094 ms
+  GFLOPS: 1.41622e+06
+END pass=3 size=16384 impl=cutlass
+BEGIN pass=3 size=32768 impl=cublas
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=6 warmup=3
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=260.745 event_avg_ms=43.457514 event_TFLOPS=1619.254
+wall_total_ms=260.757 wall_avg_ms=43.459570 wall_TFLOPS=1619.177
+csv,bf16fp32,32768,32768,32768,6,3,43.457514,1619.254,43.459570,1619.177,NVIDIA B200
+END pass=3 size=32768 impl=cublas
+BEGIN pass=3 size=32768 impl=custom
+device=0 name="NVIDIA B200" cc=10.0 dynamic_smem=197632 bytes
+mode=bf16_tcgen05_compute_sink layout=row_major_sw128 cta_tile=256x256 stage_k=64 stages=3 pipes=2 pipe1_phase_shift_cycles=512 pipe1_phase_shift_cycles_8k=96 pipe1_tma_phase_shift_cycles=512 pipe1_mma_phase_shift_cycles=512 grid_swizzle=1 grid_swizzle_m=12 grid_swizzle_n=1 grid_swizzle_min_tiles=32 tuned4k=16x1:96/96 tuned8k=12x1:0/0 tuned16k=10x1:0/0 tuned32k=3x1:0/0 tuned_cstore_swizzle_128b=1/1/1/1 tma_l2_promotion_a=0 tma_l2_promotion_b=0 tma_l2_promotion_c=0 tuned4k_tma_l2=0/0/0 tuned8k_tma_l2=0/0/0 tuned32k_tma_l2=0/0/0 cstore_swizzle_128b=1 cstore_vectorize_smem=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 input_init=random formula_scale=0.0078125 persistent_ctas=148 persistent_kernel=1 persistent_macro=16x16 persistent_8k_macro=8x18 persistent_32k_macro=8x18 persistent_order_local_m_fast=1 macro_n_fast=1 store_mode=tma c_type=fp32
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 grid_swizzle=1 group=3x1 pipe1_phase=128 pipe1_tma_phase=0 pipe1_mma_phase=0 cstore_swizzle_128b=1 single_pipeline=0 single_pipeline_ntile_128=0 single_pipeline_wide_mma=0 single_pipeline_split_tma=1 single_pipeline_interleave_pipes=1 tma_l2=0/0/0 input_init=random store_mode=tma event_ms=43.529438 wall_ms=43.533191 event_TFLOPS=1616.578 wall_TFLOPS=1616.439 checksum=00000000
+END pass=3 size=32768 impl=custom
+BEGIN pass=3 size=32768 impl=cutlass
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 32768x32768x32768
+  Avg runtime: 57.4816 ms
+  GFLOPS: 1.2242e+06
+END pass=3 size=32768 impl=cutlass

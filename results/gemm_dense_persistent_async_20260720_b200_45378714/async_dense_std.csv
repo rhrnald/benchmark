@@ -1,0 +1,4 @@
+size,m,n,k,cta_m,cta_n,stage_k,mtile,ntile,ktiles,ctas,launch_ctas,warmup,iters,grid_swizzle,group_m,group_n,pipe1_phase_cycles,pipe1_tma_phase_cycles,pipe1_mma_phase_cycles,cstore_swizzle_128b,single_pipeline,single_pipeline_ntile_128,single_pipeline_wide_mma,single_pipeline_split_tma,single_pipeline_interleave_pipes,tma_a_l2_promotion,tma_b_l2_promotion,tma_c_l2_promotion,input_init,store_mode,dynamic_smem_bytes,event_ms,wall_ms,event_TFLOPS,wall_TFLOPS,checksum,device
+8192,8192,8192,8192,256,256,64,32,32,128,1024,1152,3,5,1,12,1,128,96,0,1,0,0,0,1,1,3,3,0,random,tma,197632,0.655578,0.658120,1677.165,1670.686,00000000,NVIDIA B200
+16384,16384,16384,16384,256,256,64,64,64,256,4096,4480,3,5,1,10,1,128,0,0,1,0,0,0,1,1,0,0,0,random,tma,197632,4.983219,4.985512,1765.143,1764.331,00000000,NVIDIA B200
+32768,32768,32768,32768,256,256,64,128,128,512,16384,16512,3,5,1,3,1,128,0,0,1,0,0,0,1,1,0,0,0,random,tma,197632,46.728706,46.733425,1505.900,1505.748,00000000,NVIDIA B200
