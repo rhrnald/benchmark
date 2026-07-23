@@ -1,0 +1,10 @@
+logs/sass_clean.txt
+UTCHMMA=4
+UTMALDG.2D=7
+UTMALDG.4D=14
+UTMASTG=4
+logs/sass_trace.txt
+UTCHMMA=4
+UTMALDG.2D=3
+UTMALDG.4D=6
+UTMASTG=4

@@ -88,6 +88,10 @@ build/gemm_e7a_pipeline_trace \
   --pipeline-trace-csv results/pipeline_trace.csv
 ```
 
+현재 `--validate` 명령은 같은 generated binary의
+`pipeline_trace=nullptr` 경로를 검증한다. Timestamp/store가 활성화된 16K
+trace launch는 full C reference를 별도로 비교하지 않는다.
+
 Trace 실행시간은 TFLOP/s로 사용하지 않는다.
 
 ## Render
@@ -104,6 +108,19 @@ post-call에서 observer dependency-pass까지의 signed software-observation
 window와 first/all marker를 별도로 표시한다. `metrics.csv`에는 per-stage
 commit cadence, A/B0/B1 ordered residual wait, M0/M1 reuse wait, signed
 post-call gap, issue/prepare-start 기준의 보수적 observation bound가 들어간다.
+
+## Measured result
+
+2026-07-23 B200 실측의 SVG, raw CSV, per-stage metrics, correctness, SASS와
+해석은 다음 결과 디렉터리에 보존했다.
+
+[`../results/gemm_e7a_pipeline_stage_trace_b200_45481495_20260723/README.md`](../results/gemm_e7a_pipeline_stage_trace_b200_45481495_20260723/README.md)
+
+핵심적으로 B0/B1 residual wait는 대부분 ready-check 수준으로 숨겨졌지만,
+producer는 M0 ring reuse에 강하게 back-pressure되었고 A ready에는
+`ring_stage=1`에서 반복적인 bubble이 관측됐다. 이는 한 CTA/window의
+instrumented diagnostic이므로, physical slot imbalance라고 확정하려면
+window 또는 sampled tile을 옮긴 재현이 필요하다.
 
 ## Interpretation limits
 

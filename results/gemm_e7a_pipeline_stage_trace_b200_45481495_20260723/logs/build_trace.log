@@ -1,0 +1,16 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN59_GLOBAL__N__6c5dc5f0_26_gemm_e7a_pipeline_trace_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN59_GLOBAL__N__6c5dc5f0_26_gemm_e7a_pipeline_trace_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.568 ms
+ptxas info    : Compiling entry function '_ZN59_GLOBAL__N__6c5dc5f0_26_gemm_e7a_pipeline_trace_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN59_GLOBAL__N__6c5dc5f0_26_gemm_e7a_pipeline_trace_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.831 ms
+ptxas info    : Compiling entry function '_ZN59_GLOBAL__N__6c5dc5f0_26_gemm_e7a_pipeline_trace_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_PjiiiPNS_19PipelineTraceOutputE' for 'sm_100a'
+ptxas info    : Function properties for _ZN59_GLOBAL__N__6c5dc5f0_26_gemm_e7a_pipeline_trace_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_PjiiiPNS_19PipelineTraceOutputE
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 196 registers, used 1 barriers, 3568 bytes smem
+ptxas info    : Compile time = 85.901 ms

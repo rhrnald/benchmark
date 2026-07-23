@@ -2,8 +2,9 @@
 """Render an attention-style per-K-stage E7a GEMM pipeline trace.
 
 The trace separates synchronous issue spans, explicit mbarrier wait spans, and
-asynchronous completion observations.  "Observed" is deliberate: clock64 sees
-when another warp passes a dependency, not the exact hardware completion edge.
+asynchronous dependency-pass observations.  "Observed" is deliberate:
+clock64 sees when another warp passes a dependency, not the exact hardware
+completion edge.
 """
 
 from __future__ import annotations
@@ -468,7 +469,9 @@ def write_metrics(path: Path, rows: list[dict[str, object]]) -> None:
     if not rows:
         return
     with path.open("w", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(
+            stream, fieldnames=list(rows[0]), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
 

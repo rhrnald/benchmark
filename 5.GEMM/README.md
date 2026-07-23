@@ -337,8 +337,20 @@ Or directly:
 
 ## Trace
 
-`make plot` builds a trace-enabled binary with `-DGEMM_CLOCK_TRACE=1`, captures
-`clock64()` ranges for CTA `(0,0)`, and renders a pipeline timeline SVG:
+The current E7a diagnostic follows the `0.attention` trace semantics.  It
+records physical W0--W3 lane-0 timestamps for eight steady K64 stages:
+producer M0/M1 reuse waits and TMA prepare/issue, consumer A/B0/B1 ready
+waits, MMA prepare/issue, commit, and the `kt+3` producer dependency pass.
+Use [`PIPELINE_TRACE.md`](PIPELINE_TRACE.md) for generation, collection, and
+rendering commands.
+
+The measured B200 trace, including the interactive SVG, raw 164-event CSV,
+per-stage metrics, validation, SASS, and interpretation, is archived at
+[`../results/gemm_e7a_pipeline_stage_trace_b200_45481495_20260723/`](../results/gemm_e7a_pipeline_stage_trace_b200_45481495_20260723/).
+
+The older `make plot` target below belongs to the legacy trace-enabled kernel.
+It remains useful for that implementation, but it is not the current E7a
+per-K-stage trace:
 
 ```bash
 make plot TRACE_SIZE=4096 TRACE_START=56 TRACE_ITERS=8
