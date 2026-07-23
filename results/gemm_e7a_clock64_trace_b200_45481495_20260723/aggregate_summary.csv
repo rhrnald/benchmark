@@ -1,0 +1,15 @@
+event,label,warp,runs,total_median,total_min,total_max,avg_sample_median,sample_count
+consumer_wait_a,wait A ready,2,1,38692,38692,38692,151.140625,256
+consumer_wait_a,wait A ready,3,1,37748,37748,37748,147.453125,256
+consumer_wait_b0,wait B0 ready,2,1,26700,26700,26700,104.296875,256
+consumer_wait_b0,wait B0 ready,3,1,26695,26695,26695,104.277344,256
+consumer_mma_b0_issue,issue MMA B0 (2/4),2,1,45056,45056,45056,88.0,512
+consumer_mma_b0_issue,issue MMA B0 (2/4),3,1,45056,45056,45056,88.0,512
+consumer_wait_b1,wait B1 ready,2,1,22214,22214,22214,86.773438,256
+consumer_wait_b1,wait B1 ready,3,1,22257,22257,22257,86.941406,256
+consumer_mma_b1_issue,issue MMA B1 (2/4),2,1,40704,40704,40704,79.5,512
+consumer_mma_b1_issue,issue MMA B1 (2/4),3,1,40704,40704,40704,79.5,512
+consumer_mma_commit,MMA commit,2,1,17152,17152,17152,67.0,256
+consumer_mma_commit,MMA commit,3,1,17152,17152,17152,67.0,256
+consumer_final_mma_drain,final MMA drain,2,1,713,713,713,713.0,1
+consumer_final_mma_drain,final MMA drain,3,1,562,562,562,562.0,1

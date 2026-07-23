@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1300" viewBox="0 0 1680 1300">
+<defs>
+<filter id="shadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#0f172a" flood-opacity="0.12"/></filter>
+</defs>
+<rect width="1680" height="1300" fill="#f8fafc"/>
+<text x="45.00" y="48.00" font-size="27" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">B200 GEMM clock64 trace — current E7a kernel (fresh capture)</text>
+<text x="45.00" y="78.00" font-size="15" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#475569" font-weight="400" text-anchor="start">16K BF16 GEMM · E7a dual-wide · input=random · 1 independent trace</text>
+<text x="45.00" y="102.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="start">representative=trace_random_fresh.csv · block=0 SM=142 · persistent tile_iter=8 · output tile=(28,10)</text>
+<text x="45.00" y="143.00" font-size="18" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">A. One output-tile timeline</text>
+<text x="1625.00" y="143.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="end">device clock64 cycles (same CTA / same SM)</text>
+<line x1="188.00" y1="157" x2="188.00" y2="403" stroke="#e2e8f0" stroke-width="1"/>
+<text x="188.00" y="151.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">0</text>
+<line x1="445.11" y1="157" x2="445.11" y2="403" stroke="#e2e8f0" stroke-width="1"/>
+<text x="445.11" y="151.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">50,000</text>
+<line x1="702.22" y1="157" x2="702.22" y2="403" stroke="#e2e8f0" stroke-width="1"/>
+<text x="702.22" y="151.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">100,000</text>
+<line x1="959.34" y1="157" x2="959.34" y2="403" stroke="#e2e8f0" stroke-width="1"/>
+<text x="959.34" y="151.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">150,000</text>
+<line x1="1216.45" y1="157" x2="1216.45" y2="403" stroke="#e2e8f0" stroke-width="1"/>
+<text x="1216.45" y="151.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">200,000</text>
+<line x1="1473.56" y1="157" x2="1473.56" y2="403" stroke="#e2e8f0" stroke-width="1"/>
+<text x="1473.56" y="151.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">250,000</text>
+<rect x="35" y="166.00" width="1610" height="49" rx="7" fill="#ffffff"/>
+<text x="174.00" y="190.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">W0 · A + late B1 TMA</text>
+<rect x="35" y="220.00" width="1610" height="49" rx="7" fill="#f1f5f9"/>
+<text x="174.00" y="244.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">W1 · early B0 TMA</text>
+<rect x="35" y="274.00" width="1610" height="49" rx="7" fill="#ffffff"/>
+<text x="174.00" y="298.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">W2 · M0 MMA consumer</text>
+<rect x="35" y="328.00" width="1610" height="49" rx="7" fill="#f1f5f9"/>
+<text x="174.00" y="352.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">W3 · M1 MMA consumer</text>
+<rect x="188.00" y="175.00" width="3.32" height="24.00" rx="3" fill="#94a3b8" opacity="0.880" stroke="none"><title>scheduler | W0 | 0–646 cycles | duration=646</title></rect>
+<rect x="194.54" y="175.00" width="1360.26" height="24.00" rx="3" fill="#38bdf8" opacity="0.880" stroke="none"><title>producer mainloop | W0 | 1,272–265,798 cycles | duration=264,526</title></rect>
+<rect x="194.53" y="229.00" width="1360.08" height="24.00" rx="3" fill="#38bdf8" opacity="0.880" stroke="none"><title>producer mainloop | W1 | 1,270–265,762 cycles | duration=264,492</title></rect>
+<rect x="194.92" y="283.00" width="1374.32" height="24.00" rx="3" fill="#a78bfa" opacity="0.880" stroke="none"><title>consumer mainloop | W2 | 1,345–268,606 cycles | duration=267,261</title></rect>
+<rect x="194.96" y="337.00" width="1374.83" height="24.00" rx="3" fill="#a78bfa" opacity="0.880" stroke="none"><title>consumer mainloop | W3 | 1,353–268,712 cycles | duration=267,359</title></rect>
+<rect x="1572.21" y="175.00" width="4.33" height="24.00" rx="3" fill="#22c55e" opacity="0.880" stroke="none"><title>C chunk 0 | W0 | 269,185–270,028 cycles | duration=843</title></rect>
+<rect x="1572.24" y="229.00" width="4.31" height="24.00" rx="3" fill="#22c55e" opacity="0.880" stroke="none"><title>C chunk 0 | W1 | 269,189–270,028 cycles | duration=839</title></rect>
+<rect x="1572.26" y="283.00" width="4.31" height="24.00" rx="3" fill="#22c55e" opacity="0.880" stroke="none"><title>C chunk 0 | W2 | 269,193–270,031 cycles | duration=838</title></rect>
+<rect x="1572.28" y="337.00" width="4.30" height="24.00" rx="3" fill="#22c55e" opacity="0.880" stroke="none"><title>C chunk 0 | W3 | 269,197–270,033 cycles | duration=836</title></rect>
+<rect x="1576.66" y="175.00" width="4.48" height="24.00" rx="3" fill="#16a34a" opacity="0.880" stroke="none"><title>C chunk 1 | W0 | 270,049–270,920 cycles | duration=871</title></rect>
+<rect x="1576.66" y="229.00" width="4.46" height="24.00" rx="3" fill="#16a34a" opacity="0.880" stroke="none"><title>C chunk 1 | W1 | 270,049–270,917 cycles | duration=868</title></rect>
+<rect x="1576.67" y="283.00" width="4.46" height="24.00" rx="3" fill="#16a34a" opacity="0.880" stroke="none"><title>C chunk 1 | W2 | 270,052–270,920 cycles | duration=868</title></rect>
+<rect x="1576.68" y="337.00" width="4.46" height="24.00" rx="3" fill="#16a34a" opacity="0.880" stroke="none"><title>C chunk 1 | W3 | 270,054–270,921 cycles | duration=867</title></rect>
+<rect x="1598.14" y="175.00" width="4.37" height="24.00" rx="3" fill="#14b8a6" opacity="0.880" stroke="none"><title>C chunk 2 | W0 | 274,226–275,075 cycles | duration=849</title></rect>
+<rect x="1598.14" y="229.00" width="4.35" height="24.00" rx="3" fill="#14b8a6" opacity="0.880" stroke="none"><title>C chunk 2 | W1 | 274,226–275,072 cycles | duration=846</title></rect>
+<rect x="1598.14" y="283.00" width="4.37" height="24.00" rx="3" fill="#14b8a6" opacity="0.880" stroke="none"><title>C chunk 2 | W2 | 274,226–275,075 cycles | duration=849</title></rect>
+<rect x="1598.14" y="337.00" width="4.37" height="24.00" rx="3" fill="#14b8a6" opacity="0.880" stroke="none"><title>C chunk 2 | W3 | 274,226–275,076 cycles | duration=850</title></rect>
+<rect x="1602.61" y="175.00" width="4.42" height="24.00" rx="3" fill="#0d9488" opacity="0.880" stroke="none"><title>C chunk 3 | W0 | 275,096–275,956 cycles | duration=860</title></rect>
+<rect x="1602.60" y="229.00" width="4.44" height="24.00" rx="3" fill="#0d9488" opacity="0.880" stroke="none"><title>C chunk 3 | W1 | 275,093–275,956 cycles | duration=863</title></rect>
+<rect x="1602.61" y="283.00" width="4.42" height="24.00" rx="3" fill="#0d9488" opacity="0.880" stroke="none"><title>C chunk 3 | W2 | 275,096–275,956 cycles | duration=860</title></rect>
+<rect x="1602.62" y="337.00" width="4.42" height="24.00" rx="3" fill="#0d9488" opacity="0.880" stroke="none"><title>C chunk 3 | W3 | 275,097–275,956 cycles | duration=859</title></rect>
+<rect x="191.54" y="178.00" width="1.00" height="18.00" rx="3" fill="#cbd5e1" opacity="0.960" stroke="none"><title>scheduler | W0 | 689–759 cycles | duration=70</title></rect>
+<rect x="188.03" y="232.00" width="1.00" height="18.00" rx="3" fill="#cbd5e1" opacity="0.960" stroke="none"><title>scheduler | W1 | 6–40 cycles | duration=34</title></rect>
+<rect x="188.04" y="286.00" width="1.00" height="18.00" rx="3" fill="#cbd5e1" opacity="0.960" stroke="none"><title>scheduler | W2 | 8–42 cycles | duration=34</title></rect>
+<rect x="188.08" y="340.00" width="1.00" height="18.00" rx="3" fill="#cbd5e1" opacity="0.960" stroke="none"><title>scheduler | W3 | 15–49 cycles | duration=34</title></rect>
+<rect x="192.01" y="178.00" width="2.05" height="18.00" rx="3" fill="#64748b" opacity="0.960" stroke="none"><title>scheduler | W0 | 780–1,179 cycles | duration=399</title></rect>
+<rect x="1555.47" y="178.00" width="15.65" height="18.00" rx="3" fill="#475569" opacity="0.960" stroke="none"><title>mainloop join | W0 | 265,929–268,972 cycles | duration=3,043</title></rect>
+<rect x="1554.98" y="232.00" width="16.14" height="18.00" rx="3" fill="#475569" opacity="0.960" stroke="none"><title>mainloop join | W1 | 265,834–268,972 cycles | duration=3,138</title></rect>
+<rect x="1570.12" y="286.00" width="1.00" height="18.00" rx="3" fill="#475569" opacity="0.960" stroke="none"><title>mainloop join | W2 | 268,777–268,972 cycles | duration=195</title></rect>
+<rect x="1570.66" y="340.00" width="1.00" height="18.00" rx="3" fill="#475569" opacity="0.960" stroke="none"><title>mainloop join | W3 | 268,882–268,972 cycles | duration=90</title></rect>
+<rect x="1581.40" y="178.00" width="16.62" height="18.00" rx="3" fill="#f59e0b" opacity="0.960" stroke="none"><title>C group 0 drain | W0 | 270,971–274,204 cycles | duration=3,233</title></rect>
+<rect x="1581.38" y="232.00" width="1.00" height="18.00" rx="3" fill="#f59e0b" opacity="0.960" stroke="none"><title>C group 0 drain | W1 | 270,968–271,032 cycles | duration=64</title></rect>
+<rect x="1581.40" y="286.00" width="1.00" height="18.00" rx="3" fill="#f59e0b" opacity="0.960" stroke="none"><title>C group 0 drain | W2 | 270,972–271,036 cycles | duration=64</title></rect>
+<rect x="1581.45" y="340.00" width="1.00" height="18.00" rx="3" fill="#f59e0b" opacity="0.960" stroke="none"><title>C group 0 drain | W3 | 270,980–271,044 cycles | duration=64</title></rect>
+<rect x="1607.33" y="178.00" width="16.57" height="18.00" rx="3" fill="#d97706" opacity="0.960" stroke="none"><title>C group 1 drain | W0 | 276,013–279,235 cycles | duration=3,222</title></rect>
+<rect x="1607.25" y="232.00" width="1.00" height="18.00" rx="3" fill="#d97706" opacity="0.960" stroke="none"><title>C group 1 drain | W1 | 275,999–276,065 cycles | duration=66</title></rect>
+<rect x="1607.26" y="286.00" width="1.00" height="18.00" rx="3" fill="#d97706" opacity="0.960" stroke="none"><title>C group 1 drain | W2 | 276,001–276,066 cycles | duration=65</title></rect>
+<rect x="1607.27" y="340.00" width="1.00" height="18.00" rx="3" fill="#d97706" opacity="0.960" stroke="none"><title>C group 1 drain | W3 | 276,002–276,067 cycles | duration=65</title></rect>
+<rect x="1565.57" y="284.00" width="3.67" height="22.00" rx="3" fill="#f97316" opacity="0.950" stroke="#ffffff"><title>final MMA drain | W2 | 267,893–268,606 cycles | duration=713</title></rect>
+<rect x="1566.89" y="338.00" width="2.89" height="22.00" rx="3" fill="#f97316" opacity="0.950" stroke="#ffffff"><title>final MMA drain | W3 | 268,150–268,712 cycles | duration=562</title></rect>
+<rect x="1624.87" y="176.00" width="1.00" height="22.00" rx="3" fill="#334155" opacity="0.950" stroke="#ffffff"><title>tile barrier | W0 | 279,424–279,450 cycles | duration=26</title></rect>
+<rect x="1624.38" y="230.00" width="1.00" height="22.00" rx="3" fill="#334155" opacity="0.950" stroke="#ffffff"><title>tile barrier | W1 | 279,329–279,450 cycles | duration=121</title></rect>
+<rect x="1624.39" y="284.00" width="1.00" height="22.00" rx="3" fill="#334155" opacity="0.950" stroke="#ffffff"><title>tile barrier | W2 | 279,331–279,450 cycles | duration=119</title></rect>
+<rect x="1624.39" y="338.00" width="1.00" height="22.00" rx="3" fill="#334155" opacity="0.950" stroke="#ffffff"><title>tile barrier | W3 | 279,332–279,450 cycles | duration=118</title></rect>
+<rect x="188" y="426" width="14" height="14" rx="2" fill="#64748b"/>
+<text x="208.00" y="438.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#475569" font-weight="400" text-anchor="start">scheduler</text>
+<rect x="293.9" y="426" width="14" height="14" rx="2" fill="#38bdf8"/>
+<text x="313.90" y="438.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#475569" font-weight="400" text-anchor="start">TMA producer loop</text>
+<rect x="456.59999999999997" y="426" width="14" height="14" rx="2" fill="#a78bfa"/>
+<text x="476.60" y="438.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#475569" font-weight="400" text-anchor="start">MMA consumer loop</text>
+<rect x="619.3" y="426" width="14" height="14" rx="2" fill="#22c55e"/>
+<text x="639.30" y="438.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#475569" font-weight="400" text-anchor="start">C stage/TMA store</text>
+<rect x="782.0" y="426" width="14" height="14" rx="2" fill="#f59e0b"/>
+<text x="802.00" y="438.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#475569" font-weight="400" text-anchor="start">store-group drain</text>
+<rect x="45.00" y="473.00" width="385.50" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/>
+<text x="61.00" y="498.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="start">scheduler</text>
+<text x="61.00" y="526.00" font-size="20" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">1,179 cyc</text>
+<text x="416.50" y="526.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="end">0.42%</text>
+<rect x="446.50" y="473.00" width="385.50" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/>
+<text x="462.50" y="498.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="start">mainloop → CTA join</text>
+<text x="462.50" y="526.00" font-size="20" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">267,702 cyc</text>
+<text x="818.00" y="526.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="end">95.80%</text>
+<rect x="848.00" y="473.00" width="385.50" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/>
+<text x="864.00" y="498.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="start">FP32 C epilogue</text>
+<text x="864.00" y="526.00" font-size="20" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">10,077 cyc</text>
+<text x="1219.50" y="526.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="end">3.61%</text>
+<rect x="1249.50" y="473.00" width="385.50" height="78" rx="10" fill="#ffffff" stroke="#e2e8f0" filter="url(#shadow)"/>
+<text x="1265.50" y="498.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="start">complete output tile</text>
+<text x="1265.50" y="526.00" font-size="20" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">279,450 cyc</text>
+<text x="1621.00" y="526.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="end">100.00%</text>
+<text x="45.00" y="601.00" font-size="18" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="700" text-anchor="start">B. Consumer call-time aggregates</text>
+<text x="45.00" y="626.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="start">Median total across runs; whisker = min–max. Rows overlap in time and are not an additive critical path.</text>
+<line x1="300.00" y1="661" x2="300.00" y2="1087" stroke="#e2e8f0" stroke-width="1"/>
+<text x="300.00" y="654.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">0</text>
+<line x1="562.00" y1="661" x2="562.00" y2="1087" stroke="#e2e8f0" stroke-width="1"/>
+<text x="562.00" y="654.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">10,000</text>
+<line x1="824.00" y1="661" x2="824.00" y2="1087" stroke="#e2e8f0" stroke-width="1"/>
+<text x="824.00" y="654.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">20,000</text>
+<line x1="1086.00" y1="661" x2="1086.00" y2="1087" stroke="#e2e8f0" stroke-width="1"/>
+<text x="1086.00" y="654.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">30,000</text>
+<line x1="1348.00" y1="661" x2="1348.00" y2="1087" stroke="#e2e8f0" stroke-width="1"/>
+<text x="1348.00" y="654.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">40,000</text>
+<line x1="1610.00" y1="661" x2="1610.00" y2="1087" stroke="#e2e8f0" stroke-width="1"/>
+<text x="1610.00" y="654.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="middle">50,000</text>
+<text x="278.00" y="706.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">wait A ready</text>
+<line x1="1313.73" y1="693.00" x2="1313.73" y2="693.00" stroke="#0ea5e9" stroke-width="2" opacity="0.65"/>
+<line x1="1313.73" y1="689.00" x2="1313.73" y2="697.00" stroke="#0ea5e9" stroke-width="2"/>
+<line x1="1313.73" y1="689.00" x2="1313.73" y2="697.00" stroke="#0ea5e9" stroke-width="2"/>
+<rect x="300.00" y="686.00" width="1013.73" height="14.00" rx="3" fill="#0ea5e9" opacity="0.820" stroke="none"><title>wait A ready | W2 | median total=38692 cycles | range=38,692–38,692 | samples=256 | median/sample=151.14</title></rect>
+<circle cx="1313.73" cy="693.00" r="3.5" fill="#0ea5e9"><title>wait A ready | W2 | median total=38692 cycles | range=38,692–38,692 | samples=256 | median/sample=151.14</title></circle>
+<text x="1321.73" y="698.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 38692 (151.1/call)</text>
+<line x1="1289.00" y1="713.00" x2="1289.00" y2="713.00" stroke="#0ea5e9" stroke-width="2" opacity="0.65"/>
+<line x1="1289.00" y1="709.00" x2="1289.00" y2="717.00" stroke="#0ea5e9" stroke-width="2"/>
+<line x1="1289.00" y1="709.00" x2="1289.00" y2="717.00" stroke="#0ea5e9" stroke-width="2"/>
+<rect x="300.00" y="706.00" width="989.00" height="14.00" rx="3" fill="#0ea5e9" opacity="0.820" stroke="none"><title>wait A ready | W3 | median total=37748 cycles | range=37,748–37,748 | samples=256 | median/sample=147.45</title></rect>
+<circle cx="1289.00" cy="713.00" r="3.5" fill="#0ea5e9"><title>wait A ready | W3 | median total=37748 cycles | range=37,748–37,748 | samples=256 | median/sample=147.45</title></circle>
+<text x="1297.00" y="718.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 37748 (147.5/call)</text>
+<text x="278.00" y="764.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">wait B0 ready</text>
+<line x1="999.54" y1="751.00" x2="999.54" y2="751.00" stroke="#06b6d4" stroke-width="2" opacity="0.65"/>
+<line x1="999.54" y1="747.00" x2="999.54" y2="755.00" stroke="#06b6d4" stroke-width="2"/>
+<line x1="999.54" y1="747.00" x2="999.54" y2="755.00" stroke="#06b6d4" stroke-width="2"/>
+<rect x="300.00" y="744.00" width="699.54" height="14.00" rx="3" fill="#06b6d4" opacity="0.820" stroke="none"><title>wait B0 ready | W2 | median total=26700 cycles | range=26,700–26,700 | samples=256 | median/sample=104.30</title></rect>
+<circle cx="999.54" cy="751.00" r="3.5" fill="#06b6d4"><title>wait B0 ready | W2 | median total=26700 cycles | range=26,700–26,700 | samples=256 | median/sample=104.30</title></circle>
+<text x="1007.54" y="756.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 26700 (104.3/call)</text>
+<line x1="999.41" y1="771.00" x2="999.41" y2="771.00" stroke="#06b6d4" stroke-width="2" opacity="0.65"/>
+<line x1="999.41" y1="767.00" x2="999.41" y2="775.00" stroke="#06b6d4" stroke-width="2"/>
+<line x1="999.41" y1="767.00" x2="999.41" y2="775.00" stroke="#06b6d4" stroke-width="2"/>
+<rect x="300.00" y="764.00" width="699.41" height="14.00" rx="3" fill="#06b6d4" opacity="0.820" stroke="none"><title>wait B0 ready | W3 | median total=26695 cycles | range=26,695–26,695 | samples=256 | median/sample=104.28</title></rect>
+<circle cx="999.41" cy="771.00" r="3.5" fill="#06b6d4"><title>wait B0 ready | W3 | median total=26695 cycles | range=26,695–26,695 | samples=256 | median/sample=104.28</title></circle>
+<text x="1007.41" y="776.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 26695 (104.3/call)</text>
+<text x="278.00" y="822.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">issue MMA B0 (2/4)</text>
+<line x1="1480.47" y1="809.00" x2="1480.47" y2="809.00" stroke="#8b5cf6" stroke-width="2" opacity="0.65"/>
+<line x1="1480.47" y1="805.00" x2="1480.47" y2="813.00" stroke="#8b5cf6" stroke-width="2"/>
+<line x1="1480.47" y1="805.00" x2="1480.47" y2="813.00" stroke="#8b5cf6" stroke-width="2"/>
+<rect x="300.00" y="802.00" width="1180.47" height="14.00" rx="3" fill="#8b5cf6" opacity="0.820" stroke="none"><title>issue MMA B0 (2/4) | W2 | median total=45056 cycles | range=45,056–45,056 | samples=512 | median/sample=88.00</title></rect>
+<circle cx="1480.47" cy="809.00" r="3.5" fill="#8b5cf6"><title>issue MMA B0 (2/4) | W2 | median total=45056 cycles | range=45,056–45,056 | samples=512 | median/sample=88.00</title></circle>
+<text x="1488.47" y="814.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 45056 (88.0/call)</text>
+<line x1="1480.47" y1="829.00" x2="1480.47" y2="829.00" stroke="#8b5cf6" stroke-width="2" opacity="0.65"/>
+<line x1="1480.47" y1="825.00" x2="1480.47" y2="833.00" stroke="#8b5cf6" stroke-width="2"/>
+<line x1="1480.47" y1="825.00" x2="1480.47" y2="833.00" stroke="#8b5cf6" stroke-width="2"/>
+<rect x="300.00" y="822.00" width="1180.47" height="14.00" rx="3" fill="#8b5cf6" opacity="0.820" stroke="none"><title>issue MMA B0 (2/4) | W3 | median total=45056 cycles | range=45,056–45,056 | samples=512 | median/sample=88.00</title></rect>
+<circle cx="1480.47" cy="829.00" r="3.5" fill="#8b5cf6"><title>issue MMA B0 (2/4) | W3 | median total=45056 cycles | range=45,056–45,056 | samples=512 | median/sample=88.00</title></circle>
+<text x="1488.47" y="834.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 45056 (88.0/call)</text>
+<text x="278.00" y="880.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">wait B1 ready</text>
+<line x1="882.01" y1="867.00" x2="882.01" y2="867.00" stroke="#14b8a6" stroke-width="2" opacity="0.65"/>
+<line x1="882.01" y1="863.00" x2="882.01" y2="871.00" stroke="#14b8a6" stroke-width="2"/>
+<line x1="882.01" y1="863.00" x2="882.01" y2="871.00" stroke="#14b8a6" stroke-width="2"/>
+<rect x="300.00" y="860.00" width="582.01" height="14.00" rx="3" fill="#14b8a6" opacity="0.820" stroke="none"><title>wait B1 ready | W2 | median total=22214 cycles | range=22,214–22,214 | samples=256 | median/sample=86.77</title></rect>
+<circle cx="882.01" cy="867.00" r="3.5" fill="#14b8a6"><title>wait B1 ready | W2 | median total=22214 cycles | range=22,214–22,214 | samples=256 | median/sample=86.77</title></circle>
+<text x="890.01" y="872.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 22214 (86.8/call)</text>
+<line x1="883.13" y1="887.00" x2="883.13" y2="887.00" stroke="#14b8a6" stroke-width="2" opacity="0.65"/>
+<line x1="883.13" y1="883.00" x2="883.13" y2="891.00" stroke="#14b8a6" stroke-width="2"/>
+<line x1="883.13" y1="883.00" x2="883.13" y2="891.00" stroke="#14b8a6" stroke-width="2"/>
+<rect x="300.00" y="880.00" width="583.13" height="14.00" rx="3" fill="#14b8a6" opacity="0.820" stroke="none"><title>wait B1 ready | W3 | median total=22257 cycles | range=22,257–22,257 | samples=256 | median/sample=86.94</title></rect>
+<circle cx="883.13" cy="887.00" r="3.5" fill="#14b8a6"><title>wait B1 ready | W3 | median total=22257 cycles | range=22,257–22,257 | samples=256 | median/sample=86.94</title></circle>
+<text x="891.13" y="892.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 22257 (86.9/call)</text>
+<text x="278.00" y="938.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">issue MMA B1 (2/4)</text>
+<line x1="1366.44" y1="925.00" x2="1366.44" y2="925.00" stroke="#a855f7" stroke-width="2" opacity="0.65"/>
+<line x1="1366.44" y1="921.00" x2="1366.44" y2="929.00" stroke="#a855f7" stroke-width="2"/>
+<line x1="1366.44" y1="921.00" x2="1366.44" y2="929.00" stroke="#a855f7" stroke-width="2"/>
+<rect x="300.00" y="918.00" width="1066.44" height="14.00" rx="3" fill="#a855f7" opacity="0.820" stroke="none"><title>issue MMA B1 (2/4) | W2 | median total=40704 cycles | range=40,704–40,704 | samples=512 | median/sample=79.50</title></rect>
+<circle cx="1366.44" cy="925.00" r="3.5" fill="#a855f7"><title>issue MMA B1 (2/4) | W2 | median total=40704 cycles | range=40,704–40,704 | samples=512 | median/sample=79.50</title></circle>
+<text x="1374.44" y="930.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 40704 (79.5/call)</text>
+<line x1="1366.44" y1="945.00" x2="1366.44" y2="945.00" stroke="#a855f7" stroke-width="2" opacity="0.65"/>
+<line x1="1366.44" y1="941.00" x2="1366.44" y2="949.00" stroke="#a855f7" stroke-width="2"/>
+<line x1="1366.44" y1="941.00" x2="1366.44" y2="949.00" stroke="#a855f7" stroke-width="2"/>
+<rect x="300.00" y="938.00" width="1066.44" height="14.00" rx="3" fill="#a855f7" opacity="0.820" stroke="none"><title>issue MMA B1 (2/4) | W3 | median total=40704 cycles | range=40,704–40,704 | samples=512 | median/sample=79.50</title></rect>
+<circle cx="1366.44" cy="945.00" r="3.5" fill="#a855f7"><title>issue MMA B1 (2/4) | W3 | median total=40704 cycles | range=40,704–40,704 | samples=512 | median/sample=79.50</title></circle>
+<text x="1374.44" y="950.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 40704 (79.5/call)</text>
+<text x="278.00" y="996.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">MMA commit</text>
+<line x1="749.38" y1="983.00" x2="749.38" y2="983.00" stroke="#ec4899" stroke-width="2" opacity="0.65"/>
+<line x1="749.38" y1="979.00" x2="749.38" y2="987.00" stroke="#ec4899" stroke-width="2"/>
+<line x1="749.38" y1="979.00" x2="749.38" y2="987.00" stroke="#ec4899" stroke-width="2"/>
+<rect x="300.00" y="976.00" width="449.38" height="14.00" rx="3" fill="#ec4899" opacity="0.820" stroke="none"><title>MMA commit | W2 | median total=17152 cycles | range=17,152–17,152 | samples=256 | median/sample=67.00</title></rect>
+<circle cx="749.38" cy="983.00" r="3.5" fill="#ec4899"><title>MMA commit | W2 | median total=17152 cycles | range=17,152–17,152 | samples=256 | median/sample=67.00</title></circle>
+<text x="757.38" y="988.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 17152 (67.0/call)</text>
+<line x1="749.38" y1="1003.00" x2="749.38" y2="1003.00" stroke="#ec4899" stroke-width="2" opacity="0.65"/>
+<line x1="749.38" y1="999.00" x2="749.38" y2="1007.00" stroke="#ec4899" stroke-width="2"/>
+<line x1="749.38" y1="999.00" x2="749.38" y2="1007.00" stroke="#ec4899" stroke-width="2"/>
+<rect x="300.00" y="996.00" width="449.38" height="14.00" rx="3" fill="#ec4899" opacity="0.820" stroke="none"><title>MMA commit | W3 | median total=17152 cycles | range=17,152–17,152 | samples=256 | median/sample=67.00</title></rect>
+<circle cx="749.38" cy="1003.00" r="3.5" fill="#ec4899"><title>MMA commit | W3 | median total=17152 cycles | range=17,152–17,152 | samples=256 | median/sample=67.00</title></circle>
+<text x="757.38" y="1008.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 17152 (67.0/call)</text>
+<text x="278.00" y="1054.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#0f172a" font-weight="600" text-anchor="end">final MMA drain</text>
+<line x1="318.68" y1="1041.00" x2="318.68" y2="1041.00" stroke="#f97316" stroke-width="2" opacity="0.65"/>
+<line x1="318.68" y1="1037.00" x2="318.68" y2="1045.00" stroke="#f97316" stroke-width="2"/>
+<line x1="318.68" y1="1037.00" x2="318.68" y2="1045.00" stroke="#f97316" stroke-width="2"/>
+<rect x="300.00" y="1034.00" width="18.68" height="14.00" rx="3" fill="#f97316" opacity="0.820" stroke="none"><title>final MMA drain | W2 | median total=713 cycles | range=713–713 | samples=1 | median/sample=713.00</title></rect>
+<circle cx="318.68" cy="1041.00" r="3.5" fill="#f97316"><title>final MMA drain | W2 | median total=713 cycles | range=713–713 | samples=1 | median/sample=713.00</title></circle>
+<text x="326.68" y="1046.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W2 713</text>
+<line x1="314.72" y1="1061.00" x2="314.72" y2="1061.00" stroke="#f97316" stroke-width="2" opacity="0.65"/>
+<line x1="314.72" y1="1057.00" x2="314.72" y2="1065.00" stroke="#f97316" stroke-width="2"/>
+<line x1="314.72" y1="1057.00" x2="314.72" y2="1065.00" stroke="#f97316" stroke-width="2"/>
+<rect x="300.00" y="1054.00" width="14.72" height="14.00" rx="3" fill="#f97316" opacity="0.820" stroke="none"><title>final MMA drain | W3 | median total=562 cycles | range=562–562 | samples=1 | median/sample=562.00</title></rect>
+<circle cx="314.72" cy="1061.00" r="3.5" fill="#f97316"><title>final MMA drain | W3 | median total=562 cycles | range=562–562 | samples=1 | median/sample=562.00</title></circle>
+<text x="322.72" y="1066.00" font-size="10" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#334155" font-weight="400" text-anchor="start">W3 562</text>
+<rect x="45" y="1122.00" width="1590" height="88" rx="10" fill="#fff7ed" stroke="#fed7aa"/>
+<text x="65.00" y="1149.00" font-size="13" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#9a3412" font-weight="700" text-anchor="start">Reading this trace</text>
+<text x="65.00" y="1173.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#7c2d12" font-weight="400" text-anchor="start">In the representative run, the last producer returns 2,914 cycles before the last consumer; W2/W3 consumer finish skew is 106 cycles.</text>
+<text x="65.00" y="1194.00" font-size="12" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#7c2d12" font-weight="400" text-anchor="start">TMA bars measure issue-loop occupancy, not transfer completion. MMA bars measure descriptor setup/issue, not isolated tensor-core execution.</text>
+<text x="1635.00" y="1280.00" font-size="11" font-family="Inter,Segoe UI,Arial,sans-serif" fill="#64748b" font-weight="400" text-anchor="end">Diagnostic trace only: clock reads and trace storage perturb the kernel; use the uninstrumented binary for TFLOP/s.</text>
+</svg>
