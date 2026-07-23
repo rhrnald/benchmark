@@ -227,6 +227,29 @@ percentage point라 현재 source-backed E7a가 역사적 상대 효율은 거�
 [환경 상대 비교 결과](../../results/gemm_env_cublas_reference_b200_45481495_20260723/summary.md)에
 있다.
 
+같은 GPU와 software stack에서 8K와 32K도 확장 측정했다. E7a는 8K에서
+`16x16`, 32K에서 size-tuned `8x18` persistent macro를 사용한다. 아래 값은
+각 행의 같은 activation 안에서 실행 순서를 균형화한 process mean이며,
+모든 process가 warmup 1회와 timed 5회를 사용했다.
+
+| input | size | `p0` | 현재 E7a | cuBLAS | E7a/cuBLAS |
+|---|---:|---:|---:|---:|---:|
+| `[0,1)` | 8K | 1674.848 | **1704.894** | 1737.851 | **98.104%** |
+| `[0,1)` | 16K | 1737.130 | **1770.382** | 1836.906 | **96.378%** |
+| `[0,1)` | 32K | 1591.566 | **1608.133** | 1625.373 | **98.939%** |
+| `[-8,8)` | 8K | 1534.717 | **1555.989** | 1580.738 | **98.434%** |
+| `[-8,8)` | 16K | 1512.169 | **1529.712** | 1608.169 | **95.121%** |
+| `[-8,8)` | 32K | 1316.549 | **1338.924** | 1332.195 | **100.505%** |
+
+8K signed는 첫 activation의 cuBLAS 한 표본이 다른 두 표본보다 2.489%
+낮아서, 세 방법을 새 activation에서 다시 완전 회전한 confirmation 값을
+표에 사용했다. 32K signed의 E7a/cuBLAS 차이는 +0.505%지만 cuBLAS
+process SD가 17.252 TFLOP/s이므로 동률 범위로 해석한다. 32K에서 `8x18`은
+직접 size port인 `16x16`보다 `[0,1)` +0.791%, `[-8,8)` +4.735%였다.
+원시 표본, SD, 두 activation을 합치지 않은 이유와 source diff는
+[8K/32K 확장 결과](../../results/gemm_env_cublas_size_extension_b200_45481495_20260723/summary.md)에
+있다.
+
 ## 소스 위치
 
 - [상수와 shared/TMEM layout](gemm256_bf16_16k.cu#L42-L110)

@@ -1,0 +1,56 @@
+--- /workspace/benchmark/5.GEMM/baseline/gemm256_bf16_16k.cu	2026-07-22 19:46:27.557645924 +0000
++++ /workspace/gemm_env_cublas_size_extension_b200_45481495_20260723/source/gemm256_bf16_8k_m16n16.cu	2026-07-23 04:58:32.371333672 +0000
+@@ -10,7 +10,7 @@
+ #include <cstring>
+ #include <vector>
+
+-// Clean 16K dense working default.
++// Clean 8192 dense working default.
+ //
+ // The original B0 was reconstructed from the configuration that produced the
+ // preserved 1806.657-TFLOP/s p0 binary.  This version retains the measured E2a
+@@ -42,7 +42,7 @@
+ static constexpr int kThreadsPerWarp = 32;
+ static constexpr int kWarps = 4;
+ static constexpr int kThreads = kWarps * kThreadsPerWarp;
+-static constexpr int kBenchmarkSize = 16384;
++static constexpr int kBenchmarkSize = 8192;
+ static constexpr int kPersistentCtas = 148;
+ static constexpr int kValidationCtas = 1;
+ static constexpr int kMaxValidationSize = 512;
+@@ -120,7 +120,7 @@
+   int device = 0;
+   int warmup = 1;
+   int iters = 5;
+-  const char *csv = "gemm256_bf16_16k.csv";
++  const char *csv = "gemm256_bf16_8k_m16n16.csv";
+   int input_init_mode = kInputInitRandom;
+   bool validate = false;
+   int validate_size = 512;
+@@ -562,7 +562,7 @@
+   tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
+ }
+
+-__global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
++__global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_8k_m16n16_kernel(
+     const __grid_constant__ CUtensorMap a_map,
+     const __grid_constant__ CUtensorMap b_map,
+     const __grid_constant__ CUtensorMap c_map, uint32_t *__restrict__ sink,
+@@ -1040,7 +1040,7 @@
+ }
+
+ void set_gemm_kernel_attribute() {
+-  cuda_check(cudaFuncSetAttribute(gemm256_bf16_16k_kernel,
++  cuda_check(cudaFuncSetAttribute(gemm256_bf16_8k_m16n16_kernel,
+                                   cudaFuncAttributeMaxDynamicSharedMemorySize,
+                                   kDynamicSmemBytes));
+ }
+@@ -1048,7 +1048,7 @@
+ void launch_gemm_kernel(dim3 grid, const CUtensorMap &a_map,
+                         const CUtensorMap &b_map, const CUtensorMap &c_map,
+                         uint32_t *d_sink, int ktiles, int mtile, int ntile) {
+-  gemm256_bf16_16k_kernel<<<grid, kThreads, kDynamicSmemBytes>>>(
++  gemm256_bf16_8k_m16n16_kernel<<<grid, kThreads, kDynamicSmemBytes>>>(
+       a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
+ }
+ struct CaseResult {

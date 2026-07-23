@@ -38,6 +38,14 @@ instance `45481495`의 calibration은 `[0,1)`에서 `p0 1737.130`, E7a
 과거 `p0 1806.657` 환경에는 같은 세션의 cuBLAS 측정이 없으므로,
 cross-instance 정규화는 직접 증거로 사용하지 않는다.
 
+같은 instance와 software stack의 size extension에서 현재 E7a/cuBLAS는
+`[0,1)` 기준 8K 98.104%, 32K 98.939%였고, `[-8,8)` 기준 confirmation
+8K 98.434%, 32K 100.505%였다. 32K signed의 차이는 cuBLAS process
+변동보다 작으므로 동률로 취급한다. 32K에서는 `16x16` direct port보다
+`8x18` macro가 `[0,1)` +0.791%, `[-8,8)` +4.735%여서 size extension의
+기준으로 사용한다. 이 수치는 환경 calibration용이며 16K 후보 채택
+gate에는 사용하지 않는다.
+
 ## B0. clean reconstruction 검증
 
 1. local CUDA 12.9 build와 `REG 178 / spill 0`을 확인한다.

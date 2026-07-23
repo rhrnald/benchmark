@@ -1,0 +1,10 @@
+pass	size	distribution	position	method
+4	8192	signed8	1	p0
+4	8192	signed8	2	current_m16n16
+4	8192	signed8	3	cublas
+5	8192	signed8	1	current_m16n16
+5	8192	signed8	2	cublas
+5	8192	signed8	3	p0
+6	8192	signed8	1	cublas
+6	8192	signed8	2	p0
+6	8192	signed8	3	current_m16n16

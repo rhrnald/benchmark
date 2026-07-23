@@ -50,6 +50,20 @@ CUBLAS_REFERENCE_BIN=/workspace/benchmark/6.cuBLAS/cublas_gemm_bench \
 The 2026-07-23 B200 result and its interpretation are recorded in
 `../results/gemm_env_cublas_reference_b200_45481495_20260723/summary.md`.
 
+The 8K/32K extension uses the same pinned cuBLAS executable and generates
+size-specialized E7a sources from the macro-free 16K baseline. It measures a
+direct `16x16` port and a separate size-tuned `8x18` E7a at 32K:
+
+```bash
+OUT_DIR=/workspace/gemm_env_cublas_size_extension \
+P0_BIN=/workspace/benchmark/results/gemm_phase_resweep_b200_45465499/bin/p0 \
+CUBLAS_REFERENCE_BIN=/workspace/benchmark/6.cuBLAS/cublas_gemm_bench \
+../run_b200_gemm_env_cublas_size_extension.sh
+```
+
+Results, process samples, validation, and the 8K signed confirmation are in
+`../results/gemm_env_cublas_size_extension_b200_45481495_20260723/summary.md`.
+
 Supported modes:
 
 - `fp16`: FP16 input/output, FP32 accumulate.

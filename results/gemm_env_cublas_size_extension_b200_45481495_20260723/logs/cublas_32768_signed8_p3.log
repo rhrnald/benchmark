@@ -1,0 +1,8 @@
+device=0 name="NVIDIA B200" cc=10.0
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=266.180 event_avg_ms=53.236041 event_TFLOPS=1321.825
+wall_total_ms=266.198 wall_avg_ms=53.239500 wall_TFLOPS=1321.739
+csv,bf16fp32,32768,32768,32768,5,1,53.236041,1321.825,53.239500,1321.739,NVIDIA B200
