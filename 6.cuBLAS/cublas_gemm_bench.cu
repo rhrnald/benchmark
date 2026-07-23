@@ -271,7 +271,11 @@ int main(int argc, char **argv) {
   CHECK_CUBLAS(cublasCreate(&handle));
   CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_TF32_TENSOR_OP_MATH));
   int cublas_version = 0;
+  int cuda_runtime_version = 0;
+  int cuda_driver_version = 0;
   CHECK_CUBLAS(cublasGetVersion(handle, &cublas_version));
+  CHECK_CUDA(cudaRuntimeGetVersion(&cuda_runtime_version));
+  CHECK_CUDA(cudaDriverGetVersion(&cuda_driver_version));
 
   GemmConfig cfg = config_for_mode(opt.mode);
 
@@ -343,8 +347,11 @@ int main(int argc, char **argv) {
 
   std::printf("device=%d name=\"%s\" cc=%d.%d\n", opt.device, prop.name,
               prop.major, prop.minor);
-  std::printf("cublas_version=%d cuda_runtime_version=%d\n", cublas_version,
-              CUDART_VERSION);
+  std::printf(
+      "cublas_version=%d cuda_runtime_version=%d cuda_driver_version=%d "
+      "cuda_compile_version=%d\n",
+      cublas_version, cuda_runtime_version, cuda_driver_version,
+      CUDART_VERSION);
   std::printf("mode=%s (%s)\n", opt.mode.c_str(), cfg.label);
   std::printf("input=BF16 uniform %s, exact 5.GEMM seeds; layout=row-major C=A*B\n",
               opt.input_dist == "unit" ? "[0,1)" : "[-8,8)");

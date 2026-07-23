@@ -4,12 +4,14 @@ set -euo pipefail
 repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 out_dir=${OUT_DIR:-"$repo_dir/results/gemm_env_cublas_reference"}
 p0_bin=${P0_BIN:-"$repo_dir/results/gemm_phase_resweep_b200_45465499/bin/p0"}
+cublas_reference_bin=${CUBLAS_REFERENCE_BIN:-"$repo_dir/6.cuBLAS/cublas_gemm_bench"}
 nvcc_bin=${NVCC:-/usr/local/cuda-12.9/bin/nvcc}
 
 size=16384
 warmup=1
 iters=5
 expected_p0_sha=166044d6690b52dc448befefb79baabb1c9cb56950b16a0536454249d623ff72
+expected_cublas_sha=1f47799b1ffd8d815f457aa908be4ded8c8a3539d6a11fcc8053410612f5148b
 
 mkdir -p -- "$out_dir/bin" "$out_dir/csv" "$out_dir/logs" "$out_dir/source"
 
@@ -21,6 +23,17 @@ fi
 actual_p0_sha=$(sha256sum "$p0_bin" | awk '{print $1}')
 if [[ "$actual_p0_sha" != "$expected_p0_sha" ]]; then
   echo "unexpected p0 SHA-256: $actual_p0_sha" >&2
+  exit 2
+fi
+
+if [[ ! -x "$cublas_reference_bin" ]]; then
+  echo "missing executable cuBLAS reference binary: $cublas_reference_bin" >&2
+  exit 2
+fi
+
+actual_cublas_sha=$(sha256sum "$cublas_reference_bin" | awk '{print $1}')
+if [[ "$actual_cublas_sha" != "$expected_cublas_sha" ]]; then
+  echo "unexpected cuBLAS reference SHA-256: $actual_cublas_sha" >&2
   exit 2
 fi
 
@@ -36,9 +49,7 @@ cp -- "$0" "$out_dir/source/run_b200_gemm_env_cublas_reference.sh"
 "$nvcc_bin" -O3 -std=c++17 \
   -gencode arch=compute_100a,code=sm_100a \
   "$current_src" -lcuda -o "$current_bin"
-"$nvcc_bin" -O3 -std=c++17 \
-  -gencode arch=compute_100,code=sm_100 \
-  "$cublas_src" -lcublas -o "$cublas_bin"
+cp -- "$cublas_reference_bin" "$cublas_bin"
 
 {
   date --iso-8601=seconds
@@ -47,12 +58,17 @@ cp -- "$0" "$out_dir/source/run_b200_gemm_env_cublas_reference.sh"
   nvidia-smi --query-gpu=name,uuid,driver_version,power.limit,clocks.max.sm,memory.total \
     --format=csv,noheader,nounits
   ldd "$cublas_bin"
+  cublas_so=$(ldd "$cublas_bin" | awk '$1 ~ /^libcublas.so/ {print $3; exit}')
+  cublas_lt_so=$(ldd "$cublas_bin" | awk '$1 ~ /^libcublasLt.so/ {print $3; exit}')
+  readlink -f "$cublas_so"
+  readlink -f "$cublas_lt_so"
+  sha256sum "$(readlink -f "$cublas_so")" "$(readlink -f "$cublas_lt_so")"
 } >"$out_dir/logs/environment.txt" 2>&1
 nvidia-smi -q >"$out_dir/logs/nvidia_smi_before.txt"
 
 {
   sha256sum "$current_src" "$cublas_src" "$p0_bin"
-  sha256sum "$current_bin" "$cublas_bin"
+  sha256sum "$current_bin" "$cublas_bin" "$cublas_reference_bin"
 } >"$out_dir/logs/sha256.txt"
 
 "$current_bin" --validate --validate-size 512 --validate-pattern pattern \
