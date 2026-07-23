@@ -9,8 +9,8 @@ DEVICE ?= 0
 M ?= 16384
 N ?= 16384
 K ?= 16384
-REPEAT ?= 50
-WARMUP ?= 10
+REPEAT ?= 5
+WARMUP ?= 1
 MODES ?= fp16 bf16 tf32
 
 .PHONY: all build run clean

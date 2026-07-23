@@ -38,6 +38,43 @@ __global__ void init_kernel(T *ptr, size_t n, float scale) {
   }
 }
 
+__device__ __forceinline__ uint32_t random_mix32(uint32_t x) {
+  x += 0x9e3779b9u;
+  x = (x ^ (x >> 16)) * 0x85ebca6bu;
+  x = (x ^ (x >> 13)) * 0xc2b2ae35u;
+  return x ^ (x >> 16);
+}
+
+// Bit-for-bit identical to 5.GEMM's BF16 uniform [0,1) initializer.
+__global__ void init_random_bf16_words(uint32_t *words, size_t word_count,
+                                       uint32_t seed, float scale, float bias) {
+  const size_t word_idx =
+      static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (word_idx >= word_count) return;
+  const uint32_t index = static_cast<uint32_t>(word_idx);
+  const uint32_t lo24 = random_mix32(seed ^ index ^ 0x9e3779b9u) >> 8;
+  const uint32_t hi24 = random_mix32(seed ^ index ^ 0x243f6a88u) >> 8;
+  const float lo = static_cast<float>(lo24) * 0x1.0p-24f * scale + bias;
+  const float hi = static_cast<float>(hi24) * 0x1.0p-24f * scale + bias;
+  const uint32_t lo_bits = static_cast<uint32_t>(__bfloat16_as_ushort(__float2bfloat16(lo)));
+  const uint32_t hi_bits = static_cast<uint32_t>(__bfloat16_as_ushort(__float2bfloat16(hi)));
+  words[word_idx] = lo_bits | (hi_bits << 16);
+}
+
+void init_random_bf16(__nv_bfloat16 *ptr, size_t elements, uint32_t seed,
+                      float scale, float bias) {
+  if ((elements & 1u) != 0u) {
+    std::fprintf(stderr, "Random BF16 initializer requires an even element count\n");
+    std::exit(EXIT_FAILURE);
+  }
+  constexpr int threads = 256;
+  const size_t words = elements / 2;
+  const int blocks = static_cast<int>((words + threads - 1) / threads);
+  init_random_bf16_words<<<blocks, threads>>>(
+      reinterpret_cast<uint32_t *>(ptr), words, seed, scale, bias);
+  CHECK_CUDA(cudaGetLastError());
+}
+
 template <>
 __global__ void init_kernel<__half>(__half *ptr, size_t n, float scale) {
   size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -70,15 +107,17 @@ struct Options {
   int m = 16384;
   int n = 16384;
   int k = 16384;
-  int repeat = 50;
-  int warmup = 10;
+  int repeat = 5;
+  int warmup = 1;
   std::string mode = "bf16";
+  std::string input_dist = "unit";
 };
 
 void usage(const char *argv0) {
   std::printf(
       "Usage: %s [--device N] [--m M] [--n N] [--k K] [--repeat R] "
-      "[--warmup W] [--mode fp16|bf16|bf16fp32|tf32|fp32]\n",
+      "[--warmup W] [--mode fp16|bf16|bf16fp32|tf32|fp32] "
+      "[--input-dist unit|signed8]\n",
       argv0);
 }
 
@@ -108,6 +147,8 @@ Options parse_options(int argc, char **argv) {
       opt.warmup = std::atoi(need_arg("--warmup"));
     } else if (std::strcmp(argv[i], "--mode") == 0) {
       opt.mode = need_arg("--mode");
+    } else if (std::strcmp(argv[i], "--input-dist") == 0) {
+      opt.input_dist = need_arg("--input-dist");
     } else if (std::strcmp(argv[i], "--help") == 0) {
       usage(argv[0]);
       std::exit(EXIT_SUCCESS);
@@ -121,6 +162,10 @@ Options parse_options(int argc, char **argv) {
   if (opt.m <= 0 || opt.n <= 0 || opt.k <= 0 || opt.repeat <= 0 ||
       opt.warmup < 0) {
     std::fprintf(stderr, "m/n/k/repeat must be positive and warmup >= 0\n");
+    std::exit(EXIT_FAILURE);
+  }
+  if (opt.input_dist != "unit" && opt.input_dist != "signed8") {
+    std::fprintf(stderr, "input-dist must be 'unit' or 'signed8'\n");
     std::exit(EXIT_FAILURE);
   }
   return opt;
@@ -225,6 +270,8 @@ int main(int argc, char **argv) {
   cublasHandle_t handle = nullptr;
   CHECK_CUBLAS(cublasCreate(&handle));
   CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_TF32_TENSOR_OP_MATH));
+  int cublas_version = 0;
+  CHECK_CUBLAS(cublasGetVersion(handle, &cublas_version));
 
   GemmConfig cfg = config_for_mode(opt.mode);
 
@@ -235,19 +282,29 @@ int main(int argc, char **argv) {
   void *A = nullptr;
   void *B = nullptr;
   void *C = nullptr;
-  A = alloc_and_init_by_type(cfg.a_type, a_elems, 1.0e-3f);
-  B = alloc_and_init_by_type(cfg.b_type, b_elems, 1.0e-3f);
+  A = alloc_and_init_by_type(cfg.a_type, a_elems, 0.0f);
+  B = alloc_and_init_by_type(cfg.b_type, b_elems, 0.0f);
   C = alloc_and_init_by_type(cfg.c_type, c_elems, 0.0f);
+  if (cfg.a_type == CUDA_R_16BF && cfg.b_type == CUDA_R_16BF) {
+    const float scale = opt.input_dist == "unit" ? 1.0f : 16.0f;
+    const float bias = opt.input_dist == "unit" ? 0.0f : -8.0f;
+    init_random_bf16(static_cast<__nv_bfloat16 *>(A), a_elems,
+                     20260719u ^ 0xa511e9b3u, scale, bias);
+    init_random_bf16(static_cast<__nv_bfloat16 *>(B), b_elems,
+                     20260719u ^ 0x63d83595u, scale, bias);
+  }
   CHECK_CUDA(cudaDeviceSynchronize());
 
   const float alpha = 1.0f;
   const float beta = 0.0f;
 
   auto run_gemm = [&]() {
-    CHECK_CUBLAS(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, opt.m, opt.n,
-                              opt.k, &alpha, A, cfg.a_type, opt.m, B,
-                              cfg.b_type, opt.k, &beta, C, cfg.c_type,
-                              opt.m, cfg.compute_type, cfg.algo));
+    // cuBLAS is column-major. Swapping A/B computes the row-major operation
+    // C = A * B used by 5.GEMM: C^T = B^T * A^T.
+    CHECK_CUBLAS(cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, opt.n, opt.m,
+                              opt.k, &alpha, B, cfg.b_type, opt.n, A,
+                              cfg.a_type, opt.k, &beta, C, cfg.c_type,
+                              opt.n, cfg.compute_type, cfg.algo));
   };
 
   for (int i = 0; i < opt.warmup; ++i) {
@@ -286,7 +343,11 @@ int main(int argc, char **argv) {
 
   std::printf("device=%d name=\"%s\" cc=%d.%d\n", opt.device, prop.name,
               prop.major, prop.minor);
+  std::printf("cublas_version=%d cuda_runtime_version=%d\n", cublas_version,
+              CUDART_VERSION);
   std::printf("mode=%s (%s)\n", opt.mode.c_str(), cfg.label);
+  std::printf("input=BF16 uniform %s, exact 5.GEMM seeds; layout=row-major C=A*B\n",
+              opt.input_dist == "unit" ? "[0,1)" : "[-8,8)");
   std::printf("m=%d n=%d k=%d repeat=%d warmup=%d\n", opt.m, opt.n, opt.k,
               opt.repeat, opt.warmup);
   std::printf("a_type=%s b_type=%s c_type=%s compute_type=%d memory=%.2f GiB\n",
