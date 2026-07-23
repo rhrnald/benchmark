@@ -1,0 +1,2 @@
+timestamp, name, uuid, driver_version, temperature.gpu, power.draw [W], clocks.current.sm [MHz]
+2026/07/23 08:28:49.891, NVIDIA B200, GPU-f0c8b07f-01f9-a3f5-9d7d-cfa6e67eea92, 580.126.09, 34, 143.12 W, 120 MHz

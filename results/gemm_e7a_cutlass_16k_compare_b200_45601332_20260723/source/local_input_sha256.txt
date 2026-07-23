@@ -1,0 +1,2 @@
+5c993a7d1bf77ee7c5e1bbe2568cbc0bf965f23d592a53d60ab72fe16eeaf754  /home/chaewon/cutlass_bf16_best_clc_bench
+37deebeee43b426c92331d8deda6bd4d627ed71ae931a7f519dfc97109e4f33a  5.GEMM/baseline/gemm256_bf16_16k.cu

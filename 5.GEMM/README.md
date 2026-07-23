@@ -255,6 +255,26 @@ at 32K.  It is 3.89--28.12% above the selected targeted CUTLASS kernels.  Full
 per-process values, relative differences, configurations, and raw output are
 in `../results/gemm_default_compare_1x5_b200_45460466/`.
 
+#### Fresh 16K E7a versus CUTLASS throughput rerun
+
+The clean E7a baseline and the selected CUTLASS 16K kernel were remeasured on
+the same B200 session on 2026-07-23.  This was a throughput-only run; no trace
+instrumentation was enabled.  Each implementation ran in four independent
+processes, each using one warmup and five timed launches.  The order alternated
+as AB/BA/AB/BA, and all measured-process snapshots were at 35--36 C and
+1965 MHz.
+
+| input | size | clean E7a | selected CUTLASS | E7a vs CUTLASS |
+|---|---:|---:|---:|---:|
+| BF16 `[0,1)` | 16384 | **1800.000 ± 1.632** | **1423.120 ± 2.577** | **+26.483%** |
+
+Both kernels computed row-major BF16-input, FP32-output `C=A*B` from the same
+deterministic input bytes.  E7a used a `256x256x64` three-stage persistent
+kernel; CUTLASS used the selected `256x256x64`, static `4x1` cluster,
+five-stage direct-store CLC kernel.  Per-process values, hashes, commands, and
+raw artifacts are in
+`../results/gemm_e7a_cutlass_16k_compare_b200_45601332_20260723/`.
+
 The most relevant previous library comparison used the last short-window
 configuration and bit-identical `[0,1)` inputs:
 

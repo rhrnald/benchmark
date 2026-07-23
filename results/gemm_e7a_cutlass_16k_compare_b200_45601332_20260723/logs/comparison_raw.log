@@ -1,0 +1,45 @@
+PROTOCOL one_case_per_process=true warmup=1 timed=5 input=BF16_[0,1)
+1d1a7d26b1a071bfd913c52786a58e669a148de08099a8ab827975c71b480940  /workspace/e7a_cutlass_16k_compare_20260723/bin/gemm_e7a_clean
+5c993a7d1bf77ee7c5e1bbe2568cbc0bf965f23d592a53d60ab72fe16eeaf754  /workspace/e7a_cutlass_16k_compare_20260723/bin/cutlass_bf16_best_clc_bench
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+BEGIN method=e7a input=unit size=16384 pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 b_parts=2 mma=m128n256k16 split=m_split k_loop=u1 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.893216 wall_ms=4.895758 event_TFLOPS=1797.610 wall_TFLOPS=1796.676 checksum=00000000
+END method=e7a input=unit size=16384 pass=1
+BEGIN method=cutlass input=unit size=16384 pass=1
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.17167 ms
+  GFLOPS: 1.42524e+06
+END method=cutlass input=unit size=16384 pass=1
+BEGIN method=cutlass input=unit size=16384 pass=2
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.17085 ms
+  GFLOPS: 1.42543e+06
+END method=cutlass input=unit size=16384 pass=2
+BEGIN method=e7a input=unit size=16384 pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 b_parts=2 mma=m128n256k16 split=m_split k_loop=u1 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.885913 wall_ms=4.888220 event_TFLOPS=1800.297 wall_TFLOPS=1799.447 checksum=00000000
+END method=e7a input=unit size=16384 pass=2
+BEGIN method=e7a input=unit size=16384 pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 b_parts=2 mma=m128n256k16 split=m_split k_loop=u1 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.883898 wall_ms=4.886395 event_TFLOPS=1801.040 wall_TFLOPS=1800.119 checksum=00000000
+END method=e7a input=unit size=16384 pass=3
+BEGIN method=cutlass input=unit size=16384 pass=3
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.19212 ms
+  GFLOPS: 1.42053e+06
+END method=cutlass input=unit size=16384 pass=3
+BEGIN method=cutlass input=unit size=16384 pass=4
+  Input: BF16 uniform [0,1), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.18885 ms
+  GFLOPS: 1.42128e+06
+END method=cutlass input=unit size=16384 pass=4
+BEGIN method=e7a input=unit size=16384 pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 b_parts=2 mma=m128n256k16 split=m_split k_loop=u1 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.883859 wall_ms=4.886231 event_TFLOPS=1801.054 wall_TFLOPS=1800.180 checksum=00000000
+END method=e7a input=unit size=16384 pass=4
