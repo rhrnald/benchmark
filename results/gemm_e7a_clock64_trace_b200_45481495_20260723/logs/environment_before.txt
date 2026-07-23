@@ -1,0 +1,4 @@
+2026-07-23T06:26:45Z
+NVIDIA B200, GPU-32b83fc4-687e-1a70-e8dc-b8015a71af27, 580.126.09, 36, 120 MHz, 141.31 W, 1000.00 W
+Build cuda_12.9.r12.9/compiler.36037853_0
+d742bc0331e5faa3b6bbebe4686cdd7222ab97c9a6a416322f69da54c5f4645d  /workspace/gemm_e7a_clock64_trace_20260723/source/dual_wide_phase_trace.cu

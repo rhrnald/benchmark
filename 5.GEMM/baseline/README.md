@@ -61,6 +61,13 @@ producer는 consumer보다 약 2.9K cycle 먼저 끝났고 서로의 completion
 차이도 34--35 cycle뿐이었다. 따라서 scheduler나 단순 producer workload
 균형보다 mainloop readiness/wait 동작을 먼저 분리했다.
 
+현재 E7a exact-source 계측판을 B200에서 다시 실행해 만든 standalone
+`clock64` SVG는
+[`gemm_e7a_clock64_trace.svg`](../../results/gemm_e7a_clock64_trace_b200_45481495_20260723/gemm_e7a_clock64_trace.svg)에
+있다. fresh `[0,1)` capture의 complete tile은 279450 cycle로 기존 5-run
+median 279398 cycle과 0.019% 차이였고, pattern/ones full-C validation은
+모두 정확히 통과했다. SVG의 traced runtime은 성능 수치로 사용하지 않는다.
+
 아래 delta는 매 실험의 동일 실행 clean 대비 paired 결과다. 모든 성능
 case는 한 프로세스당 한 case, warmup 1회, timed 5회 평균이다.
 
