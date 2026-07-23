@@ -25,6 +25,19 @@ paired mean이 0.5% 미만이면 noise로 간주한다. 0.5--1.0% 후보는 표�
 같은 후보만 기본선에 합친다. 후보 하나마다 source commit과 result commit을
 분리해 ablation이 섞이지 않게 한다.
 
+새 GPU, driver, CUDA/cuBLAS library 또는 Vast host로 옮길 때는 pinned
+cuBLAS 실행 파일을 16K의 두 input distribution에서 같은 1/5 규약으로
+3프로세스 측정한다. absolute TFLOP/s와 함께 custom/cuBLAS 비율을 환경
+calibration으로 기록한다. 이 비율은 서로 다른 환경의 결과를 참고용으로
+비교하는 데만 쓰며, 코드 채택 여부는 계속 같은 세션의 baseline/candidate
+paired delta로 결정한다.
+
+instance `45481495`의 calibration은 `[0,1)`에서 `p0 1737.130`, E7a
+`1770.382`, cuBLAS `1836.906 TFLOP/s`였고 E7a/cuBLAS는 96.378%였다.
+`[-8,8)`은 각각 1512.169, 1529.712, 1608.169 TFLOP/s와 95.121%였다.
+과거 `p0 1806.657` 환경에는 같은 세션의 cuBLAS 측정이 없으므로,
+cross-instance 정규화는 직접 증거로 사용하지 않는다.
+
 ## B0. clean reconstruction 검증
 
 1. local CUDA 12.9 build와 `REG 178 / spill 0`을 확인한다.

@@ -36,6 +36,20 @@ initialization, handle creation, and warmup are outside the CUDA-event region.
 Use `--input-dist signed8` to apply `16*u-8` to the identical random stream and
 measure BF16 uniform `[-8,8)` instead.
 
+The reproducible 16K environment-reference experiment runs preserved `p0`,
+the current source-backed GEMM, and the exact historical cuBLAS executable in
+one position-balanced session:
+
+```bash
+OUT_DIR=/workspace/gemm_env_cublas_reference \
+P0_BIN=/workspace/benchmark/results/gemm_phase_resweep_b200_45465499/bin/p0 \
+CUBLAS_REFERENCE_BIN=/workspace/benchmark/6.cuBLAS/cublas_gemm_bench \
+../run_b200_gemm_env_cublas_reference.sh
+```
+
+The 2026-07-23 B200 result and its interpretation are recorded in
+`../results/gemm_env_cublas_reference_b200_45481495_20260723/summary.md`.
+
 Supported modes:
 
 - `fp16`: FP16 input/output, FP32 accumulate.
