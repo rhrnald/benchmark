@@ -1,0 +1,1 @@
+Extension rationale: preserve primary 3-pass result; collect three additional rotated W1/I5 samples for baseline and the B1 code-generation control family after an isolated b1_gap0/random/pass3 low outlier. No primary sample is deleted or overwritten.

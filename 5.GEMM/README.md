@@ -7,6 +7,10 @@ version 주의사항은 먼저 [`CURRENT_STATUS.md`](CURRENT_STATUS.md)를 본�
 아래 문서는 이전 구현을 포함한 전체 실험 기록과 generic benchmark
 interface를 보존한다.
 
+현재 dual-wide topology를 기준으로 다시 설계한 CTA/B1 phase ablation은
+[`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)에 있으며, 측정 결과
+canonical phase는 계속 `0/0`이다.
+
 Current kernel shape:
 
 - One CTA computes one logical `256 x 256` C tile.

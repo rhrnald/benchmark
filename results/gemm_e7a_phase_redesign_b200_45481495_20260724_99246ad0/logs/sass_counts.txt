@@ -1,0 +1,18 @@
+# Static main-binary SASS site counts
+#
+# Counts were taken from the downloaded cuobjdump -sass outputs.  They are
+# static instruction sites, not dynamic execution counts.
+#
+# variant    UTMALDG UTMASTG UTCHMMA UTMACMDFLUSH TRYWAIT ARRIVE sleep0 sleep32 sleep64
+baseline     21      4       4       2             64      21     0      0       0
+cta4         21      4       4       2             64      21     0      0       0
+cta8         21      4       4       2             64      21     0      0       0
+b1_gap0      21      4       4       2             64      21     7      0       0
+b1_gap32     21      4       4       2             64      21     0      7       0
+b1_gap64     21      4       4       2             64      21     0      0       7
+b1_cross     21      4       4       2             66      21     0      0       0
+
+The gap family preserves all TMA/MMA static site counts and changes only the
+sleep immediate relative to its gap0 control.  b1_cross changes branch layout,
+so two additional static TRYWAIT sites appear in mutually selected paths;
+the source relocates the existing W3 B1 wait and does not add a dynamic wait.

@@ -1,6 +1,6 @@
 # GEMM current status
 
-Last updated: 2026-07-23
+Last updated: 2026-07-24
 
 ## 요약
 
@@ -11,7 +11,10 @@ Last updated: 2026-07-23
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 16K canonical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
   `[-8,8)` **1531.740 TFLOP/s**다. 별도 fresh B200 세션의 `[0,1)`
-  결과는 **1800.000 +/- 1.632 TFLOP/s**였다.
+  결과는 **1800.000 +/- 1.632 TFLOP/s**였다. 2026-07-24 phase
+  ablation 세션의 exact-source baseline은 **1819.500 +/- 0.641** /
+  **1613.465 +/- 1.236 TFLOP/s**였다. 세션 간 절대값 대신 같은 세션의
+  paired ratio를 최적화 판정에 사용한다.
 - 과거 보존 binary `p0`의 절대 최고는 **1806.657 TFLOP/s**였지만,
   당시 exact source object는 남아 있지 않다. E7a가 현재 재현 가능한
   canonical source다.
@@ -72,6 +75,18 @@ grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,
 eviction hint, strip ownership, multicast/cluster-4는 최종 non-multicast
 default를 넘지 못했다. 현재 선택은 dynamic 148 CTA, no hint,
 no multicast, phase `0/0`이다.
+
+현재 E7a topology에 맞춰 phase shift도 다시 설계해 측정했다. 148 CTA의
+one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
+32/64 cycle 늦추는 방식, W3의 기존 B1 wait를 첫 MMA 앞으로 옮기는
+방식을 비교했다. Primary `[0,1)` / `[-8,8)` paired 변화는 각각
+`cta4 +0.001%/+0.079%`, `cta8 -0.113%/-0.058%`,
+`b1_gap32 -0.094%/-0.199%`, `b1_gap64 -0.118%/-0.253%`,
+`b1_cross -0.146%/-0.002%`였다. Outlier 보강 6-process 결과에서도
+`b1_gap32/64`는 exact baseline보다 두 분포 모두 느렸다. 어떤 후보도
+양쪽 분포 `+0.5%` gate를 넘지 못해 canonical phase는 `0/0`을 유지한다.
+세부 설계와 raw artifact는
+[`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)에 있다.
 
 ## Library comparison
 
@@ -213,4 +228,5 @@ make validate
 - current E7a source: [`baseline/gemm256_bf16_16k.cu`](baseline/gemm256_bf16_16k.cu)
 - 비-L2 최적화 ledger: [`baseline/OPTIMIZATION_PLAN.md`](baseline/OPTIMIZATION_PLAN.md)
 - non-multicast L2 scheduler ledger: [`NON_MULTICAST_L2_EXPERIMENT_PLAN.md`](NON_MULTICAST_L2_EXPERIMENT_PLAN.md)
+- E7a 전용 phase redesign: [`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)
 - historical 3-way runner: [`../run_b200_gemm_compare_1x5.sh`](../run_b200_gemm_compare_1x5.sh)

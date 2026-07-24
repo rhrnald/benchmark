@@ -1,0 +1,7 @@
+input	pass	order
+random	4	baseline b1_gap0 b1_gap32 b1_gap64
+random	5	b1_gap64 b1_gap32 b1_gap0 baseline
+random	6	b1_gap0 b1_gap64 baseline b1_gap32
+random-signed8	4	b1_gap64 b1_gap32 b1_gap0 baseline
+random-signed8	5	baseline b1_gap0 b1_gap32 b1_gap64
+random-signed8	6	b1_gap32 baseline b1_gap64 b1_gap0

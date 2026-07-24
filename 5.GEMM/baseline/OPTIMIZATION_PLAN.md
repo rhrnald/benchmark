@@ -172,6 +172,19 @@ E8g는 TMA 수를 유지한 채 producer를 A 32 KiB/B 32 KiB로 재배치했지
 -0.108%/-0.324%였고 6/6 pair가 느렸다. B0/B1을 한 warp에 직렬화하지 않고
 현재의 두 독립 B producer stream을 유지한다.
 
+E9에서는 과거 N-split의 one-time phase 상수를 재사용하지 않고 현재
+dual-wide E7a의 measured slack에 맞춰 phase를 다시 설계했다. 148 CTA를
+4/8 cohort로 한 번만 stagger한 후보는 `[0,1)`/`[-8,8)`에서
+`+0.001%/+0.079%`, `-0.113%/-0.058%`였다. 매 K64에서 A issue 뒤 late
+B1만 32/64 cycle suspend한 후보는 exact baseline 대비
+`-0.094%/-0.199%`, `-0.118%/-0.253%`였다. W3의 기존 B1 wait를 첫 MMA
+앞으로 옮긴 후보도 `-0.146%/-0.002%`였다. B1 codegen control의 한
+`[0,1)` outlier를 보존하고 3 pass를 추가한 6-process 결과에서도
+B1 32/64 후보는 양쪽 분포 모두 exact baseline보다 느렸다. 모든 후보가
+두 분포 `+0.5%` gate를 실패했으므로 phase `0/0`을 유지하고 이 방향을
+닫는다. 세부 결과는 [`../E7A_PHASE_REDESIGN.md`](../E7A_PHASE_REDESIGN.md)에
+있다.
+
 ### 다음 비-L2 순서
 
 1. 동일 TMA byte, 동적 MMA 8회, TMEM destination을 고정한 same-address
@@ -247,3 +260,8 @@ E8g는 TMA 수를 유지한 채 producer를 A 32 KiB/B 32 KiB로 재배치했지
 | E8e | CUTLASS suspend hint on producer `mma_done` waits only | exact, pattern/ones x1 | 172/0 | 1777.055 | 1535.769 | +0.357% / +0.488% vs dual-wide u1 | neutral; 12/12 positive but both below 0.5% gate |
 | E8f | split A 32 KiB into two M128 x K64 16 KiB TMAs | exact, pattern/ones x1 | 174/0 | 1766.954 | 1525.982 | -0.143% / -0.047% vs dual-wide u1 | reject; fourth TMA transaction does not repay finer readiness |
 | E8g | producer ownership A-only / B0-then-B1 | exact, pattern/ones x1 | 176/0 | 1767.832 | 1525.960 | -0.108% / -0.324% vs dual-wide u1 | reject; keep two independent B producer streams |
+| E9a | one-time 4-cohort CTA startup staggering | exact, pattern/ones x1 | 172/0 | 1819.517 | 1614.732 | +0.001% / +0.079% | neutral; below gate |
+| E9b | one-time 8-cohort CTA startup staggering | exact, pattern/ones x1 | 172/0 | 1817.449 | 1612.529 | -0.113% / -0.058% | reject |
+| E9c | per-K64 late-B1 32-cycle spacing | exact, pattern/ones x1 | 180/0 | 1817.785 | 1610.263 | -0.094% / -0.199% vs exact E7a | reject; six-process extension also negative |
+| E9d | per-K64 late-B1 64-cycle spacing | exact, pattern/ones x1 | 180/0 | 1817.348 | 1609.389 | -0.118% / -0.253% vs exact E7a | reject; six-process extension also negative |
+| E9e | W3 existing B1 wait before first MMA half | exact, pattern/ones x1 | 174/0 | 1816.851 | 1613.433 | -0.146% / -0.002% | reject |
