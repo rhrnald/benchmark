@@ -1,0 +1,20 @@
+--- /workspace/gemm_nsplit_cross_tile_prefetch_b200_45715178_20260724_472be59/logs/kernel_ops_nsplit_prefetch_nonoverlap.txt	2026-07-24 14:59:46.456612944 +0000
++++ /workspace/gemm_nsplit_cross_tile_prefetch_b200_45715178_20260724_472be59/logs/kernel_ops_nsplit_prefetch_overlap.txt	2026-07-24 14:59:50.352623706 +0000
+@@ -2029,7 +2029,7 @@
+ LDC R163, c[0x0][0x508];
+ BSSY.RECONVERGENT B0, 0x7f80;
+ MOV R12, 0x7f70;
+-UMOV UR8, URZ;
++UMOV UR8, 0x1;
+ UIADD3 UR24, UP0, UPT, UR20, 0x80, URZ;
+ UMOV UR16, UR20;
+ UMOV UR17, UR21;
+@@ -2404,7 +2404,7 @@
+ BAR.SYNC.DEFER_BLOCKING 0x0;
+ MOV R12, 0x96c0;
+ BSSY.RECONVERGENT B0, 0x96d0;
+-UMOV UR8, 0x1;
++UMOV UR8, URZ;
+ UMOV UR16, UR20;
+ UMOV UR17, UR21;
+ UMOV UR14, UR24;

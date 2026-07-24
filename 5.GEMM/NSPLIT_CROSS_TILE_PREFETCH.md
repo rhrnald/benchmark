@@ -179,6 +179,41 @@ a positive confidence-interval lower bound.
 No statistical outlier is deleted. An infrastructure failure invalidates and
 reruns the complete affected ordered triplet.
 
+## B200 result
+
+Definition commit: `472be59b372eaed179976e53e841963cba2ededb`.
+The run used CUDA 12.9.86, driver 595.84, one 1,000 W B200, and the complete
+six-permutation W1/I5 protocol. All nine full-C validations passed with zero
+bad elements and zero error.
+
+| input | A: scalar x64 | B: non-overlap | C: overlap |
+|---|---:|---:|---:|
+| BF16 uniform `[0,1)` | 1743.253 +/- 2.047 | 1747.851 +/- 1.290 | 1748.909 +/- 0.882 |
+| BF16 uniform `[-8,8)` | 1558.528 +/- 2.539 | 1562.414 +/- 3.073 | 1560.297 +/- 3.645 |
+
+Values are mean +/- process sample SD in TFLOP/s. The paired effects were:
+
+| input | C versus B | C versus A | B versus A |
+|---|---:|---:|---:|
+| `[0,1)` | +0.0606% `[-0.0120,+0.1332]` | +0.3246% `[+0.1911,+0.4581]` | +0.2639% `[+0.0786,+0.4492]` |
+| `[-8,8)` | -0.1353% `[-0.4209,+0.1504]` | +0.1137% `[-0.1778,+0.4051]` | +0.2496% `[-0.0682,+0.5674]` |
+
+Brackets are Student-t 95% confidence intervals over six process-level paired
+ratios. C fails the primary C/B gate for both inputs: the random interval
+crosses zero and the signed mean is negative. It also fails the signed C/A net
+guard. Therefore epilogue-overlapped kt0 prefetch is rejected and no
+direct-exact confirmation is run.
+
+B's roughly `+0.25%` mean over A is a useful diagnostic for the combined early
+task claim, rotating C buffers, and cross-tile kt0 machinery, but the signed
+interval crosses zero and B is not an isolated or direct-exact comparison. It
+is not adopted from this experiment.
+
+The checksummed artifact is
+[`gemm_nsplit_cross_tile_prefetch_b200_45715178_20260724_472be59`](../results/gemm_nsplit_cross_tile_prefetch_b200_45715178_20260724_472be59/).
+The full archive SHA-256 is
+`5c7d2fc1c53bb5fa1a91ee05ef0ba80ffb3fd26aee40cfbfd1cab8ca859f9eef`.
+
 ## Instance workflow
 
 All source editing, local generation, codegen checks, documentation, and the

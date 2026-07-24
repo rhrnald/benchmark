@@ -114,13 +114,22 @@ warp 0이 A 32 KiB 뒤 late B1 16 KiB를 issue한다. 새 phase trace에서
 consumer가 B1을 실제로 기다리는 구간이 확인될 때만 다음 producer mapping
 ablation을 연다. TMA byte 수와 descriptor shape는 고정한다.
 
-### E6. 다음 task ID 선취
+### E6. 다음 task ID와 first-K64 선취 (완료, 미채택)
 
-현재 global atomic task fetch는 이전 tile의 MMA와 C store가 모두 끝난 뒤
-시작한다. 현재 tile 좌표를 보존한 채 epilogue 진입 전에 다음 task ID를
-선취하고, C store와 sink 기록 뒤 바로 다음 mainloop를 시작하게 한다.
-atomic 수와 tile order는 동일하게 유지한다. 별도로 persistent CTA 수
-148 고정과 132/140/144/148 sweep을 비교해 tail 효과도 확인한다.
+N-split scalar-x64에서 warp 0의 producer tail이 다음 valid task를 먼저
+claim하고, 다음 tile의 정상 kt0 stage를 회전 예약했다. A `256x64`와
+B0/B1 `64x128` TMA를 현재 epilogue의 첫 C-store commit/wait 사이에
+배치한 C를, 동일 issue를 epilogue 뒤에 둔 B와 비교했다. 두 버전은 같은
+두 noinline call과 같은 opcode multiset/resource를 가지며 active call
+위치만 다르다.
+
+Matched C/B는 `[0,1)` `+0.0606% [-0.0120,+0.1332]`,
+`[-8,8)` `-0.1353% [-0.4209,+0.1504]`였다. 두 입력 gate를 모두
+실패했으므로 epilogue-overlap first-K64 prefetch는 미채택한다. B/A의
+평균은 약 `+0.25%`였지만 signed CI가 0을 걸치고 여러 구조 변경이 합쳐진
+diagnostic이므로 별도 채택 근거로 쓰지 않는다. 세부 내용은
+[`../NSPLIT_CROSS_TILE_PREFETCH.md`](../NSPLIT_CROSS_TILE_PREFETCH.md)에
+있다.
 
 ### E7. consumer MMA topology와 K-loop codegen (완료)
 
@@ -155,8 +164,9 @@ B1 readiness 경로 aggregate가 각각 약 37--41K, 26K, 22K cycle이었다.
    독립 비교한다. E8c에서 main-kernel instruction이 1952에서 1144로
    줄었지만 `[0,1)` -0.491%, `[-8,8)` -0.113%여서 채택하지 않았다.
    producer code size는 현재 critical path가 아니다.
-5. 이후에 epilogue overlap을 다시 검토한다. task prefetch와 producer 역할
-   재배치는 profiler 근거가 생길 때까지 보류한다.
+5. 이후 epilogue overlap을 cross-tile first-K64 prefetch로 다시
+   검토했다. C/B가 `+0.0606%/-0.1353%`여서 미채택했으며, 세부 결과는
+   위 E6에 기록했다.
 
 E8d에서는 CUTLASS와 같이 모든 `mbarrier.try_wait`에 `0x989680` suspend
 hint를 넣었다. 두 분포의 여섯 pair가 모두 빨랐지만 +0.285%/+0.241%로

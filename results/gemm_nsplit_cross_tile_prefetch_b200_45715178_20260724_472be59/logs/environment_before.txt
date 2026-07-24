@@ -1,0 +1,9 @@
+2026-07-24T14:59:51+00:00
+Linux a7e0e7539188 5.15.0-186-generic #196-Ubuntu SMP Sat Jun 20 16:09:34 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+GPU 0: NVIDIA B200 (UUID: GPU-36006856-ea98-6be6-2391-3bac7e78bfb4)
+NVIDIA B200, GPU-36006856-ea98-6be6-2391-3bac7e78bfb4, 595.84, 30, 1000.00 W, 1965 MHz, 183359 MiB

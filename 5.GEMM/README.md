@@ -125,10 +125,13 @@ crossed zero. X64 itself improved on direct exact by only
 rejected, x16 will not be measured, and direct exact remains canonical. See
 [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md).
 
-The next one-factor candidate uses the otherwise idle 64 KiB shared-memory
-stage during the current output epilogue to prefetch the next output tile's
-first K64 A `256x64` and B0/B1 `64x128` panels. The rotating-stage design,
-matched A/B/C protocol, correctness gates, and instance workflow are in
+The completed cross-tile experiment used the otherwise idle 64 KiB
+shared-memory stage during the current output epilogue to prefetch the next
+output tile's first K64 A `256x64` and B0/B1 `64x128` panels. C changed only
+the active issue placement relative to a matched non-overlap B. C/B was
+`+0.0606% [-0.0120,+0.1332]` for `[0,1)` and
+`-0.1353% [-0.4209,+0.1504]` for `[-8,8)`, so overlap is rejected. The
+rotating-stage design, complete A/B/C table, and artifact are in
 [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md).
 
 The default benchmark path consumes TMEM accumulators into a checksum sink.

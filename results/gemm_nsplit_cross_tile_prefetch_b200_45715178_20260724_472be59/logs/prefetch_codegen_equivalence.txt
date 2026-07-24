@@ -1,0 +1,4 @@
+B/C kernel resources: identical
+B/C opcode(+modifier) multiset: identical
+B/C ordered kernel SASS: different as required by issue placement
+B/C static input-TMA instruction counts: identical

@@ -25,8 +25,8 @@ Last updated: 2026-07-24
   B0/B1 `64x128`, warp별 logical `256x128` 소유를 유지하면서 K64당
   MMA를 16→8회로 줄였다. No-store mainloop는 **+0.8963%/+0.4722%**,
   scalar-transpose E2E는 **+0.4617%/-0.0792%**였다. Mapping은 유효하지만
-  scalar epilogue가 0.019/0.029 ms를 추가하므로 아직 미채택이며,
-  vectorized epilogue가 다음 후보이다.
+  scalar epilogue가 0.019/0.029 ms를 추가해 아직 미채택이다.
+  이어서 수행한 vectorized epilogue 결과는 아래와 같다.
 - Vectorized epilogue local gate는 naive vec2의 2-way shared-bank
   conflict를 확인했다. Conflict-free x32 vec2는 111/116 registers,
   fused x64 vec2/vec4는 128 registers이며 모두 spill/local 0이다.
@@ -43,12 +43,13 @@ Last updated: 2026-07-24
   `+0.5%` adoption gate에 못 미쳤다. 따라서 x32는 미채택하고,
   x16은 측정하지 않으며 direct exact가 canonical이다. 세부 결과는
   [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md)에 있다.
-- 다음 one-factor 후보는 남는 64 KiB SMEM 한 stage에 다음 output
-  tile의 첫 K64 A `256x64`와 B0/B1 `64x128`을 prefetch해 현재 tile의
-  epilogue와 겹치는 cross-tile one-stage prefetch다. 회전 stage와
-  matched A/B/C 측정 설계는
+- Cross-tile first-K64 prefetch는 남는 64 KiB stage를 회전 예약하고
+  다음 A `256x64`와 B0/B1 `64x128`을 현재 epilogue의 첫 TMA-store
+  group과 겹쳤다. Matched C/B는 `[0,1)`에서
+  **+0.0606% `[-0.0120,+0.1332]`**, `[-8,8)`에서
+  **-0.1353% `[-0.4209,+0.1504]`**여서 overlap을 미채택했다.
   [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md)에
-  고정했다.
+  설계, 전체 A/B/C 결과와 artifact가 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -117,6 +118,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | N-split transpose compute | B^T x A^T로 MMA 16→8, scalar transpose C store, W1/I5 x4 | E2E 1808.175 / 1598.322; no-store 1882.926 / 1670.525 | exact 대비 E2E +0.4617% / -0.0792%; no-store +0.8963% / +0.4722% |
 | N-split vector epilogue | scalar + vec2/vec4 5종, Williams-balanced W1/I5 x8 | scalar 1766.507 / 1574.004; best vector CF2 x64 1765.241 / 1573.960 | scalar는 exact 대비 +0.4473% / +0.5994%; 모든 vector는 scalar 미달 |
 | N-split scalar TMEM width | exact/x64/x32 전순열-balanced W1/I5 x6 | exact 1758.255 / 1567.368; x64 1766.621 / 1574.829; x32 1765.736 / 1573.798 | x32는 x64 대비 -0.0501% / -0.0652%; x64도 exact 대비 +0.5% gate 미달 |
+| N-split cross-tile kt0 prefetch | scalar-x64 A / non-overlap B / epilogue-overlap C, 전순열-balanced W1/I5 x6 | A 1743.253 / 1558.528; B 1747.851 / 1562.414; C 1748.909 / 1560.297 | C/B +0.0606% / -0.1353%; 두 입력 CI gate 실패로 overlap 미채택 |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,

@@ -1,0 +1,4 @@
+variant	ops	reg	static_shared	utchmma	utcbar	tma_load_2d	tma_load_4d	tma_load_total	tma_store	phasecheck	tmem_x16	tmem_x32	tmem_x64	shfl	scalar_st32	call_noinc
+nsplit_transpose_scalar_x64	2229	174	1184	4	1	7	14	21	4	48	0	0	8	0	512	3
+nsplit_prefetch_nonoverlap	2832	194	1184	4	1	8	16	24	4	54	0	0	8	0	512	5
+nsplit_prefetch_overlap	2832	194	1184	4	1	8	16	24	4	54	0	0	8	0	512	5
