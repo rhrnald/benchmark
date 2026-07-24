@@ -45,7 +45,10 @@ Last updated: 2026-07-24
   [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md)에 있다.
 - 다음 one-factor 후보는 남는 64 KiB SMEM 한 stage에 다음 output
   tile의 첫 K64 A `256x64`와 B0/B1 `64x128`을 prefetch해 현재 tile의
-  epilogue와 겹치는 cross-tile one-stage prefetch다.
+  epilogue와 겹치는 cross-tile one-stage prefetch다. 회전 stage와
+  matched A/B/C 측정 설계는
+  [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md)에
+  고정했다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -274,4 +277,6 @@ make validate
 - 비-L2 최적화 ledger: [`baseline/OPTIMIZATION_PLAN.md`](baseline/OPTIMIZATION_PLAN.md)
 - non-multicast L2 scheduler ledger: [`NON_MULTICAST_L2_EXPERIMENT_PLAN.md`](NON_MULTICAST_L2_EXPERIMENT_PLAN.md)
 - E7a 전용 phase redesign: [`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)
+- N-split cross-tile kt0 prefetch:
+  [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md)
 - historical 3-way runner: [`../run_b200_gemm_compare_1x5.sh`](../run_b200_gemm_compare_1x5.sh)

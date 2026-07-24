@@ -127,7 +127,9 @@ rejected, x16 will not be measured, and direct exact remains canonical. See
 
 The next one-factor candidate uses the otherwise idle 64 KiB shared-memory
 stage during the current output epilogue to prefetch the next output tile's
-first K64 A `256x64` and B0/B1 `64x128` panels.
+first K64 A `256x64` and B0/B1 `64x128` panels. The rotating-stage design,
+matched A/B/C protocol, correctness gates, and instance workflow are in
+[`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md).
 
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
