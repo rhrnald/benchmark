@@ -26,18 +26,25 @@ Last updated: 2026-07-24
   MMA를 16→8회로 줄였다. No-store mainloop는 **+0.8963%/+0.4722%**,
   scalar-transpose E2E는 **+0.4617%/-0.0792%**였다. Mapping은 유효하지만
   scalar epilogue가 0.019/0.029 ms를 추가하므로 아직 미채택이며,
-  2x2 vectorized epilogue가 다음 후보이다.
+  vectorized epilogue가 다음 후보이다.
+- Vectorized epilogue local gate는 naive vec2의 2-way shared-bank
+  conflict를 확인했다. Conflict-free x32 vec2는 111/116 registers,
+  fused x64 vec2/vec4는 128 registers이며 모두 spill/local 0이다.
+  Exact/scalar/bank-conflict control/CF vec2/CF vec4를 비교하는
+  8-position/first-order Williams-balanced B200 실험은
+  [`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md)에 고정했다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
-- 16K canonical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
+- 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
   `[-8,8)` **1531.740 TFLOP/s**다. 별도 fresh B200 세션의 `[0,1)`
   결과는 **1800.000 +/- 1.632 TFLOP/s**였다. 2026-07-24 phase
   ablation 세션의 exact-source baseline은 **1819.500 +/- 0.641** /
   **1613.465 +/- 1.236 TFLOP/s**였다. 세션 간 절대값 대신 같은 세션의
   paired ratio를 최적화 판정에 사용한다.
 - 과거 보존 binary `p0`의 절대 최고는 **1806.657 TFLOP/s**였지만,
-  당시 exact source object는 남아 있지 않다. E7a가 현재 재현 가능한
-  canonical source다.
+  당시 exact source object는 남아 있지 않다. 직전 E7a는 Git/result
+  artifact에 보존된 historical performance reference이고, 현재
+  working canonical은 N-split이다.
 - 최근 표준은 한 프로세스당 한 case, warmup 1회, timed 5회다. 다른
   B200이나 activation의 절대 TFLOP/s를 직접 ablation으로 섞지 않고,
   같은 세션의 paired ratio를 우선한다.
@@ -87,8 +94,8 @@ CPU-reference validation을 bit-exact로 통과했다.
 | first dense GEMM | 실제 A/B 좌표, 초기 scheduler | 8K 1205.758 / 16K 1356.429 / 32K 1186.012 | 초기 end-to-end baseline |
 | corrected dense persistent | async stage-reuse barrier, full FP32 C | 8K 1697.631 / 16K 1777.128 / 32K 1615.074 | serialized completion wait 제거 후 회복 |
 | historical `p0` | dense 16K, W1/I5, 3 processes | 1806.657 | exact binary 보존, exact source 유실 |
-| current E7a | dual-wide M-split canonical source | 1773.523 / 1531.740 | `[0,1)` / `[-8,8)` source-backed baseline |
-| fresh current E7a | 별도 B200, `[0,1)`, 4 processes | 1800.000 +/- 1.632 | 환경 변화 범위와 현재 source 성능 재확인 |
+| historical E7a reference | dual-wide M-split source | 1773.523 / 1531.740 | `[0,1)` / `[-8,8)` source-backed reference |
+| fresh historical E7a | 별도 B200, `[0,1)`, 4 processes | 1800.000 +/- 1.632 | 환경 변화 범위와 E7a source 성능 재확인 |
 | fresh N-split redesign | A 공유 + B N-split, 실제 A/B/C, W1/I5 x3 | 1797.175 / 1593.776 | 같은 세션 E7a보다 -1.0924% / -1.1712% |
 | N-split static/WS ablation | pipe-static ordinary / B collector, 실제 A/B/C, W1/I5 x4 | 1755.775 / 1571.485; 1682.383 / 1513.175 | static은 exact보다 -2.2181% / -1.4136%; WS는 static보다 -4.1799% / -3.7104% |
 | N-split transpose compute | B^T x A^T로 MMA 16→8, scalar transpose C store, W1/I5 x4 | E2E 1808.175 / 1598.322; no-store 1882.926 / 1670.525 | exact 대비 E2E +0.4617% / -0.0792%; no-store +0.8963% / +0.4722% |
@@ -99,7 +106,7 @@ eviction hint, strip ownership, multicast/cluster-4는 최종 non-multicast
 default를 넘지 못했다. 현재 선택은 dynamic 148 CTA, no hint,
 no multicast, phase `0/0`이다.
 
-현재 E7a topology에 맞춰 phase shift도 다시 설계해 측정했다. 148 CTA의
+직전 E7a topology에 맞춰 phase shift도 다시 설계해 측정했다. 148 CTA의
 one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
 32/64 cycle 늦추는 방식, W3의 기존 B1 wait를 첫 MMA 앞으로 옮기는
 방식을 비교했다. Primary `[0,1)` / `[-8,8)` paired 변화는 각각
@@ -117,7 +124,7 @@ one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
 
 아래는 같은 B200 세션에서 세 방법, 세 크기, 두 분포를 모두 맞춘 표다.
 각 cell은 독립 프로세스 3개의 평균과 sample SD이고, 각 프로세스는
-W1/I5다. 단, custom 열은 현재 E7a가 아니라 그 이전의 recovered
+W1/I5다. 단, custom 열은 직전 E7a가 아니라 그 이전의 recovered
 persistent kernel이다.
 
 | input | size | pre-E7a custom | cuBLAS | selected CUTLASS |
@@ -133,7 +140,7 @@ Raw data와 binary hash는
 [`gemm_default_compare_1x5_b200_45460466`](../results/gemm_default_compare_1x5_b200_45460466/)
 에 있다.
 
-### 현재 E7a와 cuBLAS: same-session
+### 직전 E7a와 cuBLAS: same-session
 
 | input | size | E7a | cuBLAS | E7a/cuBLAS |
 |---|---:|---:|---:|---:|
@@ -170,7 +177,7 @@ direct-store CLC 구성이다. E7a가 이 선택 후보보다 26.483% 높았지�
 Artifact:
 [`gemm_e7a_cutlass_16k_compare_b200_45601332_20260723`](../results/gemm_e7a_cutlass_16k_compare_b200_45601332_20260723/)
 
-현재 E7a에 대해 8K/16K/32K x 두 분포 x cuBLAS/CUTLASS를 한 세션에서
+직전 E7a에 대해 8K/16K/32K x 두 분포 x cuBLAS/CUTLASS를 한 세션에서
 모두 맞춘 표는 아직 없다. 위 세 표를 합쳐 하나의 matched 표로
 재작성하지 않는다.
 
@@ -234,7 +241,7 @@ Official references:
 
 ## Reproduce
 
-16K canonical E7a:
+16K canonical N-split:
 
 ```bash
 cd 5.GEMM/baseline
@@ -247,8 +254,8 @@ make validate
 주요 문서와 artifact:
 
 - 전체 timeline과 generic 실행법: [`README.md`](README.md)
-- canonical E7a 설명: [`baseline/README.md`](baseline/README.md)
-- current E7a source: [`baseline/gemm256_bf16_16k.cu`](baseline/gemm256_bf16_16k.cu)
+- canonical N-split 설명: [`baseline/README.md`](baseline/README.md)
+- current N-split source: [`baseline/gemm256_bf16_16k.cu`](baseline/gemm256_bf16_16k.cu)
 - 비-L2 최적화 ledger: [`baseline/OPTIMIZATION_PLAN.md`](baseline/OPTIMIZATION_PLAN.md)
 - non-multicast L2 scheduler ledger: [`NON_MULTICAST_L2_EXPERIMENT_PLAN.md`](NON_MULTICAST_L2_EXPERIMENT_PLAN.md)
 - E7a 전용 phase redesign: [`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)

@@ -219,7 +219,10 @@ transpose epilogue가 `[0,1)`에서 `0.0194 ms`, `[-8,8)`에서
 Scalar E2E는 두 입력 `+0.5%` gate를 통과하지 못하므로 canonical로
 채택하지 않는다. 다만 mainloop 변화는 양쪽 모두 유효하므로 mapping은
 유지하고, 다음 one-factor experiment는 scalar 32-bit shared store를
-2-lane shuffle + 64-bit store로 바꾸는 `2x2` epilogue다.
+vectorized shared store로 바꾸는 epilogue ablation이다. Naive 2-lane
+mapping은 2-way bank conflict가 있으므로, x32/x64 conflict-free vec2와
+conflict-free vec4까지 포함한 최종 계획과 runner는
+[`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md)에 고정했다.
 
 CSV, source, full/normalized SASS, validation, telemetry, compiler resource,
 execution order, hashes는

@@ -101,7 +101,9 @@ Full-C pattern/ones validation was exact. The scalar transpose adds about
 0.019/0.029 ms per launch relative to the existing epilogue, so the mapping
 advances but the scalar epilogue does not. See
 [`NSPLIT_TRANSPOSE.md`](NSPLIT_TRANSPOSE.md) for the descriptor, TMEM
-mapping, codegen, and next vectorized epilogue ablation.
+mapping, and first decomposition. The bank-conflict analysis, locally gated
+vec2/vec4 candidates, matched B200 protocol, and runner are in
+[`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md).
 
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
@@ -418,7 +420,7 @@ Or directly:
 
 ## Trace
 
-The current E7a diagnostic follows the `0.attention` trace semantics.  It
+The historical E7a diagnostic follows the `0.attention` trace semantics.  It
 records physical W0--W3 lane-0 timestamps for eight steady K64 stages:
 producer M0/M1 reuse waits and TMA prepare/issue, consumer A/B0/B1 ready
 waits, MMA prepare/issue, commit, and the `kt+3` producer dependency pass.
@@ -430,7 +432,7 @@ per-stage metrics, validation, SASS, and interpretation, is archived at
 [`../results/gemm_e7a_pipeline_stage_trace_b200_45481495_20260723/`](../results/gemm_e7a_pipeline_stage_trace_b200_45481495_20260723/).
 
 The older `make plot` target below belongs to the legacy trace-enabled kernel.
-It remains useful for that implementation, but it is not the current E7a
+It remains useful for that implementation, but it is not the historical E7a
 per-K-stage trace:
 
 ```bash
