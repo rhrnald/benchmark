@@ -1,0 +1,9 @@
+input	pass	order
+random	1	e7a_exact nsplit_exact nsplit_static_control nsplit_ws_b01
+random	2	nsplit_ws_b01 e7a_exact nsplit_exact nsplit_static_control
+random	3	nsplit_static_control nsplit_ws_b01 e7a_exact nsplit_exact
+random	4	nsplit_exact nsplit_static_control nsplit_ws_b01 e7a_exact
+random-signed8	1	nsplit_ws_b01 nsplit_static_control nsplit_exact e7a_exact
+random-signed8	2	e7a_exact nsplit_ws_b01 nsplit_static_control nsplit_exact
+random-signed8	3	nsplit_exact e7a_exact nsplit_ws_b01 nsplit_static_control
+random-signed8	4	nsplit_static_control nsplit_exact e7a_exact nsplit_ws_b01

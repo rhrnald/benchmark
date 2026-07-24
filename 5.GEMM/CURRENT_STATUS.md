@@ -15,6 +15,12 @@ Last updated: 2026-07-24
   **1817.023/1612.664 TFLOP/s** (`[0,1)`/`[-8,8)`)다. N-split은
   각각 1.0924%/1.1712% 낮았다. 첫 producer-suspend 후보는 N-split 대비
   -0.0224%/+0.4660%라 미채택이다.
+- 두 번째 fresh 세션에서 exact N-split은 **1795.604/1594.047**,
+  E7a는 **1817.047/1608.067 TFLOP/s**였다. Pipe 특수화 control은
+  exact N-split보다 **-2.2181%/-1.4136%**, 동일 코드 형태의
+  `tcgen05.mma.ws` B-collector 후보는 control보다
+  **-4.1799%/-3.7104%**였다. 두 방향 모두 미채택이며 canonical은
+  runtime-pipe ordinary-MMA N-split을 유지한다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 16K canonical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -78,6 +84,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | current E7a | dual-wide M-split canonical source | 1773.523 / 1531.740 | `[0,1)` / `[-8,8)` source-backed baseline |
 | fresh current E7a | 별도 B200, `[0,1)`, 4 processes | 1800.000 +/- 1.632 | 환경 변화 범위와 현재 source 성능 재확인 |
 | fresh N-split redesign | A 공유 + B N-split, 실제 A/B/C, W1/I5 x3 | 1797.175 / 1593.776 | 같은 세션 E7a보다 -1.0924% / -1.1712% |
+| N-split static/WS ablation | pipe-static ordinary / B collector, 실제 A/B/C, W1/I5 x4 | 1755.775 / 1571.485; 1682.383 / 1513.175 | static은 exact보다 -2.2181% / -1.4136%; WS는 static보다 -4.1799% / -3.7104% |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,

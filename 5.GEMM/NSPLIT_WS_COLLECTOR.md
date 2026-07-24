@@ -87,3 +87,54 @@ additionally requires beating `e7a_exact` in both distributions.
   /workspace/benchmark \
   /workspace/gemm_nsplit_ws_b200
 ```
+
+## B200 result
+
+This experiment ran on instance `45481495` from definition commit
+`cfa51a9ae4ec979f88168e2df5769bc71e4ce4c8`.  Values are event TFLOP/s,
+reported as the mean and sample standard deviation of four position-balanced
+W1/I5 processes.
+
+| variant | `[0,1)` | `[-8,8)` |
+|---|---:|---:|
+| `e7a_exact` | 1817.047 +/- 1.870 | 1608.067 +/- 2.952 |
+| `nsplit_exact` | 1795.604 +/- 1.779 | 1594.047 +/- 7.264 |
+| `nsplit_static_control` | 1755.775 +/- 2.540 | 1571.485 +/- 1.757 |
+| `nsplit_ws_b01` | 1682.383 +/- 1.095 | 1513.175 +/- 2.494 |
+
+The controlled effects are:
+
+| contrast | `[0,1)` paired delta | `[-8,8)` paired delta |
+|---|---:|---:|
+| static consumer vs exact N-split | -2.2181% +/- 0.2127% | -1.4136% +/- 0.8440% |
+| WS collector vs static consumer | -4.1799% +/- 0.1952% | -3.7104% +/- 0.2729% |
+
+The uncertainty after each paired delta is a two-sided 95% Student-t
+half-width with four pairs.  Both negative controls are clear; neither
+candidate advances.
+
+All eight pattern/ones size-512 validations passed with `max_abs=0`,
+`max_rel=0`, and `bad=0`.  `nsplit_exact` uses 174 registers.  The static and
+WS variants both use 166 registers, zero stack/local/spill, and have
+2,197-line normalized main-kernel SASS.  Those two streams differ in exactly
+the 16 MMA opcode lines, so the additional WS regression is a clean
+collector-semantic effect rather than a register or surrounding-instruction
+effect.
+
+The exact runtime-pipe consumer has only eight static MMA sites shared by
+warp 2 and warp 3.  Pipe specialization duplicates the consumer body into 16
+static sites and expands the normalized kernel from 1,913 to 2,197 lines,
+while the dynamic work remains 16 MMA instructions per CTA and K64.  The
+static-control regression therefore closes this code-duplication direction;
+the lower register count is not beneficial here.  This is consistent with
+instruction-footprint or scheduling cost, although throughput alone does not
+identify which mechanism dominates.
+
+All 64 before/after process samples recorded a 1965 MHz SM clock and
+33--34 C.  Environment endpoints were 31 C and 34 C, so neither thermal
+throttling nor run order explains the regressions.  The 1 Hz power snapshots
+are retained for anomaly detection, not per-variant power attribution.
+
+Exact CSVs, generated sources, validation logs, compiler resources,
+normalized and full SASS, telemetry, and hashes are retained in
+[`../results/gemm_nsplit_ws_b200_45481495_20260724_cfa51a9/`](../results/gemm_nsplit_ws_b200_45481495_20260724_cfa51a9/).

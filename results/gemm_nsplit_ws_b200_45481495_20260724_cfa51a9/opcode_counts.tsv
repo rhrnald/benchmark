@@ -1,0 +1,3 @@
+variant	ordinary_utchmma	utchmma_ws	b_keep	b_reuse	buffer1	other_buffer
+nsplit_static_control	16	0	0	0	0	0
+nsplit_ws_b01	0	16	8	8	8	0

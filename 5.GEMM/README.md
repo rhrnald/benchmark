@@ -2,14 +2,17 @@
 
 Prototype Blackwell GEMM compute benchmark using TMA loads and `tcgen05.mma`.
 
-현재 canonical E7a 구현, benchmark 단계별 해석, library 비교와 software
-version 주의사항은 먼저 [`CURRENT_STATUS.md`](CURRENT_STATUS.md)를 본다.
+현재 canonical E2a N-split 구현, benchmark 단계별 해석, library 비교와
+software version 주의사항은 먼저
+[`CURRENT_STATUS.md`](CURRENT_STATUS.md)를 본다.
 아래 문서는 이전 구현을 포함한 전체 실험 기록과 generic benchmark
 interface를 보존한다.
 
-현재 dual-wide topology를 기준으로 다시 설계한 CTA/B1 phase ablation은
+과거 dual-wide topology를 기준으로 다시 설계한 CTA/B1 phase ablation은
 [`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)에 있으며, 측정 결과
-canonical phase는 계속 `0/0`이다.
+선택 phase는 `0/0`이었다. 현재 A-shared/B-N-split 복구와 최적화 기록은
+[`NSPLIT_REDESIGN.md`](NSPLIT_REDESIGN.md)와
+[`NSPLIT_WS_COLLECTOR.md`](NSPLIT_WS_COLLECTOR.md)에 있다.
 
 Current kernel shape:
 
@@ -50,6 +53,39 @@ Current kernel shape:
     shared-memory layout.
   - B is loaded as two `64 x 128` row-major halves into `major_mn`
     shared-memory layout.
+
+### Fresh N-split restoration and first optimization ablations
+
+The canonical source now implements the requested ownership exactly: one
+`256x64` A TMA is shared, B0/B1 each load `64x128`, and warp 2/3 each
+accumulate one `256x128` N half.  Because CTA-group-1 has no M256 MMA, each
+consumer issues two `m128n128k16` operations per K16, for 16 dynamic MMA
+instructions per CTA and K64.
+
+The first same-session B200 restoration measured:
+
+| variant | `[0,1)` | `[-8,8)` |
+|---|---:|---:|
+| E7a exact reference | 1817.023 | 1612.664 |
+| requested N-split exact | 1797.175 | 1593.776 |
+| producer suspend | 1796.770 | 1601.205 |
+
+Producer suspend failed the two-input selection gate.  A second four-pass
+session isolated a weight-stationary B-collector attempt:
+
+| variant | `[0,1)` | `[-8,8)` | controlled conclusion |
+|---|---:|---:|---|
+| E7a exact | 1817.047 | 1608.067 | performance reference |
+| N-split exact | 1795.604 | 1594.047 | canonical working source |
+| static ordinary-MMA control | 1755.775 | 1571.485 | -2.2181% / -1.4136% vs exact |
+| static `mma.ws` B collector | 1682.383 | 1513.175 | -4.1799% / -3.7104% vs static |
+
+The static and WS binaries both use 166 registers and their normalized SASS
+differs in exactly 16 MMA opcode lines.  Thus the additional WS loss is not a
+register-count or surrounding-code confound.  Static pipe specialization
+itself duplicates the shared consumer body, growing the normalized kernel
+from 1,913 to 2,197 lines, and is also rejected.  Keep the compact
+runtime-pipe ordinary-MMA consumer as the optimization base.
 
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
