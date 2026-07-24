@@ -11,6 +11,10 @@ Last updated: 2026-07-24
 - 현재까지 source-backed 성능 최선은 직전 **E7a dual-wide**이며 exact
   source는 결과 artifact와 Git 이력에 보존돼 있다. N-split을 다시
   최적화하되 같은-session E7a exact를 성능 reference로 함께 측정한다.
+- fresh 같은-session 결과는 N-split **1797.175/1593.776**, E7a
+  **1817.023/1612.664 TFLOP/s** (`[0,1)`/`[-8,8)`)다. N-split은
+  각각 1.0924%/1.1712% 낮았다. 첫 producer-suspend 후보는 N-split 대비
+  -0.0224%/+0.4660%라 미채택이다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 16K canonical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -73,6 +77,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | historical `p0` | dense 16K, W1/I5, 3 processes | 1806.657 | exact binary 보존, exact source 유실 |
 | current E7a | dual-wide M-split canonical source | 1773.523 / 1531.740 | `[0,1)` / `[-8,8)` source-backed baseline |
 | fresh current E7a | 별도 B200, `[0,1)`, 4 processes | 1800.000 +/- 1.632 | 환경 변화 범위와 현재 source 성능 재확인 |
+| fresh N-split redesign | A 공유 + B N-split, 실제 A/B/C, W1/I5 x3 | 1797.175 / 1593.776 | 같은 세션 E7a보다 -1.0924% / -1.1712% |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,

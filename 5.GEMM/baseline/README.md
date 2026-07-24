@@ -35,6 +35,14 @@ TMEM 주소 정리와 N-split mainloop를 반영했다. 현재 최적화 방향�
 `1184 B`였다. 상세 결과는
 `../../results/gemm_e2a_tmem_scalar_b200_45481495_20260723/summary.md`에 있다.
 
+요청에 따라 이 exact E2a N-split을 다시 working source로 복구한 뒤
+직전 E7a와 같은 세션에서 재측정했다. fresh W1/I5 3-process 평균은
+`[0,1)` **1797.175**, `[-8,8)` **1593.776 TFLOP/s**였고, exact E7a의
+1817.023/1612.664보다 각각 1.0924%/1.1712% 낮았다. producer stage-reuse
+wait에만 suspend hint를 넣은 첫 후보는 N-split 대비 -0.0224%/+0.4660%로
+두 분포 gate를 통과하지 못했다. 상세 프로토콜과 raw artifact는
+[`../NSPLIT_REDESIGN.md`](../NSPLIT_REDESIGN.md)에 있다.
+
 직전 E7a는 두 consumer warp가 N128씩 맡던 구조를 M 방향으로 바꿨다.
 warp 2는 위쪽 `128 x 256`, warp 3은 아래쪽 `128 x 256`을 각각
 `m128n256k16`으로 계산한다. K64당 CTA의 동적 MMA issue 수는 16회에서
@@ -208,11 +216,10 @@ ones 입력도 별도로 전체 C를 확인한다.
 측정해 통과했다. 후속 후보도 GPU power limit, 온도, clock, 드라이버와
 CUDA 버전을 같이 기록하고 같은 방식의 paired ratio로 판단한다.
 
-현재 N-split source의 과거 E2a 측정은 `[0,1)` 1751.903 TFLOP/s,
-`[-8,8)` 1518.912 TFLOP/s였다. 직전 E7a reference의 세 프로세스 평균은
-각각 1773.523, 1531.740 TFLOP/s다. 환경별 절대값 변화가 있으므로 현재
-비교는 [`../NSPLIT_REDESIGN.md`](../NSPLIT_REDESIGN.md)의 같은-session
-교차 측정으로 다시 확정한다.
+현재 N-split source의 fresh 세 프로세스 평균은 `[0,1)` 1797.175,
+`[-8,8)` 1593.776 TFLOP/s다. 같은 세션의 직전 E7a reference는 각각
+1817.023, 1612.664 TFLOP/s였다. 환경별 절대값 대신 위 같은-session
+paired 결과를 현재 topology 차이로 사용한다.
 
 ## cuBLAS 상대 성능과 환경 기준
 

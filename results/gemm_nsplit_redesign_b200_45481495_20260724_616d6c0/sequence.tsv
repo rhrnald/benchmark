@@ -1,0 +1,7 @@
+input	pass	order
+random	1	e7a_exact nsplit_exact nsplit_u1_suspend_prod
+random	2	nsplit_u1_suspend_prod e7a_exact nsplit_exact
+random	3	nsplit_exact nsplit_u1_suspend_prod e7a_exact
+random-signed8	1	nsplit_u1_suspend_prod nsplit_exact e7a_exact
+random-signed8	2	e7a_exact nsplit_u1_suspend_prod nsplit_exact
+random-signed8	3	nsplit_exact e7a_exact nsplit_u1_suspend_prod

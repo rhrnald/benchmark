@@ -89,6 +89,40 @@ performance reference additionally requires beating `e7a_exact` in both
 distributions.  Smaller consistent changes are diagnostics, not adoption
 claims.
 
+## First B200 result
+
+The experiment ran on instance `45481495` from definition commit
+`616d6c029facfac4b00f0be1209fe3e9d9a9f62f`.  Each value below is the mean of
+three position-balanced W1/I5 processes; the uncertainty is sample standard
+deviation.
+
+| variant | `[0,1)` TFLOP/s | vs E7a | `[-8,8)` TFLOP/s | vs E7a |
+|---|---:|---:|---:|---:|
+| `e7a_exact` | 1817.023 +/- 1.632 | -- | 1612.664 +/- 4.797 | -- |
+| `nsplit_exact` | 1797.175 +/- 3.595 | -1.0924% | 1593.776 +/- 2.177 | -1.1712% |
+| `nsplit_u1_suspend_prod` | 1796.770 +/- 1.533 | -1.1146% | 1601.205 +/- 4.090 | -0.7106% |
+
+Relative to `nsplit_exact`, producer-only suspend changed `[0,1)` by
+`-0.0224%` paired and `[-8,8)` by `+0.4660%` paired.  It does not improve
+both distributions and misses the 0.5% gate, so it is rejected.
+
+All four compiled binaries, including the untimed `consumer_u1` control,
+passed pattern and ones size-512 full-C validation with zero error.  E7a used
+172 registers; all N-split variants used 174.  Every variant had zero
+stack/local memory/spill and 1184 B static shared memory.  The compiler again
+produced identical normalized main-kernel SASS for `nsplit_exact` and
+`nsplit_consumer_u1`.
+
+The GPU remained at a recorded maximum SM clock of 1965 MHz and warmed only
+from 32 C to 34 C.  The E7a/N-split difference is therefore a same-session
+topology result, not a comparison across different instance temperatures.
+The requested N-split remains the optimization working source, while E7a
+remains the performance reference.
+
+Exact CSVs, generated sources, validation logs, resource reports, normalized
+kernel instruction streams, telemetry, and hashes are retained in
+[`../results/gemm_nsplit_redesign_b200_45481495_20260724_616d6c0/`](../results/gemm_nsplit_redesign_b200_45481495_20260724_616d6c0/).
+
 ## Reproduction
 
 ```bash
