@@ -1,0 +1,10 @@
+metric	exact	mma_pair
+normalized_ops	1913	1917
+registers	174	174
+utchmma	8	8
+elect	32	32
+broadcast	65	65
+branch	154	154
+bssy	18	18
+bsync	18	18
+phasechk	48	48

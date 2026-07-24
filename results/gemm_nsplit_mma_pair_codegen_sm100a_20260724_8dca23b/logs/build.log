@@ -1,0 +1,26 @@
+results/gemm_nsplit_mma_pair_codegen_sm100a_20260724_8dca23b/source/nsplit_mma_pair.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+results/gemm_nsplit_mma_pair_codegen_sm100a_20260724_8dca23b/source/nsplit_mma_pair.cu(394): warning #177-D: function "<unnamed>::tcgen05_mma_bf16_ss" was declared but never referenced
+  tcgen05_mma_bf16_ss(uint32_t d_taddr, uint64_t a_desc, uint64_t b_desc,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN51_GLOBAL__N__95f28981_18_nsplit_mma_pair_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN51_GLOBAL__N__95f28981_18_nsplit_mma_pair_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.870 ms
+ptxas info    : Compiling entry function '_ZN51_GLOBAL__N__95f28981_18_nsplit_mma_pair_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN51_GLOBAL__N__95f28981_18_nsplit_mma_pair_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.360 ms
+ptxas info    : Compiling entry function '_ZN51_GLOBAL__N__95f28981_18_nsplit_mma_pair_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN51_GLOBAL__N__95f28981_18_nsplit_mma_pair_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 160 bytes smem
+ptxas info    : Compile time = 81.998 ms
