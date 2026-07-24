@@ -4,9 +4,13 @@ Last updated: 2026-07-24
 
 ## 요약
 
-- 현재 source-backed 최선은
+- 현재 최적화 working source는
   [`baseline/gemm256_bf16_16k.cu`](baseline/gemm256_bf16_16k.cu)의
-  **E7a dual-wide** 커널이다.
+  **E2a N-split** 커널이다. A `256x64`를 두 consumer가 공유하고,
+  B0/B1은 각각 `64x128`, 두 warp는 각각 `256x128` C를 누적한다.
+- 현재까지 source-backed 성능 최선은 직전 **E7a dual-wide**이며 exact
+  source는 결과 artifact와 Git 이력에 보존돼 있다. N-split을 다시
+  최적화하되 같은-session E7a exact를 성능 reference로 함께 측정한다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 16K canonical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -25,28 +29,28 @@ Last updated: 2026-07-24
   논문용 최종 표는 CUDA 13.3 Update 1, cuBLAS 13.6.0.2,
   CUTLASS 4.6.1에서 다시 측정해야 한다.
 
-## 현재 canonical kernel
+## 현재 N-split optimization kernel
 
 현재 기준 구현은 broad experiment source인
 `gemm256_tma_tcgen05_bench.cu`가 아니라, 실험용 macro를 제거해 정리한
-16K 전용 source다. 상위 [`README.md`](README.md)의 첫 구조 설명 일부는
-pre-E7a N-split 구현을 설명하므로 현재 E7a 구조와 혼동하지 않는다.
+16K 전용 source다. 이 파일은 요청한 N-split 방향으로 과거 검증본
+`3d2d0a4`와 바이트 단위로 일치하도록 복구했다.
 
-| 항목 | E7a 구성 |
+| 항목 | N-split 구성 |
 |---|---|
 | 문제 | row-major `C[16384,16384] = A @ B`, BF16 A/B, FP32 accumulate/output |
 | CTA output | `256 x 256` |
 | K stage | `K=64`, SMEM 3-stage, dynamic SMEM 197632 B |
-| TMA / K64 | A `256x64` 32 KiB 1회, B `32x256` 16 KiB 2회 |
-| MMA | `m128n256k16`; K64당 CTA 동적 issue 8회 |
-| warp 0 | A TMA 후 late B1 TMA |
-| warp 1 | early B0 TMA |
-| warp 2/3 | 각각 위/아래 `128x256` output을 M-split 계산 |
+| TMA / K64 | A `256x64` 32 KiB 1회, B0/B1 `64x128` 16 KiB씩 |
+| MMA | `m128n128k16`; K64당 CTA 동적 issue 16회 |
+| warp 0 | 공유 A와 B0 TMA |
+| warp 1 | B1 TMA |
+| warp 2/3 | 각각 왼쪽/오른쪽 `256x128` output을 N-split 계산 |
 | epilogue | 네 `128x128` FP32 chunk, SW128 SMEM staging 후 TMA store |
 | scheduler | 148 persistent CTA, global atomic task queue |
 | tile order | 16K `16x16` macro, macro N-fast, macro 내부 M-fast |
 | phase/cache | TMA 0, MMA 0; promotion 없음; multicast 없음 |
-| codegen | REG 172, stack/local/spill 0 |
+| codegen | REG 174, stack/local/spill 0 |
 
 각 CTA는 scheduler가 정한 실제 `(tile_m, tile_n)`에 대해 모든 K stage의
 실제 A/B 주소를 읽고 실제 C 위치에 저장한다. 512 pattern/ones full-C

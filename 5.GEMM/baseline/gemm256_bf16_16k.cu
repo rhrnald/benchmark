@@ -13,10 +13,10 @@
 // Clean 16K dense working default.
 //
 // The original B0 was reconstructed from the configuration that produced the
-// preserved 1806.657-TFLOP/s p0 binary.  This version retains the measured E2a
-// TMEM-address cleanup and E7a dual-wide staggered M-split mainloop.  The exact
-// p0 source was not archived, so p0 remains a performance/codegen oracle.  No
-// tuning macros or command-line -D switches can silently change the kernel.
+// preserved 1806.657-TFLOP/s p0 binary.  This version also retains the measured
+// E2a TMEM-address cleanup.  The exact p0 source was not archived, so p0 remains
+// a performance/codegen oracle.  There are no tuning macros or experiment
+// switches: no command-line -D can silently change the kernel.
 
 void cuda_check(cudaError_t result) {
   if (result != cudaSuccess) {
@@ -53,24 +53,21 @@ static constexpr int kStageK = 64;
 static constexpr int kStages = 3;
 static constexpr int kMmaM = 128;
 static constexpr int kMmaN = 128;
-static constexpr int kWideMmaN = kCtaN;
 static constexpr int kMmaK = 16;
+static constexpr int kPipes = 2;
 static constexpr int kMBlocks = 2;
-static constexpr int kBTmaN = kWideMmaN;
+static constexpr int kBTmaN = 128;
 static constexpr int kBTmaNSubtiles = kBTmaN / 64;
-static constexpr int kBProducerParts = 2;
-static constexpr int kBK16PerProducerPart =
-    (kStageK / kMmaK) / kBProducerParts;
 static constexpr int kPersistentMacroM = 16;
 static constexpr int kPersistentMacroN = 16;
 static constexpr int kAStageWords = kCtaM * kStageK / 2;
 static constexpr int kBStageWords = kStageK * kCtaN / 2;
-static constexpr int kBProducerPartWords = kBStageWords / kBProducerParts;
+static constexpr int kBPipeWords = kStageK * kMmaN / 2;
 static constexpr int kStageWords = kAStageWords + kBStageWords;
 static constexpr int kAStageBytes =
     kAStageWords * static_cast<int>(sizeof(uint32_t));
-static constexpr int kBProducerPartBytes =
-    kBProducerPartWords * static_cast<int>(sizeof(uint32_t));
+static constexpr int kBPipeBytes =
+    kBPipeWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kStageBytes =
     kStageWords * static_cast<int>(sizeof(uint32_t));
 static constexpr int kMainloopSmemBytes = kStages * kStageBytes;
@@ -95,10 +92,7 @@ static constexpr int kTmemTileStride = 128;
 
 static_assert(kCtaM == 128 || kCtaM == 256);
 static_assert(kCtaM % kMmaM == 0);
-static_assert(kMBlocks == 2);
-static_assert(kWideMmaN == 256);
-static_assert(kStageK % (kMmaK * kBProducerParts) == 0);
-static_assert(kBProducerParts * kBProducerPartWords == kBStageWords);
+static_assert(kPipes * kBPipeWords == kBStageWords);
 static_assert(kMmaM % kCStoreChunkM == 0);
 static_assert(kCtaM % kCStoreChunkM == 0);
 static_assert(kCStoreChunkN % kMmaN == 0);
@@ -107,7 +101,7 @@ static_assert(kCStoreChunkN % 64 == 0);
 static_assert(kCStoreWarps * (kMmaM / kCStoreChunkM) <= kWarps);
 static_assert(kCStoreChunkCount % kCStoreBuffers == 0);
 static_assert(kCStoreChunkN == 128 || kCStoreChunkN == 256);
-static_assert(kBTmaN == kCtaN);
+static_assert(kBTmaN == 128);
 
 enum InputInitMode : int {
   kInputInitMemset = 0,
@@ -154,14 +148,12 @@ __device__ __forceinline__ uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
 }
 
 __host__ __device__ __forceinline__ uint64_t
-make_sw128_major_mn_wide_smem_desc(uint32_t matrix_start_addr, int mma) {
-  // A full B stage is laid out as four adjacent K16 x N256 SW128 slices.
-  // Advancing to the next K16 slice skips 8 KiB.
+make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
   constexpr uint64_t desc_base =
       (static_cast<uint64_t>(128u) << 16) | (static_cast<uint64_t>(64u) << 32) |
       (static_cast<uint64_t>(1u) << 46) | (static_cast<uint64_t>(2u) << 61);
   constexpr uint32_t kSliceBytes =
-      static_cast<uint32_t>(kMmaK * kWideMmaN / 2 * sizeof(uint32_t));
+      static_cast<uint32_t>(kMmaK * kMmaN / 2 * sizeof(uint32_t));
   const uint32_t addr16 = ((matrix_start_addr & ~0xFu) >> 4) +
                           static_cast<uint32_t>(mma) * (kSliceBytes >> 4);
   return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
@@ -172,7 +164,7 @@ __host__ __device__ __forceinline__ uint32_t make_bf16_idesc() {
   desc |= 1u << 4;  // C format: F32.
   desc |= 1u << 7;  // A format: BF16.
   desc |= 1u << 10; // B format: BF16.
-  desc |= static_cast<uint32_t>(kWideMmaN >> 3) << 17;
+  desc |= static_cast<uint32_t>(kMmaN >> 3) << 17;
   desc |= static_cast<uint32_t>(kMmaM >> 4) << 24;
   return desc;
 }
@@ -553,12 +545,11 @@ __device__ __forceinline__ void issue_a_stage_tma(const CUtensorMap *a_map,
 }
 
 __device__ __forceinline__ void
-issue_b_producer_part_tma(const CUtensorMap *b_map, uint32_t *b_smem,
-                          uint64_t *ready, int tile_n, int ktile, int part) {
-  mbarrier_expect_tx(ready, kBProducerPartBytes);
-  const int b_col_words = tile_n * (kCtaN / 2);
-  const int b_k16 = ktile * (kStageK / kMmaK) +
-                    part * kBK16PerProducerPart;
+issue_b_pipe_stage_tma(const CUtensorMap *b_map, uint32_t *b_smem,
+                       uint64_t *ready, int tile_n, int ktile, int pipe) {
+  mbarrier_expect_tx(ready, kBPipeBytes);
+  const int b_col_words = tile_n * (kCtaN / 2) + pipe * (kMmaN / 2);
+  const int b_k16 = ktile * (kStageK / kMmaK);
   tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
 }
 
@@ -583,8 +574,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   uint32_t *c_store_smem = smem;
 
   __shared__ uint64_t a_ready[kStages];
-  __shared__ uint64_t b_ready[kBProducerParts][kStages];
-  __shared__ uint64_t mma_done[kMBlocks][kStages];
+  __shared__ uint64_t b_ready[kPipes][kStages];
+  __shared__ uint64_t mma_done[kPipes][kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
@@ -595,15 +586,15 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     for (int s = 0; s < kStages; ++s) {
       mbarrier_init(&a_ready[s], 1);
 #pragma unroll
-      for (int part = 0; part < kBProducerParts; ++part) {
-        mbarrier_init(&b_ready[part][s], 1);
+      for (int p = 0; p < kPipes; ++p) {
+        mbarrier_init(&b_ready[p][s], 1);
       }
     }
 #pragma unroll
-    for (int mblock = 0; mblock < kMBlocks; ++mblock) {
+    for (int p = 0; p < kPipes; ++p) {
 #pragma unroll
       for (int s = 0; s < kStages; ++s) {
-        mbarrier_init(&mma_done[mblock][s], 1);
+        mbarrier_init(&mma_done[p][s], 1);
       }
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
@@ -672,19 +663,18 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         const int stage = stage_epoch % kStages;
         uint32_t *stage_smem = smem + stage * kStageWords;
         uint32_t *a_smem = stage_smem;
-        uint32_t *b_smem =
-            stage_smem + kAStageWords + kBProducerPartWords;
+        uint32_t *b_smem = stage_smem + kAStageWords;
         if (stage_epoch >= kStages) {
           const uint32_t reuse_phase =
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
 #pragma unroll
-          for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
+          for (int p = 0; p < kPipes; ++p) {
+            mbarrier_wait(&mma_done[p][stage], reuse_phase);
           }
         }
         issue_a_stage_tma(&a_map, a_smem, &a_ready[stage], tile_m, kt);
-        issue_b_producer_part_tma(&b_map, b_smem, &b_ready[1][stage], tile_n,
-                                  kt, 1);
+        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n, kt,
+                               0);
       }
     }
 
@@ -693,23 +683,19 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
         uint32_t *stage_smem = smem + stage * kStageWords;
-        uint32_t *b_smem = stage_smem + kAStageWords;
+        uint32_t *b_smem = stage_smem + kAStageWords + kBPipeWords;
         if (stage_epoch >= kStages) {
-          const uint32_t reuse_phase =
-              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
-#pragma unroll
-          for (int mblock = 0; mblock < kMBlocks; ++mblock) {
-            mbarrier_wait(&mma_done[mblock][stage], reuse_phase);
-          }
+          mbarrier_wait(
+              &mma_done[1][stage],
+              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1));
         }
-        issue_b_producer_part_tma(&b_map, b_smem, &b_ready[0][stage], tile_n,
-                                  kt, 0);
+        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n, kt,
+                               1);
       }
     }
 
     if ((warp_id == 2 || warp_id == 3) && lane0) {
-      const int mblock = warp_id - 2;
-#pragma unroll 1
+      const int pipe = warp_id - 2;
       for (int kt = 0; kt < ktiles; ++kt) {
         const int stage_epoch = stage_epoch_base + kt;
         const int stage = stage_epoch % kStages;
@@ -717,41 +703,31 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
             static_cast<uint32_t>((stage_epoch / kStages) & 1);
         uint32_t *stage_smem = smem + stage * kStageWords;
         uint32_t *a_smem = stage_smem;
-        uint32_t *b_smem = stage_smem + kAStageWords;
+        uint32_t *b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
 
         mbarrier_wait(&a_ready[stage], tma_phase);
-        mbarrier_wait(&b_ready[0][stage], tma_phase);
+        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+
 #pragma unroll
-        for (int kk = 0; kk < kBK16PerProducerPart; ++kk) {
+        for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
           const uint32_t b0 = smem_ptr_u32(b_smem);
-          const uint64_t b0_desc =
-              make_sw128_major_mn_wide_smem_desc(b0, kk);
+          const uint64_t b0_desc = make_sw128_major_mn_smem_desc(b0, kk);
           const bool input_d = (kt != 0) || (kk != 0);
-          const uint64_t a_desc = make_stage_a_smem_desc(a_smem, mblock, kk);
-          const uint32_t c_taddr =
-              tmem_base + mblock * 2 * kTmemTileStride;
-          tcgen05_mma_bf16_ss(c_taddr, a_desc, b0_desc, idesc, input_d);
-        }
-        mbarrier_wait(&b_ready[1][stage], tma_phase);
 #pragma unroll
-        for (int kk = kBK16PerProducerPart;
-             kk < kStageK / kMmaK; ++kk) {
-          const uint32_t b0 = smem_ptr_u32(b_smem);
-          const uint64_t b0_desc =
-              make_sw128_major_mn_wide_smem_desc(b0, kk);
-          const bool input_d = (kt != 0) || (kk != 0);
-          const uint64_t a_desc = make_stage_a_smem_desc(a_smem, mblock, kk);
-          const uint32_t c_taddr =
-              tmem_base + mblock * 2 * kTmemTileStride;
-          tcgen05_mma_bf16_ss(c_taddr, a_desc, b0_desc, idesc, input_d);
+          for (int mblock = 0; mblock < kMBlocks; ++mblock) {
+            const uint64_t a_desc = make_stage_a_smem_desc(a_smem, mblock, kk);
+            const int c_tile = mblock * 2 + pipe;
+            tcgen05_mma_bf16_ss(tmem_base + c_tile * kTmemTileStride, a_desc,
+                                b0_desc, idesc, input_d);
+          }
         }
-        tcgen05_commit(&mma_done[mblock][stage]);
+        tcgen05_commit(&mma_done[pipe][stage]);
       }
       const int last_stage_epoch = stage_epoch_base + ktiles - 1;
       const int last_stage = last_stage_epoch % kStages;
       const uint32_t last_phase =
           static_cast<uint32_t>((last_stage_epoch / kStages) & 1);
-      mbarrier_wait(&mma_done[mblock][last_stage], last_phase);
+      mbarrier_wait(&mma_done[pipe][last_stage], last_phase);
     }
     __syncthreads();
 
@@ -810,9 +786,6 @@ void encode_a_row_major_sw128_tma_map(CUtensorMap *map, void *base,
 void encode_b_row_major_sw128_k16_tma_map(CUtensorMap *map, void *base,
                                           uint64_t rows, uint64_t cols_bf16) {
   const cuuint64_t cols_words = cols_bf16 / 2;
-  // Two 16-KiB TMA transactions materialize K64 x N256 by splitting K.
-  // Their shared destinations form four adjacent K16 x N256 slices while
-  // retaining two independent producer warps and transactions.
   const cuuint64_t global_dim[4] = {cols_words, kMmaK, kBTmaNSubtiles,
                                     rows / kMmaK};
   const cuuint64_t global_stride[3] = {
@@ -820,7 +793,7 @@ void encode_b_row_major_sw128_k16_tma_map(CUtensorMap *map, void *base,
       static_cast<cuuint64_t>(kMmaN / 4) * sizeof(uint32_t),
       static_cast<cuuint64_t>(kMmaK) * cols_words * sizeof(uint32_t)};
   const cuuint32_t box_dim[4] = {kMmaN / 4, kMmaK, kBTmaNSubtiles,
-                                 kBK16PerProducerPart};
+                                 kStageK / kMmaK};
   const cuuint32_t elem_stride[4] = {1, 1, 1, 1};
   driver_check(cuTensorMapEncodeTiled(
                    map, CU_TENSOR_MAP_DATA_TYPE_UINT32, 4, base, global_dim,
@@ -1358,8 +1331,7 @@ int main(int argc, char **argv) {
 
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
-      "stages=3 b_parts=2 mma=m128n256k16 split=m_split "
-      "k_loop=u1 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
+      "stages=3 pipes=2 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
       "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,

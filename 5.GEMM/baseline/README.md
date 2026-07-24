@@ -1,8 +1,11 @@
 # 16K BF16 dense GEMM working default
 
-이 디렉터리는 16K 정방 GEMM 최적화의 현재 working default다. 실험용
+이 디렉터리는 16K 정방 GEMM 최적화의 현재 working source다. 실험용
 전처리 분기와 다중 커널 specialization을 제거한 reconstruction에 E2a
-TMEM 주소 정리와 E7a dual-wide M-split mainloop를 반영했다.
+TMEM 주소 정리와 N-split mainloop를 반영했다. 현재 최적화 방향은 A
+`256x64`를 공유하고 B를 N 방향 `64x128` 두 panel로 나누는 구조다.
+직전 E7a M-split은 여전히 source-backed 성능 reference이며 exact source는
+결과 artifact와 Git 이력에 보존돼 있다.
 
 ## Provenance와 현재 상태
 
@@ -32,7 +35,7 @@ TMEM 주소 정리와 E7a dual-wide M-split mainloop를 반영했다.
 `1184 B`였다. 상세 결과는
 `../../results/gemm_e2a_tmem_scalar_b200_45481495_20260723/summary.md`에 있다.
 
-현재 E7a는 두 consumer warp가 N128씩 맡던 구조를 M 방향으로 바꿨다.
+직전 E7a는 두 consumer warp가 N128씩 맡던 구조를 M 방향으로 바꿨다.
 warp 2는 위쪽 `128 x 256`, warp 3은 아래쪽 `128 x 256`을 각각
 `m128n256k16`으로 계산한다. K64당 CTA의 동적 MMA issue 수는 16회에서
 8회로 줄었고, TMA byte 수와 output store는 유지된다. 세 쌍 교차 측정에서
@@ -47,7 +50,8 @@ SHA-256은 각각 `fdd34cec...`/`0c34e046...`이다. 이후 설명 주석과 run
 banner만 정리했으며, 로컬 SM100a에서 측정 snapshot과 4192개 전체 SASS
 instruction sequence가 동일함을 확인했다.
 
-consumer K loop의 `#pragma unroll 1`을 제거한 compiler-auto-unroll 대조군도
+E7a consumer K loop의 `#pragma unroll 1`을 제거한
+compiler-auto-unroll 대조군도
 별도로 측정했다. u1 대비 `[0,1)` -0.0272%, `[-8,8)` -0.2087%였고 여섯
 pair 모두 느려서 명시적 u1을 유지한다. 상세 결과는
 `../../results/gemm_dual_wide_auto_b200_45481495_20260723/summary.md`에 있다.
@@ -61,7 +65,7 @@ producer는 consumer보다 약 2.9K cycle 먼저 끝났고 서로의 completion
 차이도 34--35 cycle뿐이었다. 따라서 scheduler나 단순 producer workload
 균형보다 mainloop readiness/wait 동작을 먼저 분리했다.
 
-현재 E7a exact-source 계측판을 B200에서 다시 실행해 만든 standalone
+E7a exact-source 계측판을 B200에서 다시 실행해 만든 standalone
 `clock64` SVG는
 [`gemm_e7a_clock64_trace.svg`](../../results/gemm_e7a_clock64_trace_b200_45481495_20260723/gemm_e7a_clock64_trace.svg)에
 있다. fresh `[0,1)` capture의 complete tile은 279450 cycle로 기존 5-run
@@ -81,10 +85,11 @@ case는 한 프로세스당 한 case, warmup 1회, timed 5회 평균이다.
 | A 32 KiB를 16 KiB 두 TMA로 분할 | -0.143% | -0.047% | reject |
 | producer를 A 32 KiB / B 32 KiB로 재배치 | -0.108% | -0.324% | reject |
 
-producer-only suspend 후보의 절대 평균은 1777.055/1535.769 TFLOP/s였고
+E7a producer-only suspend 후보의 절대 평균은
+1777.055/1535.769 TFLOP/s였고
 일관되게 양수였지만, 사전에 정한 두 분포 모두 0.5% 이상이라는 materiality
-gate를 넘지 못했으므로 default에 넣지 않았다. 가장 빠른 source-backed
-canonical default는 계속 E7a의 1773.523/1531.740 TFLOP/s다. 세부 원시
+gate를 넘지 못했으므로 E7a default에는 넣지 않았다. 현재까지 가장 빠른
+source-backed 성능 reference는 E7a의 1773.523/1531.740 TFLOP/s다. 세부 원시
 결과와 source/binary hash는 다음 문서에 있다.
 
 - [dual-wide C-store 상한](../../results/gemm_dual_wide_cstore_control_b200_45481495_20260723/summary.md)
@@ -109,15 +114,15 @@ sequence가 동일함을 확인했다. 외부 `-D` 옵션도 사용하지 않는
 | 문제 | `C[16384,16384] = A[16384,16384] * B[16384,16384]` |
 | 자료형/layout | row-major BF16 A/B, row-major FP32 C |
 | CTA output tile | `256 x 256` |
-| `tcgen05.mma` | `128 x 256 x 16`, M 방향 2 consumer warp |
+| `tcgen05.mma` | `128 x 128 x 16`, N 방향 2 consumer warp |
 | K staging | `K=64`, shared-memory 3 stage |
-| K64당 TMA | A `M256 x K64` 32 KiB 한 번, B `K32 x N256` 16 KiB 두 번 |
+| K64당 TMA | A `M256 x K64` 32 KiB 한 번, B0/B1 `K64 x N128` 16 KiB씩 |
 | threads | 4 warps, 128 threads |
-| warp 0 | A 뒤 late B1 `K32:64 x N256` TMA issue |
-| warp 1 | early B0 `K0:32 x N256` TMA issue |
-| warp 2 | 위쪽 `M0:128 x N256` MMA issue |
-| warp 3 | 아래쪽 `M128:256 x N256` MMA issue |
-| MMA issue | CTA/K64당 8회, consumer K loop `#pragma unroll 1` |
+| warp 0 | 두 pipe의 stage reuse wait 뒤 A와 B0 TMA issue |
+| warp 1 | pipe 1의 stage reuse wait 뒤 B1 TMA issue |
+| warp 2 | 왼쪽 `M256 x N0:128` MMA issue |
+| warp 3 | 오른쪽 `M256 x N128:256` MMA issue |
+| MMA issue | CTA/K64당 16회; warp마다 K16 네 번 x M128 두 block |
 | output | `128 x 128` 네 chunk를 SW128 shared memory에서 FP32 TMA store |
 | scheduler | 148 persistent CTA, global atomic task counter |
 | tile order | `16 x 16` macro, macro N-fast, macro 내부 M-fast |
@@ -125,11 +130,11 @@ sequence가 동일함을 확인했다. 외부 `-D` 옵션도 사용하지 않는
 | L2 promotion/multicast | 없음 / 없음 |
 | dynamic shared memory | 197632 B |
 
-각 K64 stage에서 두 B TMA는 N 방향 panel이 아니라 K 방향으로 나뉜다.
-consumer는 A와 early B0 완료를 기다린 뒤 K16 MMA 두 번을 issue하고, late
-B1 완료를 기다린 뒤 나머지 두 번을 issue하고 commit한다. 따라서 B는
-여전히 16 KiB TMA 두 번이고 A를 포함한 총 global-memory traffic도
-E2a와 같다.
+각 K64 stage에서 두 B TMA는 K 방향이 아니라 N 방향으로 나뉜다. B0와
+B1은 각각 전체 K64와 N128을 담는다. 두 consumer는 공유 A와 자기 B
+panel을 기다린 뒤, K16마다 위/아래 M128을 차례로 issue해 각각 논리적인
+`256x128` 출력을 누적한다. B는 16 KiB TMA 두 번이며 A를 포함한
+global-memory traffic은 E7a와 같다.
 
 각 CTA는 scheduler가 지정한 실제 `(tile_m, tile_n)`의 A/B를 읽고 실제
 C 위치를 저장한다. 동일한 global-memory tile을 반복해서 읽는
@@ -203,9 +208,11 @@ ones 입력도 별도로 전체 C를 확인한다.
 측정해 통과했다. 후속 후보도 GPU power limit, 온도, clock, 드라이버와
 CUDA 버전을 같이 기록하고 같은 방식의 paired ratio로 판단한다.
 
-현재 default의 canonical 세 프로세스 평균은 `[0,1)` 1773.523 TFLOP/s,
-`[-8,8)` 1531.740 TFLOP/s다. 별도 auto-unroll 대조 실험에서 같은 u1
-binary를 다시 측정한 평균도 각각 1773.290, 1530.367 TFLOP/s로 일치했다.
+현재 N-split source의 과거 E2a 측정은 `[0,1)` 1751.903 TFLOP/s,
+`[-8,8)` 1518.912 TFLOP/s였다. 직전 E7a reference의 세 프로세스 평균은
+각각 1773.523, 1531.740 TFLOP/s다. 환경별 절대값 변화가 있으므로 현재
+비교는 [`../NSPLIT_REDESIGN.md`](../NSPLIT_REDESIGN.md)의 같은-session
+교차 측정으로 다시 확정한다.
 
 ## cuBLAS 상대 성능과 환경 기준
 
