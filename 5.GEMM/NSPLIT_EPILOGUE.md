@@ -149,3 +149,48 @@ The sweep winner then receives a separately committed confirmatory matched
 A/B run. It replaces the direct `nsplit_exact` canonical kernel only if that
 confirmation shows a paired mean gain over exact of at least 0.5% for both
 inputs with no negative confidence interval.
+
+## B200 result
+
+The Williams-balanced run completed on Vast.ai instance `45481495` from
+definition commit `e4f5061`. Each cell below is the mean of eight independent
+W1/I5 processes; `vs scalar` is the pass-paired mean and 95% confidence
+interval.
+
+| variant | `[0,1)` TFLOP/s | vs scalar | `[-8,8)` TFLOP/s | vs scalar |
+|---|---:|---:|---:|---:|
+| direct N-split exact | 1758.641 +/- 1.232 | -0.4453% [-0.5088,-0.3817] | 1564.629 +/- 1.840 | -0.5949% [-0.8586,-0.3313] |
+| transpose no-store | 1839.790 +/- 1.020 | +4.1485% [+4.0799,+4.2171] | 1631.399 +/- 2.513 | +3.6471% [+3.3679,+3.9263] |
+| transpose scalar | **1766.507 +/- 1.345** | reference | **1574.004 +/- 4.138** | reference |
+| vec2 x32 adjacent | 1763.815 +/- 1.235 | -0.1523% [-0.2087,-0.0960] | 1573.723 +/- 4.553 | -0.0172% [-0.3576,+0.3233] |
+| vec2 CF1 x32 | 1763.000 +/- 1.241 | -0.1984% [-0.3090,-0.0878] | 1570.659 +/- 3.969 | -0.2121% [-0.4306,+0.0063] |
+| vec2 CF2 x32 | 1761.743 +/- 0.749 | -0.2696% [-0.3184,-0.2209] | 1572.339 +/- 4.840 | -0.1054% [-0.3696,+0.1587] |
+| vec2 CF2 x64 | 1765.241 +/- 0.989 | -0.0716% [-0.1097,-0.0336] | 1573.960 +/- 2.387 | -0.0020% [-0.3063,+0.3023] |
+| vec4 CF x64 | 1761.078 +/- 0.897 | -0.3073% [-0.3550,-0.2597] | 1568.183 +/- 3.095 | -0.3693% [-0.5965,-0.1421] |
+
+The scalar transpose path beat direct exact by `+0.4473%`
+`[+0.3832,+0.5114]` for `[0,1)` and `+0.5994%`
+`[+0.3320,+0.8667]` for `[-8,8)`. The first mean remains below the
+predeclared `+0.5%` two-input adoption threshold, so direct exact remains the
+working canonical.
+
+No vector candidate had a positive confidence interval against scalar on
+both inputs. The best vector candidate, CF2 x64, was slightly slower than
+scalar: `-0.0716%/-0.0020%`. A conflict-free 128-byte shared-memory
+wavefront is already the minimum transaction for each output row segment.
+Vector forms reduce store instruction count but not the 256 KiB tile's
+minimum 2,048 wavefronts, and add shuffle work. This closes register-transpose
+vector width as the next optimization axis.
+
+All 20 full-C validations reported `status=ok`, all eight binaries passed the
+expected MMA/TMA/TMEM/store SASS gates, and every kernel had zero stack,
+local memory, and spill traffic. Telemetry stayed at 1965 MHz and 32--33 C.
+This activation used GPU UUID `GPU-2a1b935d-fd9c-ec3c-8ce7-e6d92149f96f`,
+which differs from the earlier transpose run, so only the same-session paired
+effects are used for selection.
+
+Artifacts:
+
+- [`gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061`](../results/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/)
+- archive SHA-256:
+  `e68073e5bf509da3959a7df6710aee723d5b40435d8c8e3311cf4047ac703849`

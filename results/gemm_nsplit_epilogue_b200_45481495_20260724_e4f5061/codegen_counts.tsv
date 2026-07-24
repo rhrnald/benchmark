@@ -1,0 +1,9 @@
+variant	ops	reg	utchmma	utcbar	tma_load	tma_store	tmem_x32	tmem_x64	shfl	st32	st64	st128
+nsplit_exact	1913	174	8	1	21	4	0	8	0	3	0	128
+nsplit_transpose_nostore	1559	50	4	1	21	0	0	0	0	3	0	0
+nsplit_transpose_scalar	2229	174	4	1	21	4	0	8	0	515	0	0
+nsplit_transpose_vec2_x32	2290	115	4	1	21	4	4	0	64	3	64	0
+nsplit_transpose_vec2_cf1_x32	2574	116	4	1	21	4	4	0	64	3	64	0
+nsplit_transpose_vec2_cf_x32	2421	111	4	1	21	4	4	0	128	3	64	0
+nsplit_transpose_vec2_cf_x64	2706	128	4	1	21	4	0	4	256	3	128	0
+nsplit_transpose_vec4_cf_x64	3162	128	4	1	21	4	0	4	256	3	0	64

@@ -105,6 +105,15 @@ mapping, and first decomposition. The bank-conflict analysis, locally gated
 vec2/vec4 candidates, matched B200 protocol, and runner are in
 [`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md).
 
+The completed eight-pass Williams-balanced epilogue sweep found that scalar
+transpose beat direct exact by `+0.4473%/+0.5994%`, but missed the two-input
+`+0.5%` adoption gate on `[0,1)`. Every vec2/vec4 candidate was slower than
+scalar; the closest CF2 x64 result was `-0.0716%/-0.0020%`. The scalar path
+already emits the minimum 2,048 conflict-free 128-byte shared wavefronts for
+one 256 KiB output tile. Vectorization reduces store instruction count but
+does not reduce that traffic and adds shuffles, so no vector epilogue is
+adopted.
+
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
 `--store-c-tma` stages FP32 C chunks through shared memory and stores them with

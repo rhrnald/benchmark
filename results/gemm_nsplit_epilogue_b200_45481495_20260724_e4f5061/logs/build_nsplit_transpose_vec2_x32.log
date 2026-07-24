@@ -1,0 +1,42 @@
+/workspace/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/source/nsplit_transpose_vec2_x32.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/source/nsplit_transpose_vec2_x32.cu(91): warning #177-D: variable "<unnamed>::kTmemTileStride" was declared but never referenced
+  static constexpr int kTmemTileStride = 128;
+                       ^
+
+/workspace/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/source/nsplit_transpose_vec2_x32.cu(150): warning #177-D: function "<unnamed>::make_stage_a_smem_desc" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
+                                                                             ^
+
+/workspace/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/source/nsplit_transpose_vec2_x32.cu(169): warning #177-D: function "<unnamed>::make_bf16_idesc" was declared but never referenced
+  __attribute__((host)) __attribute__((device)) __inline__ __attribute__((always_inline)) uint32_t make_bf16_idesc() {
+                                                                                                   ^
+
+/workspace/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/source/nsplit_transpose_vec2_x32.cu(380): warning #177-D: function "<unnamed>::tcgen05_ld_32x32b_x64" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_ld_32x32b_x64(uint32_t (&dst)[64],
+                                                                         ^
+
+/workspace/gemm_nsplit_epilogue_b200_45481495_20260724_e4f5061/source/nsplit_transpose_vec2_x32.cu(444): warning #177-D: function "<unnamed>::store_u32x4_smem" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void store_u32x4_smem(uint32_t *smem,
+                                                                         ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN61_GLOBAL__N__32b4c023_28_nsplit_transpose_vec2_x32_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN61_GLOBAL__N__32b4c023_28_nsplit_transpose_vec2_x32_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.237 ms
+ptxas info    : Compiling entry function '_ZN61_GLOBAL__N__32b4c023_28_nsplit_transpose_vec2_x32_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN61_GLOBAL__N__32b4c023_28_nsplit_transpose_vec2_x32_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.802 ms
+ptxas info    : Compiling entry function '_ZN61_GLOBAL__N__32b4c023_28_nsplit_transpose_vec2_x32_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN61_GLOBAL__N__32b4c023_28_nsplit_transpose_vec2_x32_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 115 registers, used 1 barriers, 160 bytes smem
+ptxas info    : Compile time = 83.964 ms

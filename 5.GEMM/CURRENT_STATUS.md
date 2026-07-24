@@ -30,9 +30,12 @@ Last updated: 2026-07-24
 - Vectorized epilogue local gate는 naive vec2의 2-way shared-bank
   conflict를 확인했다. Conflict-free x32 vec2는 111/116 registers,
   fused x64 vec2/vec4는 128 registers이며 모두 spill/local 0이다.
-  Exact/scalar/bank-conflict control/CF vec2/CF vec4를 비교하는
-  8-position/first-order Williams-balanced B200 실험은
-  [`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md)에 고정했다.
+  8-position/first-order Williams-balanced B200 실험에서 scalar
+  transpose는 exact 대비 **+0.4473%/+0.5994%**였지만 `[0,1)`가
+  `+0.5%` adoption gate 아래였다. 모든 vec2/vec4 후보는 scalar보다
+  느렸고, 최선 CF2 x64도 **-0.0716%/-0.0020%**였다. Vector 후보는
+  미채택이며 세부 결과는
+  [`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md)에 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -99,6 +102,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | fresh N-split redesign | A 공유 + B N-split, 실제 A/B/C, W1/I5 x3 | 1797.175 / 1593.776 | 같은 세션 E7a보다 -1.0924% / -1.1712% |
 | N-split static/WS ablation | pipe-static ordinary / B collector, 실제 A/B/C, W1/I5 x4 | 1755.775 / 1571.485; 1682.383 / 1513.175 | static은 exact보다 -2.2181% / -1.4136%; WS는 static보다 -4.1799% / -3.7104% |
 | N-split transpose compute | B^T x A^T로 MMA 16→8, scalar transpose C store, W1/I5 x4 | E2E 1808.175 / 1598.322; no-store 1882.926 / 1670.525 | exact 대비 E2E +0.4617% / -0.0792%; no-store +0.8963% / +0.4722% |
+| N-split vector epilogue | scalar + vec2/vec4 5종, Williams-balanced W1/I5 x8 | scalar 1766.507 / 1574.004; best vector CF2 x64 1765.241 / 1573.960 | scalar는 exact 대비 +0.4473% / +0.5994%; 모든 vector는 scalar 미달 |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,
