@@ -113,11 +113,12 @@ stack/local memory/spill and 1184 B static shared memory.  The compiler again
 produced identical normalized main-kernel SASS for `nsplit_exact` and
 `nsplit_consumer_u1`.
 
-The GPU remained at a recorded maximum SM clock of 1965 MHz and warmed only
-from 32 C to 34 C.  The E7a/N-split difference is therefore a same-session
-topology result, not a comparison across different instance temperatures.
-The requested N-split remains the optimization working source, while E7a
-remains the performance reference.
+Every per-case pre-sample recorded a 1965 MHz SM clock.  The environment
+endpoints were 32 C and 34 C, and per-case pre-samples stayed within
+33--35 C.  The E7a/N-split difference is therefore a same-session topology
+result, not a comparison across different instance temperatures.  The
+requested N-split remains the optimization working source, while E7a remains
+the performance reference.
 
 Exact CSVs, generated sources, validation logs, resource reports, normalized
 kernel instruction streams, telemetry, and hashes are retained in
