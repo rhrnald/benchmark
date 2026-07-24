@@ -1,0 +1,5 @@
+variant	ops	reg	utchmma	utcbar	tma_load	tma_store	tmem_load	scalar_store	vector_store
+nsplit_exact	1913	174	8	1	21	4	8	0	128
+nsplit_transpose_scalar	2229	174	4	1	21	4	8	512	0
+nsplit_exact_nostore	1624	52	8	1	21	0	0	0	0
+nsplit_transpose_nostore	1559	50	4	1	21	0	0	0	0

@@ -87,6 +87,22 @@ itself duplicates the shared consumer body, growing the normalized kernel
 from 1,913 to 2,197 lines, and is also rejected.  Keep the compact
 runtime-pipe ordinary-MMA consumer as the optimization base.
 
+The next candidate computes each logical N half as
+`C_p^T = B_p^T A^T`. This keeps the same A/B TMA payload and two-warp
+ownership but uses `m128n256k16`, reducing dynamic MMA issue from 16 to 8 per
+CTA/K64. Fresh four-pass B200 results were:
+
+| path | `[0,1)` vs exact | `[-8,8)` vs exact |
+|---|---:|---:|
+| no-C-store mainloop | +0.8963% | +0.4722% |
+| scalar-transpose E2E | +0.4617% | -0.0792% |
+
+Full-C pattern/ones validation was exact. The scalar transpose adds about
+0.019/0.029 ms per launch relative to the existing epilogue, so the mapping
+advances but the scalar epilogue does not. See
+[`NSPLIT_TRANSPOSE.md`](NSPLIT_TRANSPOSE.md) for the descriptor, TMEM
+mapping, codegen, and next vectorized epilogue ablation.
+
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
 `--store-c-tma` stages FP32 C chunks through shared memory and stores them with

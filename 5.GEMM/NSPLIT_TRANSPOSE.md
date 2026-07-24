@@ -179,3 +179,49 @@ generator 출력에 canonical source hash와 generated source hash가 함께
   /workspace/benchmark \
   /workspace/gemm_nsplit_transpose_b200
 ```
+
+## 최초 B200 결과
+
+Instance `45481495`에서 definition commit
+`6504acf74c5a21fbeb1b41d8a6f819d01965acf9`를 실행했다. 각 값은 네
+position-balanced W1/I5 process의 event TFLOP/s 평균과 sample SD다.
+
+| variant | `[0,1)` | `[-8,8)` |
+|---|---:|---:|
+| `nsplit_exact` | 1799.869 +/- 2.723 | 1599.595 +/- 2.619 |
+| `nsplit_transpose_scalar` | 1808.175 +/- 1.897 | 1598.322 +/- 2.145 |
+| `nsplit_exact_nostore` | 1866.203 +/- 1.946 | 1662.674 +/- 4.888 |
+| `nsplit_transpose_nostore` | 1882.926 +/- 2.367 | 1670.525 +/- 5.029 |
+
+Controlled paired 변화와 95% Student-t interval은 다음과 같다.
+
+| contrast | `[0,1)` | `[-8,8)` |
+|---|---:|---:|
+| transpose no-store vs exact no-store | +0.8963% `[+0.5677,+1.2248]` | +0.4722% `[+0.2775,+0.6669]` |
+| transpose scalar E2E vs exact E2E | +0.4617% `[+0.1575,+0.7659]` | -0.0792% `[-0.5501,+0.3917]` |
+
+두 입력 모두에서 16→8 MMA mainloop 자체는 개선됐다. 하지만 scalar
+transpose epilogue가 `[0,1)`에서 `0.0194 ms`, `[-8,8)`에서
+`0.0292 ms`의 추가 per-launch 시간을 사용해 E2E 이득을 소모했다.
+추정한 평균 epilogue 시간은 다음과 같다.
+
+| input | exact epilogue | scalar-transpose epilogue |
+|---|---:|---:|
+| `[0,1)` | 0.173715 ms | 0.193122 ms |
+| `[-8,8)` | 0.208598 ms | 0.237837 ms |
+
+`pattern` 256/512와 `ones` 512 full-C validation은 모두
+`max_abs=0`, `max_rel=0`, `bad=0`으로 통과했다. Transpose source는
+174 registers, stack/local/spill 0을 유지했고, SASS는 의도대로
+`UTCHMMA=4`, operand TMA load 21, C TMA store 4, TMEM x64 load 8이다.
+모든 64 process 전후 telemetry sample은 1965 MHz와 32--33 C였다.
+
+Scalar E2E는 두 입력 `+0.5%` gate를 통과하지 못하므로 canonical로
+채택하지 않는다. 다만 mainloop 변화는 양쪽 모두 유효하므로 mapping은
+유지하고, 다음 one-factor experiment는 scalar 32-bit shared store를
+2-lane shuffle + 64-bit store로 바꾸는 `2x2` epilogue다.
+
+CSV, source, full/normalized SASS, validation, telemetry, compiler resource,
+execution order, hashes는
+[`../results/gemm_nsplit_transpose_b200_45481495_20260724_6504acf/`](../results/gemm_nsplit_transpose_b200_45481495_20260724_6504acf/)
+에 보존한다.

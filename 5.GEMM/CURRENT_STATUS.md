@@ -21,6 +21,12 @@ Last updated: 2026-07-24
   `tcgen05.mma.ws` B-collector 후보는 control보다
   **-4.1799%/-3.7104%**였다. 두 방향 모두 미채택이며 canonical은
   runtime-pipe ordinary-MMA N-split을 유지한다.
+- `C_p^T=B_p^T A^T` transpose-compute는 원하는 A `256x64` 공유와
+  B0/B1 `64x128`, warp별 logical `256x128` 소유를 유지하면서 K64당
+  MMA를 16→8회로 줄였다. No-store mainloop는 **+0.8963%/+0.4722%**,
+  scalar-transpose E2E는 **+0.4617%/-0.0792%**였다. Mapping은 유효하지만
+  scalar epilogue가 0.019/0.029 ms를 추가하므로 아직 미채택이며,
+  2x2 vectorized epilogue가 다음 후보이다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 16K canonical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -85,6 +91,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | fresh current E7a | 별도 B200, `[0,1)`, 4 processes | 1800.000 +/- 1.632 | 환경 변화 범위와 현재 source 성능 재확인 |
 | fresh N-split redesign | A 공유 + B N-split, 실제 A/B/C, W1/I5 x3 | 1797.175 / 1593.776 | 같은 세션 E7a보다 -1.0924% / -1.1712% |
 | N-split static/WS ablation | pipe-static ordinary / B collector, 실제 A/B/C, W1/I5 x4 | 1755.775 / 1571.485; 1682.383 / 1513.175 | static은 exact보다 -2.2181% / -1.4136%; WS는 static보다 -4.1799% / -3.7104% |
+| N-split transpose compute | B^T x A^T로 MMA 16→8, scalar transpose C store, W1/I5 x4 | E2E 1808.175 / 1598.322; no-store 1882.926 / 1670.525 | exact 대비 E2E +0.4617% / -0.0792%; no-store +0.8963% / +0.4722% |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,

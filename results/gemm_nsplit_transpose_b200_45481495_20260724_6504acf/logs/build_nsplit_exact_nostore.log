@@ -1,0 +1,26 @@
+/workspace/gemm_nsplit_transpose_b200_45481495_20260724_6504acf/source/nsplit_exact_nostore.cu(574): warning #177-D: variable "c_store_smem" was declared but never referenced
+    uint32_t *c_store_smem = smem;
+              ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_transpose_b200_45481495_20260724_6504acf/source/nsplit_exact_nostore.cu(505): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(uint32_t tmem_base,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN56_GLOBAL__N__46243b09_23_nsplit_exact_nostore_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN56_GLOBAL__N__46243b09_23_nsplit_exact_nostore_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.262 ms
+ptxas info    : Compiling entry function '_ZN56_GLOBAL__N__46243b09_23_nsplit_exact_nostore_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN56_GLOBAL__N__46243b09_23_nsplit_exact_nostore_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.819 ms
+ptxas info    : Compiling entry function '_ZN56_GLOBAL__N__46243b09_23_nsplit_exact_nostore_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN56_GLOBAL__N__46243b09_23_nsplit_exact_nostore_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 52 registers, used 1 barriers, 160 bytes smem
+ptxas info    : Compile time = 59.218 ms
