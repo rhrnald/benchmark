@@ -114,6 +114,12 @@ one 256 KiB output tile. Vectorization reduces store instruction count but
 does not reduce that traffic and adds shuffles, so no vector epilogue is
 adopted.
 
+The next scalar-only ablation keeps that mapping and streams x32 rather than
+x64 TMEM fragments. Its local codegen reduces 174 registers/2,229 normalized
+operations to 91/2,011 with no spill, local memory, or shuffle; the dynamic
+TMEM load count doubles while shared stores and bank wavefronts remain
+unchanged. See [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md).
+
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
 `--store-c-tma` stages FP32 C chunks through shared memory and stores them with

@@ -36,6 +36,11 @@ Last updated: 2026-07-24
   느렸고, 최선 CF2 x64도 **-0.0716%/-0.0020%**였다. Vector 후보는
   미채택이며 세부 결과는
   [`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md)에 있다.
+- 다음 one-factor 후보는 scalar store mapping을 그대로 두고 TMEM load를
+  x64에서 streamed x32로 바꾸는 것이다. Local `sm_100a`에서
+  ops/registers는 2229/174에서 2011/91로 줄고 spill/local은 0이며,
+  shuffle과 shared bank wavefront 수는 그대로다. 측정 계약은
+  [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md)에 고정한다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
