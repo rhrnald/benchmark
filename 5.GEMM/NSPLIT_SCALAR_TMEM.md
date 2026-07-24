@@ -38,10 +38,10 @@ Both scalar paths preserve:
 The scalar-x32 generator is hash-gated to scalar-x64 SHA-256
 `a6c31fb053aa9647d969fb4f2a565cc7dfa81bd4fb44ce9afabf16c954b211cc`.
 It reconstructs the input exactly after replacing only the C-stage function
-and host-visible epilogue label. Its host audit checks one `128x128` chunk:
-all 16,384 SW128 output and TMEM words occur once, all 512 warp-store
-transactions are present, and every warp store covers all 32 banks. The
-generated stage body applies this audited mapping to all four chunk offsets.
+and host-visible epilogue label. Its exhaustive host audit iterates all four
+`128x128` chunks and proves that all 65,536 output coordinates and all
+`128x512` TMEM source words occur once. It also checks all 2,048 warp-store
+transactions and proves that every transaction covers all 32 banks.
 
 ## Local `sm_100a` gate
 
