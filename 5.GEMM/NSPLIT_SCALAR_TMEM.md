@@ -38,10 +38,10 @@ Both scalar paths preserve:
 The scalar-x32 generator is hash-gated to scalar-x64 SHA-256
 `a6c31fb053aa9647d969fb4f2a565cc7dfa81bd4fb44ce9afabf16c954b211cc`.
 It reconstructs the input exactly after replacing only the C-stage function
-and host-visible epilogue label. Its exhaustive host audit proves all 65,536
-output coordinates and all `128x512` TMEM source words occur once, each
-chunk's 16,384 SW128 words occur once, and every warp store covers all 32
-banks.
+and host-visible epilogue label. Its host audit checks one `128x128` chunk:
+all 16,384 SW128 output and TMEM words occur once, all 512 warp-store
+transactions are present, and every warp store covers all 32 banks. The
+generated stage body applies this audited mapping to all four chunk offsets.
 
 ## Local `sm_100a` gate
 
@@ -103,3 +103,46 @@ It replaces direct exact only if the confirmed paired mean improvement over
 exact is at least `+0.5%` for both inputs with no negative confidence
 interval. If x32 does not beat x64, x16 is not sent to B200 and the next axis
 is cross-tile one-stage prefetch.
+
+## B200 result
+
+The committed definition `6e138f0` was measured on Vast instance `45481495`
+with GPU UUID `GPU-2a1b935d-fd9c-ec3c-8ce7-e6d92149f96f`, CUDA 12.9.86,
+driver 580.126.09, and a reported 1965 MHz SM clock. Temperature moved from
+30 C before the run to 33 C after it. All 36 independent W1/I5 processes and
+all eight full-C validation cases completed successfully.
+
+| path | `[0,1)` TFLOP/s | `[-8,8)` TFLOP/s |
+|---|---:|---:|
+| direct exact | 1758.255 +/- 1.236 | 1567.368 +/- 2.940 |
+| transpose scalar x64 | 1766.621 +/- 1.077 | 1574.829 +/- 3.793 |
+| transpose scalar x32 | 1765.736 +/- 0.856 | 1573.798 +/- 1.520 |
+
+The pass-paired comparisons were:
+
+| comparison | `[0,1)` paired change, 95% CI | `[-8,8)` paired change, 95% CI |
+|---|---:|---:|
+| scalar x32 vs scalar x64 | -0.0501% [-0.1521%, +0.0520%] | -0.0652% [-0.2287%, +0.0984%] |
+| scalar x64 vs direct exact | +0.4759% [+0.4146%, +0.5371%] | +0.4762% [+0.2033%, +0.7492%] |
+| scalar x32 vs direct exact | +0.4255% [+0.3251%, +0.5260%] | +0.4106% [+0.1820%, +0.6392%] |
+
+Reducing the live register count from 174 to 91 therefore did not improve
+throughput. The x32 path leaves the 2,048 scalar shared stores and 2,048
+128-byte bank wavefronts unchanged while doubling dynamic TMEM warp loads
+from 32 to 64. Because `tcgen05` already limits residency to one CTA per SM,
+the register reduction does not create an occupancy benefit.
+
+Scalar x32 fails the screening gate because neither input has a positive
+lower confidence bound against x64. Scalar x64 also remains below the
+two-input `+0.5%` canonical-replacement threshold against direct exact.
+Consequently:
+
+- direct exact remains the canonical source;
+- x32 is rejected and x16 will not be measured;
+- the next one-factor axis is cross-tile one-stage prefetch.
+
+The curated result is in
+[`gemm_nsplit_scalar_x32_b200_45481495_20260724_6e138f0`](../results/gemm_nsplit_scalar_x32_b200_45481495_20260724_6e138f0/).
+It excludes binaries and full SASS dumps. The separately retained full archive
+has SHA-256
+`2eb0f6c459fbae0be8eb32c4b9028e9c2feb465d92413efc0f9d09c5ff81d254`.

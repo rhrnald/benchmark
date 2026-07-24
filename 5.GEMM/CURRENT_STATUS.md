@@ -36,11 +36,16 @@ Last updated: 2026-07-24
   느렸고, 최선 CF2 x64도 **-0.0716%/-0.0020%**였다. Vector 후보는
   미채택이며 세부 결과는
   [`NSPLIT_EPILOGUE.md`](NSPLIT_EPILOGUE.md)에 있다.
-- 다음 one-factor 후보는 scalar store mapping을 그대로 두고 TMEM load를
-  x64에서 streamed x32로 바꾸는 것이다. Local `sm_100a`에서
-  ops/registers는 2229/174에서 2011/91로 줄고 spill/local은 0이며,
-  shuffle과 shared bank wavefront 수는 그대로다. 측정 계약은
-  [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md)에 고정한다.
+- Scalar TMEM-load x64→x32 ablation은 registers를 174→91로 줄였지만
+  x64 대비 **-0.0501%/-0.0652%**였고, paired 95% CI도 각각
+  `[-0.1521%,+0.0520%]` / `[-0.2287%,+0.0984%]`로 0을 걸쳤다.
+  Scalar x64 자체도 exact 대비 **+0.4759%/+0.4762%**로 두 입력
+  `+0.5%` adoption gate에 못 미쳤다. 따라서 x32는 미채택하고,
+  x16은 측정하지 않으며 direct exact가 canonical이다. 세부 결과는
+  [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md)에 있다.
+- 다음 one-factor 후보는 남는 64 KiB SMEM 한 stage에 다음 output
+  tile의 첫 K64 A `256x64`와 B0/B1 `64x128`을 prefetch해 현재 tile의
+  epilogue와 겹치는 cross-tile one-stage prefetch다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -108,6 +113,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | N-split static/WS ablation | pipe-static ordinary / B collector, 실제 A/B/C, W1/I5 x4 | 1755.775 / 1571.485; 1682.383 / 1513.175 | static은 exact보다 -2.2181% / -1.4136%; WS는 static보다 -4.1799% / -3.7104% |
 | N-split transpose compute | B^T x A^T로 MMA 16→8, scalar transpose C store, W1/I5 x4 | E2E 1808.175 / 1598.322; no-store 1882.926 / 1670.525 | exact 대비 E2E +0.4617% / -0.0792%; no-store +0.8963% / +0.4722% |
 | N-split vector epilogue | scalar + vec2/vec4 5종, Williams-balanced W1/I5 x8 | scalar 1766.507 / 1574.004; best vector CF2 x64 1765.241 / 1573.960 | scalar는 exact 대비 +0.4473% / +0.5994%; 모든 vector는 scalar 미달 |
+| N-split scalar TMEM width | exact/x64/x32 전순열-balanced W1/I5 x6 | exact 1758.255 / 1567.368; x64 1766.621 / 1574.829; x32 1765.736 / 1573.798 | x32는 x64 대비 -0.0501% / -0.0652%; x64도 exact 대비 +0.5% gate 미달 |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,

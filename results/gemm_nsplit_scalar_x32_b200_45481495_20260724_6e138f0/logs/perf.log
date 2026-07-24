@@ -1,0 +1,108 @@
+run input=random pass=1 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.997689 wall_ms=4.999896 event_TFLOPS=1760.032 wall_TFLOPS=1759.255 checksum=00000000
+run input=random pass=1 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.977139 wall_ms=4.979486 event_TFLOPS=1767.299 wall_TFLOPS=1766.466 checksum=00000000
+run input=random pass=1 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.984749 wall_ms=4.987063 event_TFLOPS=1764.601 wall_TFLOPS=1763.782 checksum=00000000
+run input=random pass=2 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.998963 wall_ms=5.001259 event_TFLOPS=1759.583 wall_TFLOPS=1758.776 checksum=00000000
+run input=random pass=2 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.980461 wall_ms=4.982694 event_TFLOPS=1766.120 wall_TFLOPS=1765.329 checksum=00000000
+run input=random pass=2 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.975085 wall_ms=4.977323 event_TFLOPS=1768.029 wall_TFLOPS=1767.234 checksum=00000000
+run input=random pass=3 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.982183 wall_ms=4.984438 event_TFLOPS=1765.510 wall_TFLOPS=1764.711 checksum=00000000
+run input=random pass=3 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.004160 wall_ms=5.006487 event_TFLOPS=1757.756 wall_TFLOPS=1756.939 checksum=00000000
+run input=random pass=3 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.978515 wall_ms=4.980620 event_TFLOPS=1766.811 wall_TFLOPS=1766.064 checksum=00000000
+run input=random pass=4 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.982893 wall_ms=4.986385 event_TFLOPS=1765.258 wall_TFLOPS=1764.022 checksum=00000000
+run input=random pass=4 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.979514 wall_ms=4.981837 event_TFLOPS=1766.456 wall_TFLOPS=1765.632 checksum=00000000
+run input=random pass=4 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.004339 wall_ms=5.006516 event_TFLOPS=1757.693 wall_TFLOPS=1756.929 checksum=00000000
+run input=random pass=5 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.982854 wall_ms=4.985130 event_TFLOPS=1765.272 wall_TFLOPS=1764.466 checksum=00000000
+run input=random pass=5 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.006150 wall_ms=5.008428 event_TFLOPS=1757.057 wall_TFLOPS=1756.258 checksum=00000000
+run input=random pass=5 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.979379 wall_ms=4.981693 event_TFLOPS=1766.504 wall_TFLOPS=1765.683 checksum=00000000
+run input=random pass=6 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.983187 wall_ms=4.985492 event_TFLOPS=1765.154 wall_TFLOPS=1764.338 checksum=00000000
+run input=random pass=6 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.977626 wall_ms=4.979916 event_TFLOPS=1767.126 wall_TFLOPS=1766.313 checksum=00000000
+run input=random pass=6 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.005158 wall_ms=5.007558 event_TFLOPS=1757.406 wall_TFLOPS=1756.564 checksum=00000000
+run input=random-signed8 pass=1 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.596365 wall_ms=5.598663 event_TFLOPS=1571.751 wall_TFLOPS=1571.106 checksum=00000000
+run input=random-signed8 pass=1 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.598464 wall_ms=5.600710 event_TFLOPS=1571.162 wall_TFLOPS=1570.532 checksum=00000000
+run input=random-signed8 pass=1 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.601043 wall_ms=5.603292 event_TFLOPS=1570.438 wall_TFLOPS=1569.808 checksum=00000000
+run input=random-signed8 pass=2 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.591821 wall_ms=5.594029 event_TFLOPS=1573.028 wall_TFLOPS=1572.407 checksum=00000000
+run input=random-signed8 pass=2 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.612967 wall_ms=5.615329 event_TFLOPS=1567.102 wall_TFLOPS=1566.443 checksum=00000000
+run input=random-signed8 pass=2 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.588333 wall_ms=5.590796 event_TFLOPS=1574.010 wall_TFLOPS=1573.317 checksum=00000000
+run input=random-signed8 pass=3 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.586144 wall_ms=5.588440 event_TFLOPS=1574.627 wall_TFLOPS=1573.980 checksum=00000000
+run input=random-signed8 pass=3 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.589754 wall_ms=5.592067 event_TFLOPS=1573.610 wall_TFLOPS=1572.959 checksum=00000000
+run input=random-signed8 pass=3 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.606183 wall_ms=5.608500 event_TFLOPS=1568.999 wall_TFLOPS=1568.350 checksum=00000000
+run input=random-signed8 pass=4 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.559821 wall_ms=5.562187 event_TFLOPS=1582.082 wall_TFLOPS=1581.409 checksum=00000000
+run input=random-signed8 pass=4 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.604045 wall_ms=5.606340 event_TFLOPS=1569.597 wall_TFLOPS=1568.955 checksum=00000000
+run input=random-signed8 pass=4 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.580032 wall_ms=5.582346 event_TFLOPS=1576.352 wall_TFLOPS=1575.698 checksum=00000000
+run input=random-signed8 pass=5 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.618976 wall_ms=5.621108 event_TFLOPS=1565.426 wall_TFLOPS=1564.833 checksum=00000000
+run input=random-signed8 pass=5 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.587469 wall_ms=5.589657 event_TFLOPS=1574.254 wall_TFLOPS=1573.637 checksum=00000000
+run input=random-signed8 pass=5 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.586541 wall_ms=5.588904 event_TFLOPS=1574.515 wall_TFLOPS=1573.849 checksum=00000000
+run input=random-signed8 pass=6 variant=nsplit_exact
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.628979 wall_ms=5.631171 event_TFLOPS=1562.644 wall_TFLOPS=1562.036 checksum=00000000
+run input=random-signed8 pass=6 variant=nsplit_transpose_scalar_x64
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.593414 wall_ms=5.595733 event_TFLOPS=1572.580 wall_TFLOPS=1571.929 checksum=00000000
+run input=random-signed8 pass=6 variant=nsplit_transpose_scalar_x32
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast nsplit_variant=transpose_mma compute=c_transpose mma=m128n256k16 epilogue=scalar_x32_coalesced_transpose phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.589095 wall_ms=5.591403 event_TFLOPS=1573.796 wall_TFLOPS=1573.146 checksum=00000000

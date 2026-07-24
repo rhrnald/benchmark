@@ -114,11 +114,20 @@ one 256 KiB output tile. Vectorization reduces store instruction count but
 does not reduce that traffic and adds shuffles, so no vector epilogue is
 adopted.
 
-The next scalar-only ablation keeps that mapping and streams x32 rather than
-x64 TMEM fragments. Its local codegen reduces 174 registers/2,229 normalized
-operations to 91/2,011 with no spill, local memory, or shuffle; the dynamic
-TMEM load count doubles while shared stores and bank wavefronts remain
-unchanged. See [`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md).
+The completed scalar-only ablation kept that mapping and streamed x32 rather
+than x64 TMEM fragments. Local codegen reduced 174 registers/2,229 normalized
+operations to 91/2,011 with no spill, local memory, or shuffle, but dynamic
+TMEM warp loads doubled while shared stores and bank wavefronts remained
+unchanged. In the six-permutation B200 run, x32 changed throughput by
+`-0.0501%/-0.0652%` versus x64 and both paired 95% confidence intervals
+crossed zero. X64 itself improved on direct exact by only
+`+0.4759%/+0.4762%`, below the two-input `+0.5%` adoption gate. X32 is
+rejected, x16 will not be measured, and direct exact remains canonical. See
+[`NSPLIT_SCALAR_TMEM.md`](NSPLIT_SCALAR_TMEM.md).
+
+The next one-factor candidate uses the otherwise idle 64 KiB shared-memory
+stage during the current output epilogue to prefetch the next output tile's
+first K64 A `256x64` and B0/B1 `64x128` panels.
 
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
