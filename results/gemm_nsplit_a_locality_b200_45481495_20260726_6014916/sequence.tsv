@@ -1,0 +1,9 @@
+input	pass	order
+random	1	baseline nfast_16x16 nfast_8x32 nfast_4x64
+random	2	nfast_4x64 nfast_8x32 nfast_16x16 baseline
+random	3	nfast_8x32 baseline nfast_4x64 nfast_16x16
+random	4	nfast_16x16 nfast_4x64 baseline nfast_8x32
+random-signed8	1	nfast_4x64 nfast_8x32 nfast_16x16 baseline
+random-signed8	2	baseline nfast_16x16 nfast_8x32 nfast_4x64
+random-signed8	3	nfast_16x16 nfast_4x64 baseline nfast_8x32
+random-signed8	4	nfast_8x32 baseline nfast_4x64 nfast_16x16

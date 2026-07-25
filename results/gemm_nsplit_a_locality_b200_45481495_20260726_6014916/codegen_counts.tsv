@@ -1,0 +1,5 @@
+variant	ops	reg	static_shared	utchmma	tma_load_total	tma_store	phasecheck
+baseline	1913	174	1184	8	21	4	48
+nfast_16x16	1913	174	1184	8	21	4	48
+nfast_8x32	1913	174	1184	8	21	4	48
+nfast_4x64	1913	174	1184	8	21	4	48

@@ -91,3 +91,34 @@ Promote a candidate only if both input distributions improve by at least
 that threshold remains diagnostic.  The user-facing 5% target requires a much
 larger positive result than previous local-order sweeps, so this run is a
 screening test for whether stronger A-locality macro shapes matter.
+
+## B200 result
+
+Definition commit: `6014916`.  The run used Vast instance `45481495`, CUDA
+12.9, one B200, dense 16K GEMM, real A/B/C addresses, and W1/I5 with four
+position-balanced processes per input.  All `pattern` and `ones` full-C
+validations passed.
+
+| variant | `[0,1)` TFLOP/s | vs baseline | `[-8,8)` TFLOP/s | vs baseline |
+|---|---:|---:|---:|---:|
+| `baseline` | 1753.998 +/- 0.313 | -- | 1521.339 +/- 6.957 | -- |
+| `nfast_16x16` | 1765.930 +/- 0.574 | +0.6803% | 1524.371 +/- 3.632 | +0.1993% |
+| `nfast_8x32` | 1711.153 +/- 15.678 | -2.4427% | 1425.926 +/- 3.545 | -6.2717% |
+| `nfast_4x64` | 1511.402 +/- 14.112 | -13.8310% | 1274.197 +/- 19.193 | -16.2451% |
+
+`nfast_16x16` confirms a small benefit from making same-A N neighbors
+consecutive, but it fails the two-input `+0.5%` promotion gate because the
+signed input improves by only `+0.1993%`.  Stronger `8x32` and `4x64` A
+locality are clearly harmful.  The likely reason is that the wider N sweep
+destroys too much B locality and produces a less favorable persistent-wave
+interleaving; the repeated-A diagnostic cannot be realized by simply making
+larger N-fast macroblocks.
+
+Decision: do not promote any A-locality scheduler variant as the default.
+Keep `nfast_16x16` as a possible component for a future combined experiment,
+but it is not a 5% path by itself.
+
+Artifact:
+[`../results/gemm_nsplit_a_locality_b200_45481495_20260726_6014916/`](../results/gemm_nsplit_a_locality_b200_45481495_20260726_6014916/).
+The full archive SHA-256 is
+`f8a3a90697fa13ab475bd8479198a806eb2350af84d3243201b81935026f37d9`.

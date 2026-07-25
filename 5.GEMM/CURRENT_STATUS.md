@@ -56,6 +56,12 @@ Last updated: 2026-07-25
   유일하게 양수인 `b1_gap64`도 matched control 대비
   **+0.0926%/+0.0681%** (`[0,1)`/`[-8,8)`)에 그쳐 미채택했다.
   [`NSPLIT_PHASE_SHIFT.md`](NSPLIT_PHASE_SHIFT.md)에 결과가 있다.
+- Clean N-split A-locality scheduler sweep은 같은-A N neighbors를 먼저
+  실행하는 `nfast_16x16`, 더 강한 `8x32`, `4x64` macro를 측정했다.
+  `nfast_16x16`은 **+0.6803%/+0.1993%**로 signed input gate를 못 넘었고,
+  `8x32`와 `4x64`는 크게 느려졌다. 단순 macro order만으로는 repeated-A
+  diagnostic의 +6.5%를 회수하지 못한다.
+  [`NSPLIT_A_LOCALITY.md`](NSPLIT_A_LOCALITY.md)에 결과가 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
@@ -125,6 +131,7 @@ CPU-reference validation을 bit-exact로 통과했다.
 | N-split vector epilogue | scalar + vec2/vec4 5종, Williams-balanced W1/I5 x8 | scalar 1766.507 / 1574.004; best vector CF2 x64 1765.241 / 1573.960 | scalar는 exact 대비 +0.4473% / +0.5994%; 모든 vector는 scalar 미달 |
 | N-split scalar TMEM width | exact/x64/x32 전순열-balanced W1/I5 x6 | exact 1758.255 / 1567.368; x64 1766.621 / 1574.829; x32 1765.736 / 1573.798 | x32는 x64 대비 -0.0501% / -0.0652%; x64도 exact 대비 +0.5% gate 미달 |
 | N-split cross-tile kt0 prefetch | scalar-x64 A / non-overlap B / epilogue-overlap C, 전순열-balanced W1/I5 x6 | A 1743.253 / 1558.528; B 1747.851 / 1562.414; C 1748.909 / 1560.297 | C/B +0.0606% / -0.1353%; 두 입력 CI gate 실패로 overlap 미채택 |
+| N-split A-locality scheduler | local N-fast macro `16x16`, `8x32`, `4x64`, W1/I5 x4 | baseline 1753.998 / 1521.339; best `nfast_16x16` 1765.930 / 1524.371 | +0.6803% / +0.1993%; signed gate 실패, stronger A-locality macro는 -2.4%~-16.2% |
 
 L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
 grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,
