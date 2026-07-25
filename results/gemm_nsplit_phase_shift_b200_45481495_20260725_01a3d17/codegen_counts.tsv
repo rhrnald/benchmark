@@ -1,0 +1,10 @@
+variant	ops	reg	static_shared	utchmma	tma_load_total	tma_store	phasecheck	nanosleep
+baseline	1913	174	1184	8	21	4	48	1
+cta4	1924	174	1184	8	21	4	48	1
+cta8	1924	174	1184	8	21	4	48	1
+b1_gap0	1919	178	1184	8	21	4	48	8
+b1_gap32	1919	178	1184	8	21	4	48	8
+b1_gap64	1919	178	1184	8	21	4	48	8
+pipe1_gap0	1921	174	1184	8	21	4	48	2
+pipe1_gap32	1921	174	1184	8	21	4	48	2
+pipe1_gap64	1921	174	1184	8	21	4	48	2

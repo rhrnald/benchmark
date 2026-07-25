@@ -1,0 +1,7 @@
+input	pass	order
+random	1	baseline cta4 cta8 b1_gap0 b1_gap32 b1_gap64 pipe1_gap0 pipe1_gap32 pipe1_gap64
+random	2	pipe1_gap64 pipe1_gap32 pipe1_gap0 b1_gap64 b1_gap32 b1_gap0 cta8 cta4 baseline
+random	3	cta8 b1_gap0 pipe1_gap0 b1_gap32 pipe1_gap32 b1_gap64 pipe1_gap64 baseline cta4
+random-signed8	1	pipe1_gap64 pipe1_gap32 pipe1_gap0 b1_gap64 b1_gap32 b1_gap0 cta8 cta4 baseline
+random-signed8	2	baseline cta4 cta8 b1_gap0 b1_gap32 b1_gap64 pipe1_gap0 pipe1_gap32 pipe1_gap64
+random-signed8	3	b1_gap32 pipe1_gap32 cta8 baseline pipe1_gap0 b1_gap0 cta4 pipe1_gap64 b1_gap64

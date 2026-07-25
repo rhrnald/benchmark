@@ -134,6 +134,12 @@ the active issue placement relative to a matched non-overlap B. C/B was
 rotating-stage design, complete A/B/C table, and artifact are in
 [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md).
 
+The direct N-split phase-shift sweep then tested the same dense kernel without
+any cross-tile prefetch.  CTA startup staggering was neutral to negative,
+pipe-1 consumer delay was clearly harmful, and `b1_gap64` was only
+`+0.0926%/+0.0681%` against its codegen control.  No phase-shift variant is
+adopted; see [`NSPLIT_PHASE_SHIFT.md`](NSPLIT_PHASE_SHIFT.md).
+
 The default benchmark path consumes TMEM accumulators into a checksum sink.
 `--store-c` stores the full FP32 C matrix with scalar global stores, and
 `--store-c-tma` stages FP32 C chunks through shared memory and stores them with

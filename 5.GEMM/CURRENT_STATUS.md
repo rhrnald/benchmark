@@ -1,6 +1,6 @@
 # GEMM current status
 
-Last updated: 2026-07-24
+Last updated: 2026-07-25
 
 ## 요약
 
@@ -50,6 +50,12 @@ Last updated: 2026-07-24
   **-0.1353% `[-0.4209,+0.1504]`**여서 overlap을 미채택했다.
   [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md)에
   설계, 전체 A/B/C 결과와 artifact가 있다.
+- Direct N-split phase shift는 prefetch 없이 CTA startup staggering,
+  warp-1 B1 issue gap, pipe-1 consumer gap을 측정했다. CTA staggering은
+  음수, pipe-1 gap은 control부터 -2.8%~-3.5%로 크게 느렸고,
+  유일하게 양수인 `b1_gap64`도 matched control 대비
+  **+0.0926%/+0.0681%** (`[0,1)`/`[-8,8)`)에 그쳐 미채택했다.
+  [`NSPLIT_PHASE_SHIFT.md`](NSPLIT_PHASE_SHIFT.md)에 결과가 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,

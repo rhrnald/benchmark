@@ -51,3 +51,33 @@ Use the standard dense 16K protocol: one case per process, warmup 1, timed 5,
 both BF16 uniform `[0,1)` and `[-8,8)`.  Adopt only if both distributions are
 at least `+0.5%` faster against the matched control.  Smaller positive values
 are diagnostic only.
+
+## B200 result
+
+Definition commit: `01a3d17`.  The run used instance `45481495`, CUDA 12.9,
+one B200, dense 16K GEMM, real A/B/C addresses, and W1/I5 with three rotated
+processes per variant and input.  All 18 size-512 full-C validations passed
+with `bad=0`.
+
+| variant | `[0,1)` TFLOP/s | vs matched control | `[-8,8)` TFLOP/s | vs matched control |
+|---|---:|---:|---:|---:|
+| `baseline` | 1807.204 +/- 3.255 | -- | 1607.658 +/- 7.150 | -- |
+| `cta4` | 1805.725 +/- 1.172 | -0.0816% vs baseline | 1605.531 +/- 5.690 | -0.1310% vs baseline |
+| `cta8` | 1806.918 +/- 0.927 | -0.0156% vs baseline | 1601.467 +/- 1.560 | -0.3836% vs baseline |
+| `b1_gap0` | 1809.522 +/- 2.057 | +0.1286% vs baseline | 1607.710 +/- 4.992 | +0.0050% vs baseline |
+| `b1_gap32` | 1803.850 +/- 12.560 | -0.3137% vs `b1_gap0` | 1601.359 +/- 4.281 | -0.3949% vs `b1_gap0` |
+| `b1_gap64` | 1811.195 +/- 2.071 | +0.0926% vs `b1_gap0` | 1608.805 +/- 5.580 | +0.0681% vs `b1_gap0` |
+| `pipe1_gap0` | 1743.847 +/- 1.587 | -3.5056% vs baseline | 1563.106 +/- 11.076 | -2.7719% vs baseline |
+| `pipe1_gap32` | 1719.213 +/- 3.346 | -1.4127% vs `pipe1_gap0` | 1528.315 +/- 0.619 | -2.2224% vs `pipe1_gap0` |
+| `pipe1_gap64` | 1671.931 +/- 1.226 | -4.1239% vs `pipe1_gap0` | 1451.694 +/- 7.701 | -7.1251% vs `pipe1_gap0` |
+
+No candidate meets the `+0.5%` two-input adoption gate.  CTA startup
+staggering is neutral to negative.  Pipe-1 consumer delay is clearly harmful,
+including the codegen control.  `b1_gap64` is the only directionally positive
+phase shift, but the effect is only `+0.0926%/+0.0681%`; it remains diagnostic
+and is not adopted.
+
+Artifact:
+[`../results/gemm_nsplit_phase_shift_b200_45481495_20260725_01a3d17/`](../results/gemm_nsplit_phase_shift_b200_45481495_20260725_01a3d17/).
+The full archive SHA-256 is
+`5adea263f86ed9cb22462efbafb797cb5c652fcce181c96f3c4565da0321c605`.
