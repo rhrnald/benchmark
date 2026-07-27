@@ -33,6 +33,27 @@ def main() -> None:
         "static constexpr int kBenchmarkSize = 16384;",
         f"static constexpr int kBenchmarkSize = {args.size};",
     )
+    performance_shapes = {
+        8192: (128, 32, 32),
+        16384: (256, 64, 64),
+        32768: (512, 128, 128),
+    }
+    ktiles, mtiles, ntiles = performance_shapes[args.size]
+    if args.size != 16384:
+        text = replace_once(
+            text,
+            "  set_one_gemm_kernel_attribute<256, 64, 64>();",
+            f"  set_one_gemm_kernel_attribute<{ktiles}, {mtiles}, {ntiles}>();",
+        )
+        text = replace_once(
+            text,
+            """  if (ktiles == 256 && mtile == 64 && ntile == 64) {
+    launch_one_gemm_kernel<256, 64, 64>(grid, a_map, b_map, c_map, d_sink);
+""",
+            f"""  if (ktiles == {ktiles} && mtile == {mtiles} && ntile == {ntiles}) {{
+    launch_one_gemm_kernel<{ktiles}, {mtiles}, {ntiles}>(grid, a_map, b_map, c_map, d_sink);
+""",
+        )
     text = replace_once(
         text,
         "static constexpr int kPersistentMacroM = 8;",
