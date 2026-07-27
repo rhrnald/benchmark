@@ -1,0 +1,375 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__975cd42b_11_baseline_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__975cd42b_11_baseline_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.393 ms
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__975cd42b_11_baseline_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__975cd42b_11_baseline_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.830 ms
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__975cd42b_11_baseline_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__975cd42b_11_baseline_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 80.255 ms
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__73a18294_12_no_memset_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__73a18294_12_no_memset_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.272 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__73a18294_12_no_memset_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__73a18294_12_no_memset_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.830 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__73a18294_12_no_memset_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__73a18294_12_no_memset_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 80.675 ms
+/workspace/gemm_nsplit_overhead_20260727_2e58a08/source/sink_keep.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__d0b83817_12_sink_keep_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__d0b83817_12_sink_keep_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.322 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__d0b83817_12_sink_keep_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__d0b83817_12_sink_keep_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.767 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__d0b83817_12_sink_keep_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__d0b83817_12_sink_keep_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 170 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 77.870 ms
+/workspace/gemm_nsplit_overhead_20260727_2e58a08/source/sink_trim.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__387e8450_12_sink_trim_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__387e8450_12_sink_trim_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.362 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__387e8450_12_sink_trim_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__387e8450_12_sink_trim_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.848 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__387e8450_12_sink_trim_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__387e8450_12_sink_trim_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 170 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 79.220 ms
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 54.030 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 170 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 69.470 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 60.854 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.089 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b3366475_8_fixed_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.540 ms
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN43_GLOBAL__N__ba9f121e_10_suspend_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN43_GLOBAL__N__ba9f121e_10_suspend_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.332 ms
+ptxas info    : Compiling entry function '_ZN43_GLOBAL__N__ba9f121e_10_suspend_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN43_GLOBAL__N__ba9f121e_10_suspend_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.815 ms
+ptxas info    : Compiling entry function '_ZN43_GLOBAL__N__ba9f121e_10_suspend_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN43_GLOBAL__N__ba9f121e_10_suspend_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 82.433 ms
+/workspace/gemm_nsplit_overhead_20260727_2e58a08/source/fixed_sink.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=256, MTiles=64, NTiles=64]" at line 1001
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 52.888 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 67.244 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 59.211 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.073 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__49233c9c_13_fixed_sink_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.676 ms
+/workspace/gemm_nsplit_overhead_20260727_2e58a08/source/all.cu(670): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=256, MTiles=64, NTiles=64]" at line 1020
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 53.059 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 69.445 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 60.529 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.087 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.717 ms
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+2e58a0874bb29071db53e9967111861919491c9a
+cf5d945927a9209523f6c647e7960e2a2e77d11d73d448820ab116200cf13012  /workspace/benchmark_6014916_git/5.GEMM/baseline/gemm256_bf16_16k.cu
+72b4d5805009c622f922acccd2505d392b53b3aace1249c206c8ddb1b2820066  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/all
+6de40b95c8f05f62e0a810fdae01e826b61cff1e0e015ee96f6bffe374ce8b87  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/baseline
+f73625581b0811abc0299e9c98605576e7d208ed2ed48d799f1428d150adde90  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/fixed
+36868f4cb415c2a100f2244fabd53caecdd0a1a2665db90660e41563cdb934a9  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/fixed_sink
+290f35137c05fed01f60fddbfe4adb4302d67da00c7cf29c1c3970e0679768b0  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/no_memset
+4a4b0de27b11ce7d64bc898c11eab1cf7a5a34ee2e6402bb7ee935c4e20a262d  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/sink_keep
+7fe730d540d488918ae6c08487e24fa9d692712c34021cd8c64b6f41371587c3  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/sink_trim
+300ae3bdfee63096e30b2acda4c1d6d56e7f9d03e43795703f68001fdb5998e5  /workspace/gemm_nsplit_overhead_20260727_2e58a08/bin/suspend
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.772704 wall_ms=4.775092 event_TFLOPS=1843.000 wall_TFLOPS=1842.078 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.786067 wall_ms=4.788308 event_TFLOPS=1837.854 wall_TFLOPS=1836.994 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.783539 wall_ms=4.785904 event_TFLOPS=1838.825 wall_TFLOPS=1837.917 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.783789 wall_ms=4.786126 event_TFLOPS=1838.729 wall_TFLOPS=1837.832 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.793843 wall_ms=4.796283 event_TFLOPS=1834.873 wall_TFLOPS=1833.939 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.816122 wall_ms=4.818483 event_TFLOPS=1826.385 wall_TFLOPS=1825.490 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.800256 wall_ms=4.802612 event_TFLOPS=1832.422 wall_TFLOPS=1831.523 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.817696 wall_ms=4.820137 event_TFLOPS=1825.788 wall_TFLOPS=1824.864 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.394899 wall_ms=5.398321 event_TFLOPS=1630.446 wall_TFLOPS=1629.413 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.406106 wall_ms=5.408435 event_TFLOPS=1627.066 wall_TFLOPS=1626.366 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.402765 wall_ms=5.405424 event_TFLOPS=1628.073 wall_TFLOPS=1627.271 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.380621 wall_ms=5.383015 event_TFLOPS=1634.773 wall_TFLOPS=1634.046 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.425216 wall_ms=5.427498 event_TFLOPS=1621.335 wall_TFLOPS=1620.653 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.443130 wall_ms=5.445471 event_TFLOPS=1615.999 wall_TFLOPS=1615.304 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.415117 wall_ms=5.417429 event_TFLOPS=1624.359 wall_TFLOPS=1623.666 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.423872 wall_ms=5.426384 event_TFLOPS=1621.737 wall_TFLOPS=1620.986 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.434662 wall_ms=5.437076 event_TFLOPS=1618.517 wall_TFLOPS=1617.798 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.410515 wall_ms=5.413083 event_TFLOPS=1625.740 wall_TFLOPS=1624.969 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.435238 wall_ms=5.437536 event_TFLOPS=1618.345 wall_TFLOPS=1617.661 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.419847 wall_ms=5.422286 event_TFLOPS=1622.941 wall_TFLOPS=1622.211 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.400787 wall_ms=5.402936 event_TFLOPS=1628.669 wall_TFLOPS=1628.021 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.405037 wall_ms=5.407415 event_TFLOPS=1627.388 wall_TFLOPS=1626.673 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.400064 wall_ms=5.402393 event_TFLOPS=1628.887 wall_TFLOPS=1628.184 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.398189 wall_ms=5.400472 event_TFLOPS=1629.453 wall_TFLOPS=1628.764 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.818055 wall_ms=4.820432 event_TFLOPS=1825.652 wall_TFLOPS=1824.752 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.793370 wall_ms=4.795676 event_TFLOPS=1835.054 wall_TFLOPS=1834.172 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.825191 wall_ms=4.827392 event_TFLOPS=1822.953 wall_TFLOPS=1822.121 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.797293 wall_ms=4.799722 event_TFLOPS=1833.554 wall_TFLOPS=1832.626 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.781152 wall_ms=4.783497 event_TFLOPS=1839.743 wall_TFLOPS=1838.841 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.796967 wall_ms=4.799388 event_TFLOPS=1833.678 wall_TFLOPS=1832.753 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.778854 wall_ms=4.782351 event_TFLOPS=1840.628 wall_TFLOPS=1839.282 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.782938 wall_ms=4.785232 event_TFLOPS=1839.057 wall_TFLOPS=1838.175 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.421018 wall_ms=5.423335 event_TFLOPS=1622.591 wall_TFLOPS=1621.897 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.441760 wall_ms=5.444068 event_TFLOPS=1616.406 wall_TFLOPS=1615.721 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.431360 wall_ms=5.433621 event_TFLOPS=1619.501 wall_TFLOPS=1618.827 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.409543 wall_ms=5.412048 event_TFLOPS=1626.033 wall_TFLOPS=1625.280 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.410221 wall_ms=5.412568 event_TFLOPS=1625.829 wall_TFLOPS=1625.124 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.402688 wall_ms=5.405147 event_TFLOPS=1628.096 wall_TFLOPS=1627.355 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.412128 wall_ms=5.414262 event_TFLOPS=1625.256 wall_TFLOPS=1624.615 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.372743 wall_ms=5.375315 event_TFLOPS=1637.170 wall_TFLOPS=1636.387 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.810029 wall_ms=4.812245 event_TFLOPS=1828.699 wall_TFLOPS=1827.857 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.823833 wall_ms=4.826155 event_TFLOPS=1823.465 wall_TFLOPS=1822.588 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.803219 wall_ms=4.805451 event_TFLOPS=1831.291 wall_TFLOPS=1830.441 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.831456 wall_ms=4.833751 event_TFLOPS=1820.588 wall_TFLOPS=1819.724 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.777933 wall_ms=4.780270 event_TFLOPS=1840.983 wall_TFLOPS=1840.083 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.790477 wall_ms=4.792845 event_TFLOPS=1836.162 wall_TFLOPS=1835.255 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.784755 wall_ms=4.787058 event_TFLOPS=1838.358 wall_TFLOPS=1837.474 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.788493 wall_ms=4.790823 event_TFLOPS=1836.923 wall_TFLOPS=1836.030 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.780633 wall_ms=4.783164 event_TFLOPS=1839.943 wall_TFLOPS=1838.970 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.777882 wall_ms=4.780278 event_TFLOPS=1841.003 wall_TFLOPS=1840.080 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.786765 wall_ms=4.789133 event_TFLOPS=1837.586 wall_TFLOPS=1836.677 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.785625 wall_ms=4.788251 event_TFLOPS=1838.024 wall_TFLOPS=1837.016 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.825511 wall_ms=4.827776 event_TFLOPS=1822.832 wall_TFLOPS=1821.976 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.791315 wall_ms=4.793690 event_TFLOPS=1835.841 wall_TFLOPS=1834.931 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.826298 wall_ms=4.828468 event_TFLOPS=1822.534 wall_TFLOPS=1821.715 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.800410 wall_ms=4.802766 event_TFLOPS=1832.363 wall_TFLOPS=1831.464 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_trim phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.409229 wall_ms=5.411746 event_TFLOPS=1626.127 wall_TFLOPS=1625.371 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=sink_keep phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.397645 wall_ms=5.400214 event_TFLOPS=1629.617 wall_TFLOPS=1628.842 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=no_memset phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.402688 wall_ms=5.404963 event_TFLOPS=1628.096 wall_TFLOPS=1627.410 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=baseline phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.412691 wall_ms=5.414967 event_TFLOPS=1625.087 wall_TFLOPS=1624.404 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=all phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.406707 wall_ms=5.409156 event_TFLOPS=1626.885 wall_TFLOPS=1626.149 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.432595 wall_ms=5.434919 event_TFLOPS=1619.133 wall_TFLOPS=1618.441 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=suspend phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.407891 wall_ms=5.410185 event_TFLOPS=1626.529 wall_TFLOPS=1625.840 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.396960 wall_ms=5.399139 event_TFLOPS=1629.824 wall_TFLOPS=1629.166 checksum=00000000
+# Static 8x16 overhead ablation
+
+16K square BF16 GEMM, FP32 accumulation/output, 148 persistent CTAs,
+static 8x16 M-fast scheduling, W1/I5, four position-balanced process
+samples per cell.
+
+## `[0,1)`
+
+| variant | TFLOP/s mean +/- SD | paired delta vs baseline |
+|---|---:|---:|
+| `baseline` | 1840.266 +/- 2.197 | +0.000% +/- 0.000%p |
+| `no_memset` | 1838.057 +/- 1.868 | -0.120% +/- 0.180%p |
+| `sink_keep` | 1837.966 +/- 3.082 | -0.125% +/- 0.201%p |
+| `sink_trim` | 1838.834 +/- 1.381 | -0.078% +/- 0.174%p |
+| `fixed` | 1832.372 +/- 2.655 | -0.429% +/- 0.172%p |
+| `suspend` | 1823.834 +/- 1.743 | -0.893% +/- 0.046%p |
+| `fixed_sink` | 1833.652 +/- 2.148 | -0.359% +/- 0.225%p |
+| `all` | 1823.715 +/- 2.490 | -0.899% +/- 0.162%p |
+
+## `[-8,8)`
+
+| variant | TFLOP/s mean +/- SD | paired delta vs baseline |
+|---|---:|---:|
+| `baseline` | 1627.704 +/- 2.642 | +0.000% +/- 0.000%p |
+| `no_memset` | 1628.036 +/- 0.747 | +0.021% +/- 0.179%p |
+| `sink_keep` | 1627.583 +/- 1.810 | -0.007% +/- 0.197%p |
+| `sink_trim` | 1631.685 +/- 5.151 | +0.245% +/- 0.329%p |
+| `fixed` | 1624.173 +/- 3.830 | -0.217% +/- 0.369%p |
+| `suspend` | 1619.320 +/- 4.914 | -0.515% +/- 0.422%p |
+| `fixed_sink` | 1622.183 +/- 3.361 | -0.339% +/- 0.075%p |
+| `all` | 1623.293 +/- 3.900 | -0.271% +/- 0.390%p |
+

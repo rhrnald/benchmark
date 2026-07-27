@@ -1,0 +1,33 @@
+/workspace/gemm_nsplit_overhead_20260727_2e58a08/source/all.cu(670): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=256, MTiles=64, NTiles=64]" at line 1020
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 53.059 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 69.445 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 60.529 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.087 ms
+ptxas info    : Compiling entry function '_ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN38_GLOBAL__N__bb60d0e6_6_all_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.717 ms

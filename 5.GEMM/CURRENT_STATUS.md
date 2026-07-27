@@ -1,6 +1,6 @@
 # GEMM current status
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 ## 요약
 
@@ -81,6 +81,15 @@ Last updated: 2026-07-25
   이 고정 정책의 분포 민감도 확인으로 남아 있다.
   [`NSPLIT_SCHEDULER_SWEEP.md`](NSPLIT_SCHEDULER_SWEEP.md)에 전체 표와
   static load-balance 해석이 있다.
+- 현재 static `8x16`에서 남은 단순 instruction/launch overhead도
+  직접 ablation했다. Diagnostic sink/memset 제거는
+  **-0.078%/+0.245%**, 16K compile-time 특수화는
+  **-0.429%/-0.217%**, producer wait suspend는
+  **-0.893%/-0.515%** (`[0,1)`/`[-8,8)`)였다. Sink 제거와 shape
+  특수화를 합치면 registers는 174→164로 줄었지만 occupancy가 늘지
+  않아 성능 이득이 없었다. 전 후보를 미채택하고 canonical을 유지한다.
+  [`NSPLIT_OVERHEAD.md`](NSPLIT_OVERHEAD.md)에 정의, 전체 표, codegen과
+  raw artifact가 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
