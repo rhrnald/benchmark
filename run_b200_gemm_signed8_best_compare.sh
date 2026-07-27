@@ -24,6 +24,12 @@ done
 
 "$nvcc_bin" -O3 -std=c++17 \
   -gencode arch=compute_100a,code=sm_100a \
+  -DGEMM_REPEAT_TUNING=1 -DGEMM_DENSE_L2_TUNING=1 \
+  -DGEMM_PERSISTENT_CTA=1 \
+  -DGEMM_PERSISTENT_MACRO_M=16 -DGEMM_PERSISTENT_MACRO_N=16 \
+  -DGEMM_PERSISTENT_8K_MACRO_M=16 -DGEMM_PERSISTENT_8K_MACRO_N=16 \
+  -DGEMM_PERSISTENT_32K_MACRO_M=8 -DGEMM_PERSISTENT_32K_MACRO_N=18 \
+  -DGEMM_PERSISTENT_LOCAL_M_FAST=1 -DGEMM_PERSISTENT_MACRO_N_FAST=1 \
   "$ours_src" -lcuda -o "$ours_bin"
 "$nvcc_bin" -O3 -std=c++17 \
   "$cublas_src" -lcublas -o "$cublas_bin"

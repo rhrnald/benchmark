@@ -10,7 +10,9 @@ kernel against cuBLAS and the previously selected targeted CUTLASS kernels.
   position-balanced process samples per cell.
 - Ours: `256x256x64`, three stages, split `64x128` B TMA producers, 148
   persistent CTAs; scheduler macros `16x16`, `16x16`, and `8x18` for
-  8K/16K/32K.
+  8K/16K/32K. The compile explicitly enables `GEMM_PERSISTENT_CTA=1`,
+  repeat/dense tuning, local M-fast, and macro N-fast; the CLI worker count
+  alone does not select the persistent kernel.
 - CUTLASS: selected targeted `256x256x64` kernels from the earlier controlled
   comparison: dynamic `2x1` Stream-K at 8K and static `4x1` CLC at 16K/32K.
 
