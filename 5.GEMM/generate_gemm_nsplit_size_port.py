@@ -17,6 +17,9 @@ def main() -> None:
     parser.add_argument("--size", required=True, type=int)
     parser.add_argument("--macro-m", required=True, type=int)
     parser.add_argument("--macro-n", required=True, type=int)
+    parser.add_argument(
+        "--scheduler", choices=("dynamic", "static"), default="dynamic"
+    )
     args = parser.parse_args()
 
     if args.size not in (8192, 16384, 32768):
@@ -40,6 +43,29 @@ def main() -> None:
         "static constexpr int kPersistentMacroN = 16;",
         f"static constexpr int kPersistentMacroN = {args.macro_n};",
     )
+    if args.scheduler == "static":
+        text = replace_once(
+            text,
+            """  int tile_iter = 0;
+  while (true) {
+    if (threadIdx.x == 0) {
+      persistent_task_shared =
+          static_cast<int>(atomicAdd(sink + total_tiles, 1u));
+    }
+    __syncthreads();
+    const int linear_tile = persistent_task_shared;
+    if (linear_tile >= persistent_task_count)
+      break;
+""",
+            """  int tile_iter = 0;
+  int static_linear_tile = static_cast<int>(blockIdx.x);
+  while (true) {
+    const int linear_tile = static_linear_tile;
+    static_linear_tile += static_cast<int>(gridDim.x);
+    if (linear_tile >= persistent_task_count)
+      break;
+""",
+        )
     Path(args.output).write_text(text)
 
 
