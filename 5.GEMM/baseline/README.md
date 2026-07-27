@@ -132,8 +132,8 @@ sequence가 동일함을 확인했다. 외부 `-D` 옵션도 사용하지 않는
 | warp 3 | 오른쪽 `M256 x N128:256` MMA issue |
 | MMA issue | CTA/K64당 16회; warp마다 K16 네 번 x M128 두 block |
 | output | `128 x 128` 네 chunk를 SW128 shared memory에서 FP32 TMA store |
-| scheduler | 148 persistent CTA, global atomic task counter |
-| tile order | `16 x 16` macro, macro N-fast, macro 내부 M-fast |
+| scheduler | 148 persistent CTA, fixed static grid-stride ownership |
+| tile order | `8 x 16` macro, macro N-fast, macro 내부 M-fast |
 | phase shift | TMA 0 cycle, MMA 0 cycle |
 | L2 promotion/multicast | 없음 / 없음 |
 | dynamic shared memory | 197632 B |

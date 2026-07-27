@@ -84,9 +84,30 @@ Selected signed8 candidates are:
 - 16K: static `8x16`, `1628.954 TFLOP/s`;
 - 32K: dynamic `8x16`, `1400.041 TFLOP/s`.
 
-The canonical source is not changed yet. The static `8x16` candidate needs a
-matched `[0,1)` confirmation before passing the existing two-distribution
-adoption rule.
+## Best candidate comparison
+
+The table below combines the size-specific winners from this scheduler sweep
+with the controlled cuBLAS and targeted CUTLASS measurements preserved in
+`NSPLIT_SIGNED8_SIZE_COMPARE.md`.
+
+| size | ours best | cuBLAS | ours / cuBLAS | targeted CUTLASS | ours / CUTLASS |
+|---:|---:|---:|---:|---:|---:|
+| 8K | **1592.794** (static `8x16`) | 1610.837 | **98.880%** | 1485.807 | **107.201%** |
+| 16K | **1628.954** (static `8x16`) | 1683.090 | **96.784%** | 1309.717 | **124.375%** |
+| 32K | **1400.041** (dynamic `8x16`) | 1422.276 | **98.437%** | 1138.963 | **122.922%** |
+
+All values are TFLOP/s for deterministic BF16 uniform `[-8,8)`, BF16 A/B,
+FP32 accumulation/output, one warmup, five timed launches, and three process
+samples. The library columns and the new scheduler winners were measured on
+the same B200 instance and software stack, but in separate activation
+sessions. This is therefore a controlled reference comparison, not a
+same-session interleaved comparison. CUTLASS denotes the previously selected
+targeted configurations rather than an exhaustive proof of CUTLASS's global
+optimum.
+
+The 16K canonical source now uses fixed static ownership with the `8x16`
+macro. A matched `[0,1)` measurement remains necessary to characterize its
+input-distribution sensitivity.
 
 Artifact:
 `../results/gemm_nsplit_scheduler_sweep_b200_45481495_20260727_94c816f/`.

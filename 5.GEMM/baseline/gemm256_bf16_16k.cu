@@ -58,7 +58,7 @@ static constexpr int kPipes = 2;
 static constexpr int kMBlocks = 2;
 static constexpr int kBTmaN = 128;
 static constexpr int kBTmaNSubtiles = kBTmaN / 64;
-static constexpr int kPersistentMacroM = 16;
+static constexpr int kPersistentMacroM = 8;
 static constexpr int kPersistentMacroN = 16;
 static constexpr int kAStageWords = kCtaM * kStageK / 2;
 static constexpr int kBStageWords = kStageK * kCtaN / 2;
@@ -579,7 +579,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
   __shared__ uint32_t warp_sinks[kWarps];
-  __shared__ int persistent_task_shared;
 
   if (threadIdx.x == 0) {
 #pragma unroll
@@ -614,10 +613,9 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   const uint32_t tmem_base = tmem_base_shared;
   const uint32_t idesc = make_bf16_idesc() | (1u << 16);
 
-  // The dynamic counter hands out one 16x16-macroblock position at a time.
-  // M varies fastest inside a macroblock so neighboring workers share B;
-  // macro N varies fastest so the next macroblock retains the same M range.
-  const int total_tiles = mtile_count * ntile_count;
+  // Fixed 148-CTA grid-stride ownership over 8x16 macroblocks. M varies
+  // fastest inside a macroblock so neighboring workers share B; macro N
+  // varies fastest so the next macroblock retains the same M range.
   const int persistent_macro_m =
       mtile_count < kPersistentMacroM ? mtile_count : kPersistentMacroM;
   const int persistent_macro_n =
@@ -630,13 +628,10 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   const int persistent_task_count =
       persistent_groups_m * persistent_groups_n * persistent_macro_tiles;
   int tile_iter = 0;
+  int static_linear_tile = static_cast<int>(blockIdx.x);
   while (true) {
-    if (threadIdx.x == 0) {
-      persistent_task_shared =
-          static_cast<int>(atomicAdd(sink + total_tiles, 1u));
-    }
-    __syncthreads();
-    const int linear_tile = persistent_task_shared;
+    const int linear_tile = static_linear_tile;
+    static_linear_tile += static_cast<int>(gridDim.x);
     if (linear_tile >= persistent_task_count)
       break;
 

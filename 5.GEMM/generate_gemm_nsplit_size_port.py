@@ -18,7 +18,7 @@ def main() -> None:
     parser.add_argument("--macro-m", required=True, type=int)
     parser.add_argument("--macro-n", required=True, type=int)
     parser.add_argument(
-        "--scheduler", choices=("dynamic", "static"), default="dynamic"
+        "--scheduler", choices=("dynamic", "static"), default="static"
     )
     args = parser.parse_args()
 
@@ -35,7 +35,7 @@ def main() -> None:
     )
     text = replace_once(
         text,
-        "static constexpr int kPersistentMacroM = 16;",
+        "static constexpr int kPersistentMacroM = 8;",
         f"static constexpr int kPersistentMacroM = {args.macro_m};",
     )
     text = replace_once(
@@ -43,25 +43,32 @@ def main() -> None:
         "static constexpr int kPersistentMacroN = 16;",
         f"static constexpr int kPersistentMacroN = {args.macro_n};",
     )
-    if args.scheduler == "static":
+    if args.scheduler == "dynamic":
         text = replace_once(
             text,
-            """  int tile_iter = 0;
-  while (true) {
-    if (threadIdx.x == 0) {
-      persistent_task_shared =
-          static_cast<int>(atomicAdd(sink + total_tiles, 1u));
-    }
-    __syncthreads();
-    const int linear_tile = persistent_task_shared;
-    if (linear_tile >= persistent_task_count)
-      break;
+            "  __shared__ uint32_t warp_sinks[kWarps];\n",
+            """  __shared__ uint32_t warp_sinks[kWarps];
+  __shared__ int persistent_task_shared;
 """,
+        )
+        text = replace_once(
+            text,
             """  int tile_iter = 0;
   int static_linear_tile = static_cast<int>(blockIdx.x);
   while (true) {
     const int linear_tile = static_linear_tile;
     static_linear_tile += static_cast<int>(gridDim.x);
+    if (linear_tile >= persistent_task_count)
+      break;
+""",
+            """  int tile_iter = 0;
+  while (true) {
+    if (threadIdx.x == 0) {
+      persistent_task_shared = static_cast<int>(
+          atomicAdd(sink + mtile_count * ntile_count, 1u));
+    }
+    __syncthreads();
+    const int linear_tile = persistent_task_shared;
     if (linear_tile >= persistent_task_count)
       break;
 """,

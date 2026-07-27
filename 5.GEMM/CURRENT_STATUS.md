@@ -76,8 +76,9 @@ Last updated: 2026-07-25
   1592.794**, **16K static `8x16` 1628.954**, **32K dynamic `8x16`
   1400.041 TFLOP/s**였다. 144-task macro가 148 workers에 가깝다는
   이유만으로 유리하지 않았고, static `8x18/12x12`는 padding과 fixed
-  ownership의 phase drift 때문에 크게 느려졌다. 아직 `[0,1)` 확인 전이라
-  canonical은 바꾸지 않았다.
+  ownership의 phase drift 때문에 크게 느려졌다. 우선 16K canonical은
+  측정된 signed8 최선인 static `8x16`으로 고정했다. `[0,1)` 확인은
+  이 고정 정책의 분포 민감도 확인으로 남아 있다.
   [`NSPLIT_SCHEDULER_SWEEP.md`](NSPLIT_SCHEDULER_SWEEP.md)에 전체 표와
   static load-balance 해석이 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
@@ -117,8 +118,8 @@ Last updated: 2026-07-25
 | warp 1 | B1 TMA |
 | warp 2/3 | 각각 왼쪽/오른쪽 `256x128` output을 N-split 계산 |
 | epilogue | 네 `128x128` FP32 chunk, SW128 SMEM staging 후 TMA store |
-| scheduler | 148 persistent CTA, global atomic task queue |
-| tile order | 16K `16x16` macro, macro N-fast, macro 내부 M-fast |
+| scheduler | 148 persistent CTA, fixed static grid-stride ownership |
+| tile order | 16K `8x16` macro, macro N-fast, macro 내부 M-fast |
 | phase/cache | TMA 0, MMA 0; promotion 없음; multicast 없음 |
 | codegen | REG 174, stack/local/spill 0 |
 
@@ -151,11 +152,11 @@ CPU-reference validation을 bit-exact로 통과했다.
 | N-split cross-tile kt0 prefetch | scalar-x64 A / non-overlap B / epilogue-overlap C, 전순열-balanced W1/I5 x6 | A 1743.253 / 1558.528; B 1747.851 / 1562.414; C 1748.909 / 1560.297 | C/B +0.0606% / -0.1353%; 두 입력 CI gate 실패로 overlap 미채택 |
 | N-split A-locality scheduler | local N-fast macro `16x16`, `8x32`, `4x64`, W1/I5 x4 | baseline 1753.998 / 1521.339; best `nfast_16x16` 1765.930 / 1524.371 | +0.6803% / +0.1993%; signed gate 실패, stronger A-locality macro는 -2.4%~-16.2% |
 
-L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. Static
-grid-stride, 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,
-eviction hint, strip ownership, multicast/cluster-4는 최종 non-multicast
-default를 넘지 못했다. 현재 선택은 dynamic 148 CTA, no hint,
-no multicast, phase `0/0`이다.
+L2/scheduler 실험에서는 persistent가 normal grid보다 유리했다. 최근
+direct N-split sweep에서 static `8x16`이 16K signed8 최선으로 측정되어
+현재 canonical은 static 148 CTA, `8x16`, no hint, no multicast,
+phase `0/0`이다. 단순 phase shift, wide-B 단일 TMA, A/B L2 promotion,
+eviction hint, strip ownership, multicast/cluster-4는 채택하지 않았다.
 
 직전 E7a topology에 맞춰 phase shift도 다시 설계해 측정했다. 148 CTA의
 one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
