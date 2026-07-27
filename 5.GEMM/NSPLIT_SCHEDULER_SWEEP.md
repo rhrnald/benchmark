@@ -126,9 +126,28 @@ ABBA-position-balanced independent processes per variant. Both variants
 passed pattern and ones full-C validation with zero error. Static `8x16`
 therefore remains canonical.
 
+## Static 8x16 local order
+
+The canonical M-fast order was compared with an N-fast order while keeping
+the static scheduler, `8x16` macro shape, macro N-fast order, arithmetic, and
+all memory operations fixed.
+
+| input | M-fast | N-fast | N-fast vs M-fast |
+|---|---:|---:|---:|
+| `[0,1)` | **1839.429 +/- 1.177** | 1781.671 +/- 1.489 | **-3.140%** |
+| `[-8,8)` | **1630.438 +/- 1.106** | 1568.869 +/- 2.581 | **-3.776%** |
+
+The run used W1/I5 and four ABBA-position-balanced independent processes per
+cell. Both variants used 174 registers with zero stack/local/spill and passed
+pattern and ones full-C validation with zero error. The older dynamic
+`16x16` N-fast result does not transfer to fixed static `8x16`: here M-fast
+is decisively better for both distributions and remains canonical.
+
 Artifacts:
 
 - full scheduler sweep:
   `../results/gemm_nsplit_scheduler_sweep_b200_45481495_20260727_94c816f/`;
 - static orientation control:
-  `../results/gemm_nsplit_static_orientation_20260727_21d6bda/`.
+  `../results/gemm_nsplit_static_orientation_20260727_21d6bda/`;
+- static local-order control:
+  `../results/gemm_nsplit_static_local_order_20260727_5c1b849/`.
