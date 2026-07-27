@@ -1,0 +1,15 @@
+	linux-vdso.so.1 (0x00007ffffad99000)
+	libcublas.so.12 => /usr/local/cuda/lib64/libcublas.so.12 (0x00007907cce00000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007907ccbd4000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007907d34e8000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007907cc9ab000)
+	/lib64/ld-linux-x86-64.so.2 (0x00007907d35c9000)
+	libcublasLt.so.12 => /usr/local/cuda/lib64/libcublasLt.so.12 (0x000079079a600000)
+	librt.so.1 => /lib/x86_64-linux-gnu/librt.so.1 (0x00007907d34e1000)
+	libpthread.so.0 => /lib/x86_64-linux-gnu/libpthread.so.0 (0x00007907d34dc000)
+	libdl.so.2 => /lib/x86_64-linux-gnu/libdl.so.2 (0x00007907d34d7000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007907cc8c4000)
+/usr/local/cuda-12.9/targets/x86_64-linux/lib/libcublas.so.12.9.1.4
+/usr/local/cuda-12.9/targets/x86_64-linux/lib/libcublasLt.so.12.9.1.4
+d63456d94f1b8e2408a8a9538c8740eb474c9eba48a84f420b15e2e10fbcd048  /usr/local/cuda-12.9/targets/x86_64-linux/lib/libcublas.so.12.9.1.4
+96ddf4891ca4f4ed1475966783a9185df2abd64a81c3cc713b96d036696fc541  /usr/local/cuda-12.9/targets/x86_64-linux/lib/libcublasLt.so.12.9.1.4

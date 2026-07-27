@@ -1,0 +1,9 @@
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.409 event_avg_ms=0.681830 event_TFLOPS=1612.588
+wall_total_ms=3.421 wall_avg_ms=0.684114 wall_TFLOPS=1607.204
+csv,bf16fp32,8192,8192,8192,5,1,0.681830,1612.588,0.684114,1607.204,NVIDIA B200
