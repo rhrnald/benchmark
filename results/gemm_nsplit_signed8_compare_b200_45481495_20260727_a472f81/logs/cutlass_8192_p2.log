@@ -1,0 +1,7 @@
+Stream-K GEMM with Problem Size: 8192x8192x8192 Cluster = (2, 1, 1)
+ Decomposition_mode=Heuristic Split_count=1 Reduction_mode=Deterministic
+--------------------------------------------------------------------------------
+  Input: BF16 uniform [-8,8), exact 5.GEMM seeds
+  Problem Size: 8192x8192x8192
+  Avg runtime: 0.739738 ms
+  GFLOPS: 1.48635e+06

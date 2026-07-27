@@ -1,0 +1,4 @@
+  Input: BF16 uniform [-8,8), exact 5.GEMM seeds; FP32 row-major output
+  Problem Size: 16384x16384x16384
+  Avg runtime: 6.66543 ms
+  GFLOPS: 1.31966e+06
