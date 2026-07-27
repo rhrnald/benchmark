@@ -1,0 +1,2 @@
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random-signed8 event_ms=0.714522 wall_ms=0.754109 event_TFLOPS=1538.808 wall_TFLOPS=1458.027 checksum=00000000

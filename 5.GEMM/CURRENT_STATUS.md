@@ -70,6 +70,16 @@ Last updated: 2026-07-25
   **1485.807 / 1309.717 / 1138.963 TFLOP/s**였다.
   [`NSPLIT_SIGNED8_SIZE_COMPARE.md`](NSPLIT_SIGNED8_SIZE_COMPARE.md)에
   size-port 정의, macro sweep, full-C 검증과 결과가 있다.
+- 같은 recent N-split에서 dynamic atomic queue와 static 148-CTA
+  grid-stride ownership을 `4x16`, `8x16`, `4x32`, `8x18`, `12x12`,
+  `16x16` macro로 signed8 재측정했다. 최고는 **8K static `8x16`
+  1592.794**, **16K static `8x16` 1628.954**, **32K dynamic `8x16`
+  1400.041 TFLOP/s**였다. 144-task macro가 148 workers에 가깝다는
+  이유만으로 유리하지 않았고, static `8x18/12x12`는 padding과 fixed
+  ownership의 phase drift 때문에 크게 느려졌다. 아직 `[0,1)` 확인 전이라
+  canonical은 바꾸지 않았다.
+  [`NSPLIT_SCHEDULER_SWEEP.md`](NSPLIT_SCHEDULER_SWEEP.md)에 전체 표와
+  static load-balance 해석이 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
