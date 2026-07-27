@@ -58,8 +58,8 @@ static constexpr int kPipes = 2;
 static constexpr int kMBlocks = 2;
 static constexpr int kBTmaN = 128;
 static constexpr int kBTmaNSubtiles = kBTmaN / 64;
-static constexpr int kPersistentMacroM = 8;
-static constexpr int kPersistentMacroN = 16;
+static constexpr int kPersistentMacroM = 16;
+static constexpr int kPersistentMacroN = 8;
 static constexpr int kAStageWords = kCtaM * kStageK / 2;
 static constexpr int kBStageWords = kStageK * kCtaN / 2;
 static constexpr int kBPipeWords = kStageK * kMmaN / 2;
@@ -1326,11 +1326,11 @@ int main(int argc, char **argv) {
 
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
-      "stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast "
+      "stages=3 pipes=2 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
       "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,
-      kPersistentMacroM, kPersistentMacroN, kDynamicSmemBytes);
+      kDynamicSmemBytes);
 
   const CaseResult r = run_case(args.warmup, args.iters, args.input_init_mode);
   std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d launch_ctas=%d "

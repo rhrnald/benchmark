@@ -1326,11 +1326,11 @@ int main(int argc, char **argv) {
 
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
-      "stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast "
+      "stages=3 pipes=2 persistent_ctas=%d scheduler=dynamic_16x16_mfast "
       "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,
-      kPersistentMacroM, kPersistentMacroN, kDynamicSmemBytes);
+      kDynamicSmemBytes);
 
   const CaseResult r = run_case(args.warmup, args.iters, args.input_init_mode);
   std::printf("size=%d mtile=%d ntile=%d ktiles=%d ctas=%d launch_ctas=%d "

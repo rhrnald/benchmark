@@ -1,0 +1,9 @@
+position	pass	variant
+1	1	8x16
+2	1	16x8
+1	2	16x8
+2	2	8x16
+1	3	16x8
+2	3	8x16
+1	4	8x16
+2	4	16x8

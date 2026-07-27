@@ -1,0 +1,72 @@
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN47_GLOBAL__N__cbf32819_14_static_8x16_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN47_GLOBAL__N__cbf32819_14_static_8x16_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.349 ms
+ptxas info    : Compiling entry function '_ZN47_GLOBAL__N__cbf32819_14_static_8x16_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN47_GLOBAL__N__cbf32819_14_static_8x16_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.808 ms
+ptxas info    : Compiling entry function '_ZN47_GLOBAL__N__cbf32819_14_static_8x16_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN47_GLOBAL__N__cbf32819_14_static_8x16_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 79.695 ms
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN47_GLOBAL__N__de054bdd_14_static_16x8_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN47_GLOBAL__N__de054bdd_14_static_16x8_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 3.165 ms
+ptxas info    : Compiling entry function '_ZN47_GLOBAL__N__de054bdd_14_static_16x8_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN47_GLOBAL__N__de054bdd_14_static_16x8_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.803 ms
+ptxas info    : Compiling entry function '_ZN47_GLOBAL__N__de054bdd_14_static_16x8_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii' for 'sm_100a'
+ptxas info    : Function properties for _ZN47_GLOBAL__N__de054bdd_14_static_16x8_cu_a2175ef023gemm256_bf16_16k_kernelE14CUtensorMap_stS0_S0_Pjiii
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 174 registers, used 1 barriers, 144 bytes smem
+ptxas info    : Compile time = 79.186 ms
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+21d6bdaff93e1c163f999db40ede2c30d4e41c90
+6920721ed3747c5db7367b8366e00901791af28584b213685a68f900edede7c0  /workspace/benchmark_6014916_git/5.GEMM/baseline/gemm256_bf16_16k.cu
+fee2fd8f3c3fafb1761ec7ec78b45513092c2ede5106bf7b818a3bb16c123d21  /workspace/gemm_nsplit_static_orientation_20260727_21d6bda/bin/static_16x8
+3142dd76b7a1d1caadbc82795ed23cf2e7eac59fb7f7f6da4acd925727b4f5b9  /workspace/gemm_nsplit_static_orientation_20260727_21d6bda/bin/static_8x16
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.400960 wall_ms=5.403386 event_TFLOPS=1628.617 wall_TFLOPS=1627.885 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.496928 wall_ms=5.499446 event_TFLOPS=1600.183 wall_TFLOPS=1599.451 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.494803 wall_ms=5.497335 event_TFLOPS=1600.802 wall_TFLOPS=1600.065 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.395168 wall_ms=5.397587 event_TFLOPS=1630.365 wall_TFLOPS=1629.634 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.508499 wall_ms=5.510874 event_TFLOPS=1596.822 wall_TFLOPS=1596.134 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.404199 wall_ms=5.406413 event_TFLOPS=1627.641 wall_TFLOPS=1626.974 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.411059 wall_ms=5.413242 event_TFLOPS=1625.577 wall_TFLOPS=1624.921 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=dynamic_16x16_mfast phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.486758 wall_ms=5.489143 event_TFLOPS=1603.149 wall_TFLOPS=1602.453 checksum=00000000
+# Static macro orientation comparison
+
+16K square BF16 GEMM, uniform `[-8,8)`, FP32 accumulation/output,
+148 persistent CTAs, static grid-stride ownership, W1/I5, four
+ABBA-position-balanced independent process samples per variant.
+
+| static macro | samples (TFLOP/s) | mean +/- sample SD | vs `8x16` |
+|---:|---:|---:|---:|
+| `8x16` | 1628.617 / 1630.365 / 1627.641 / 1625.577 | **1628.050 +/- 1.997** | +0.000% |
+| `16x8` | 1600.183 / 1600.802 / 1596.822 / 1603.149 | **1600.239 +/- 2.612** | -1.708% |
+

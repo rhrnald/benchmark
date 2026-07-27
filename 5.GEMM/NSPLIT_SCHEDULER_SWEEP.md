@@ -109,5 +109,26 @@ The 16K canonical source now uses fixed static ownership with the `8x16`
 macro. A matched `[0,1)` measurement remains necessary to characterize its
 input-distribution sensitivity.
 
-Artifact:
-`../results/gemm_nsplit_scheduler_sweep_b200_45481495_20260727_94c816f/`.
+## Static orientation control
+
+Static `8x16` and its transposed `16x8` orientation were compared separately
+at 16K. Both have 128 positions per macro and divide the `64x64` output-tile
+grid exactly, so this isolates the A/B reuse orientation without padding or
+dynamic load-balancing effects.
+
+| static macro | process samples (TFLOP/s) | mean +/- sample SD | vs `8x16` |
+|---:|---:|---:|---:|
+| `8x16` | 1628.617 / 1630.365 / 1627.641 / 1625.577 | **1628.050 +/- 1.997** | baseline |
+| `16x8` | 1600.183 / 1600.802 / 1596.822 / 1603.149 | **1600.239 +/- 2.612** | **-1.708%** |
+
+This focused run used deterministic BF16 uniform `[-8,8)`, W1/I5, four
+ABBA-position-balanced independent processes per variant. Both variants
+passed pattern and ones full-C validation with zero error. Static `8x16`
+therefore remains canonical.
+
+Artifacts:
+
+- full scheduler sweep:
+  `../results/gemm_nsplit_scheduler_sweep_b200_45481495_20260727_94c816f/`;
+- static orientation control:
+  `../results/gemm_nsplit_static_orientation_20260727_21d6bda/`.
