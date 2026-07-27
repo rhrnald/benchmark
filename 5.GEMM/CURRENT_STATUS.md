@@ -184,6 +184,23 @@ one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
 
 ## Library comparison
 
+### 현재 16K canonical 재측정
+
+현재 `fixed_sink` canonical을 cuBLAS 및 selected CUTLASS CLC와 같은
+B200 세션에서 두 분포 모두 다시 측정했다. 각 cell은 W1/I5 독립
+프로세스 6개이고, 세 방법의 6개 순열을 모두 사용했다.
+
+| input | ours | cuBLAS | selected CUTLASS | ours/cuBLAS |
+|---|---:|---:|---:|---:|
+| `[0,1)` | 1834.342 +/- 2.432 | 1897.885 +/- 3.031 | 1443.285 +/- 1.724 | 96.652% |
+| `[-8,8)` | 1623.016 +/- 1.993 | 1683.923 +/- 2.435 | 1305.937 +/- 5.014 | 96.383% |
+
+세부 조건, 개별 process 값, binary hash와 artifact는
+[`NSPLIT_16K_LIBRARY_COMPARE.md`](NSPLIT_16K_LIBRARY_COMPARE.md)에
+있다. cuBLAS는 12.9.1.4이고, selected CUTLASS는 기존
+`e8ecfad` 4.6.0-dev snapshot 기반 CLC kernel이므로 최신 CUTLASS
+전체의 상한으로 해석하지 않는다.
+
 ### 완전한 matched 3-way reference: pre-E7a custom
 
 아래는 같은 B200 세션에서 세 방법, 세 크기, 두 분포를 모두 맞춘 표다.

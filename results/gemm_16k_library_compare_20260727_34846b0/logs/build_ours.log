@@ -1,0 +1,33 @@
+/workspace/benchmark_6014916_git/5.GEMM/baseline/gemm256_bf16_16k.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=256, MTiles=64, NTiles=64]" at line 1001
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 53.305 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 67.271 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 58.706 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.088 ms
+ptxas info    : Compiling entry function '_ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN52_GLOBAL__N__f1c55a84_19_gemm256_bf16_16k_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.663 ms
