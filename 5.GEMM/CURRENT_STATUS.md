@@ -62,6 +62,14 @@ Last updated: 2026-07-25
   `8x32`와 `4x64`는 크게 느려졌다. 단순 macro order만으로는 repeated-A
   diagnostic의 +6.5%를 회수하지 못한다.
   [`NSPLIT_A_LOCALITY.md`](NSPLIT_A_LOCALITY.md)에 결과가 있다.
+- 최근 direct N-split canonical을 8K/32K로 직접 포팅하고 signed8에서
+  size별 macro를 다시 선택했다. W1/I5 프로세스 3회 기준 ours는
+  **8K 1568.114 (`8x18`) / 16K 1600.626 (`16x16`) / 32K 1406.844
+  (`8x18`) TFLOP/s**였다. 같은 세션 cuBLAS는
+  **1610.837 / 1683.090 / 1422.276**, CUTLASS targeted kernel은
+  **1485.807 / 1309.717 / 1138.963 TFLOP/s**였다.
+  [`NSPLIT_SIGNED8_SIZE_COMPARE.md`](NSPLIT_SIGNED8_SIZE_COMPARE.md)에
+  size-port 정의, macro sweep, full-C 검증과 결과가 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,
