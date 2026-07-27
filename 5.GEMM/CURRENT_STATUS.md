@@ -87,7 +87,10 @@ Last updated: 2026-07-27
   **-0.429%/-0.217%**, producer wait suspend는
   **-0.893%/-0.515%** (`[0,1)`/`[-8,8)`)였다. Sink 제거와 shape
   특수화를 합치면 registers는 174→164로 줄었지만 occupancy가 늘지
-  않아 성능 이득이 없었다. 전 후보를 미채택하고 canonical을 유지한다.
+  않아 측정상 성능 이득은 없었다. 후속 engineering decision으로 작은
+  성능 차이보다 불필요한 diagnostic 경로 제거와 16K 전용화를
+  우선하여 `fixed_sink` 조합은 canonical에 적용했다. Producer suspend는
+  두 분포 모두 명확히 느려 계속 제외한다.
   [`NSPLIT_OVERHEAD.md`](NSPLIT_OVERHEAD.md)에 정의, 전체 표, codegen과
   raw artifact가 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
@@ -130,7 +133,7 @@ Last updated: 2026-07-27
 | scheduler | 148 persistent CTA, fixed static grid-stride ownership |
 | tile order | 16K `8x16` macro, macro N-fast, macro 내부 M-fast |
 | phase/cache | TMA 0, MMA 0; promotion 없음; multicast 없음 |
-| codegen | REG 174, stack/local/spill 0 |
+| codegen | 16K performance instance REG 164, stack/local/spill 0 |
 
 각 CTA는 scheduler가 정한 실제 `(tile_m, tile_n)`에 대해 모든 K stage의
 실제 A/B 주소를 읽고 실제 C 위치에 저장한다. 512 pattern/ones full-C

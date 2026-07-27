@@ -553,11 +553,11 @@ issue_b_pipe_stage_tma(const CUtensorMap *b_map, uint32_t *b_smem,
   tma_load_4d(b_map, smem_ptr_u32(b_smem), ready, b_col_words, 0, 0, b_k16);
 }
 
+template <int ktiles, int mtile_count, int ntile_count>
 __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     const __grid_constant__ CUtensorMap a_map,
     const __grid_constant__ CUtensorMap b_map,
-    const __grid_constant__ CUtensorMap c_map, uint32_t *__restrict__ sink,
-    int ktiles, int mtile_count, int ntile_count) {
+    const __grid_constant__ CUtensorMap c_map, uint32_t *__restrict__ sink) {
 #if !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ < 1000)
   (void)a_map;
   (void)b_map;
@@ -578,7 +578,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   __shared__ uint64_t mma_done[kPipes][kStages];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
-  __shared__ uint32_t warp_sinks[kWarps];
 
   if (threadIdx.x == 0) {
 #pragma unroll
@@ -726,27 +725,11 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     }
     __syncthreads();
 
-    const uint32_t acc = static_cast<uint32_t>(threadIdx.x + 0x9e3779b9u);
-    if (lane0)
-      warp_sinks[warp_id] = acc;
-    __syncthreads();
-
     const int global_row_base = tile_m * kCtaM;
     const int global_col_base = tile_n * kCtaN;
     store_256x256_float_tile_tma(tmem_base, &c_map, c_store_smem,
                                  global_row_base,
                                  global_col_base);
-    __syncthreads();
-
-    if (threadIdx.x == 0) {
-      uint32_t tile_sink = tmem_base ^ static_cast<uint32_t>(ktiles);
-#pragma unroll
-      for (int w = 0; w < kWarps; ++w)
-        tile_sink ^= warp_sinks[w];
-      sink[tile_m * ntile + tile_n] = tile_sink;
-    }
-    __syncthreads();
-
     ++tile_iter;
   } // persistent output-tile loop
 
@@ -1007,17 +990,41 @@ void initialize_bf16_inputs(uint32_t *d_a, size_t a_words, uint32_t *d_b,
   cuda_check(cudaGetLastError());
 }
 
+template <int KTiles, int MTiles, int NTiles>
+void set_one_gemm_kernel_attribute() {
+  cuda_check(cudaFuncSetAttribute(
+      gemm256_bf16_16k_kernel<KTiles, MTiles, NTiles>,
+      cudaFuncAttributeMaxDynamicSharedMemorySize, kDynamicSmemBytes));
+}
+
 void set_gemm_kernel_attribute() {
-  cuda_check(cudaFuncSetAttribute(gemm256_bf16_16k_kernel,
-                                  cudaFuncAttributeMaxDynamicSharedMemorySize,
-                                  kDynamicSmemBytes));
+  set_one_gemm_kernel_attribute<256, 64, 64>();
+  set_one_gemm_kernel_attribute<8, 2, 2>();
+  set_one_gemm_kernel_attribute<4, 1, 1>();
+}
+
+template <int KTiles, int MTiles, int NTiles>
+void launch_one_gemm_kernel(dim3 grid, const CUtensorMap &a_map,
+                            const CUtensorMap &b_map,
+                            const CUtensorMap &c_map, uint32_t *d_sink) {
+  gemm256_bf16_16k_kernel<KTiles, MTiles, NTiles>
+      <<<grid, kThreads, kDynamicSmemBytes>>>(a_map, b_map, c_map, d_sink);
 }
 
 void launch_gemm_kernel(dim3 grid, const CUtensorMap &a_map,
                         const CUtensorMap &b_map, const CUtensorMap &c_map,
                         uint32_t *d_sink, int ktiles, int mtile, int ntile) {
-  gemm256_bf16_16k_kernel<<<grid, kThreads, kDynamicSmemBytes>>>(
-      a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
+  if (ktiles == 256 && mtile == 64 && ntile == 64) {
+    launch_one_gemm_kernel<256, 64, 64>(grid, a_map, b_map, c_map, d_sink);
+  } else if (ktiles == 8 && mtile == 2 && ntile == 2) {
+    launch_one_gemm_kernel<8, 2, 2>(grid, a_map, b_map, c_map, d_sink);
+  } else if (ktiles == 4 && mtile == 1 && ntile == 1) {
+    launch_one_gemm_kernel<4, 1, 1>(grid, a_map, b_map, c_map, d_sink);
+  } else {
+    std::fprintf(stderr, "Unsupported specialized shape: %d/%d/%d\n",
+                 ktiles, mtile, ntile);
+    std::exit(EXIT_FAILURE);
+  }
 }
 struct CaseResult {
   int size = 0;
@@ -1070,7 +1077,6 @@ CaseResult run_case(int warmup, int iters, int input_init_mode) {
 
   const dim3 grid(std::min(kPersistentCtas, ctas), 1, 1);
   auto launch_gemm = [&]() {
-    cuda_check(cudaMemsetAsync(d_sink + ctas, 0, sizeof(uint32_t)));
     launch_gemm_kernel(grid, a_map, b_map, c_map, d_sink, ktiles, mtile, ntile);
   };
 
@@ -1326,7 +1332,7 @@ int main(int argc, char **argv) {
 
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
-      "stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast "
+      "stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast overhead=fixed_sink "
       "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,

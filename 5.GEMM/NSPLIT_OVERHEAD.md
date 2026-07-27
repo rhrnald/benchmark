@@ -4,16 +4,22 @@ Date: 2026-07-27
 
 ## 결론
 
-현재 16K canonical인 static `8x16` M-fast N-split을 유지한다. 아래 세
-방향과 결합 후보 중 두 입력 분포에서 모두 baseline 대비 `+0.5%`를
-넘은 후보가 없었다.
+측정상 아래 세 방향과 결합 후보 중 두 입력 분포에서 모두 baseline
+대비 `+0.5%`를 넘은 후보는 없었다.
 
 1. timed launch의 diagnostic sink 및 `cudaMemsetAsync` 제거
 2. 16K problem shape의 compile-time 특수화
 3. producer stage-reuse `mbarrier.try_wait`에 CUTLASS식 suspend hint 적용
 
-절대 TFLOP/s는 B200 activation에 따라 달라질 수 있으므로 채택 판단에는
+절대 TFLOP/s는 B200 activation에 따라 달라질 수 있으므로 성능 판단에는
 같은 프로세스 위치끼리 비교한 paired delta를 사용했다.
+
+최초 측정 판정에서는 전 후보를 미채택했으나, 이후 코드 정리와 16K
+전용화의 구조적 이점을 우선하기로 결정했다. 따라서 `fixed_sink`, 즉
+diagnostic sink/memset 제거와 compile-time shape 특수화를 canonical에
+적용했다. 이는 측정된 성능 개선에 의한 채택이 아니며, 작은 성능 손실
+가능성을 감수한 engineering decision이다. Producer suspend는 명확하게
+느려졌으므로 적용하지 않았다.
 
 ## 측정 조건
 
@@ -94,12 +100,13 @@ Date: 2026-07-27
 - producer suspend는 두 분포 모두 일관되게 느렸다. 현재 static
   grid-stride topology에서는 active polling을 줄이는 효과보다 wake-up
   latency가 더 크다.
-- 결합 후보도 baseline을 넘지 못했다. 따라서 canonical source에는
-  어느 후보도 반영하지 않는다.
+- 결합 후보도 baseline을 넘지 못했다. 다만 후속 결정으로
+  `fixed_sink`는 구조적 정리를 위해 canonical에 적용했고, suspend는
+  계속 제외한다.
 
 ## 재현
 
-실험 정의 commit은 `2e58a08`이다.
+실험 정의 commit은 `2e58a08`, 측정 결과 commit은 `399bdad`이다.
 
 ```bash
 ./run_b200_gemm_nsplit_overhead.sh
