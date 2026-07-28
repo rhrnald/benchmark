@@ -93,6 +93,17 @@ Last updated: 2026-07-27
   두 분포 모두 명확히 느려 계속 제외한다.
   [`NSPLIT_OVERHEAD.md`](NSPLIT_OVERHEAD.md)에 정의, 전체 표, codegen과
   raw artifact가 있다.
+- 동일 dense tile stream에서 MMA/C-store만 제거한 16K TMA-only는
+  64 GiB logical A/B payload를 **2.602/2.605 ms**, 즉
+  **26.415/26.381 logical TB/s**로 처리했다 (`[0,1)`/`[-8,8)`).
+  이는 같은 세션 GEMM 시간의 **54.20%/47.95%**다. 주소만 고정한
+  locality ablation에서 A 고정은 **+4.69%/+4.66%**, B 고정은
+  **+4.36%/+4.38%**, A/B 모두 고정은 **+9.28%/+9.49%**였다.
+  Dense memory hierarchy에 약 9% 통신 headroom이 있음은 확인했지만,
+  Nsight Compute counter가 `ERR_NVGPUCTRPERM`으로 차단되어 L2
+  bandwidth saturation 자체는 아직 counter로 확정하지 못했다.
+  [`NSPLIT_TMA_ONLY.md`](NSPLIT_TMA_ONLY.md)에 설계, 산식, 전체 결과와
+  해석이 있다.
 - 이 커널은 repeated-address microbenchmark가 아니라 실제 A/B 좌표를
   읽고 FP32 C 전체를 저장하는 dense end-to-end GEMM이다.
 - 직전 E7a의 historical paired 측정은 `[0,1)` **1773.523 TFLOP/s**,

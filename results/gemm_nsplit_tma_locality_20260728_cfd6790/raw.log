@@ -1,0 +1,457 @@
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(143): warning #177-D: function "<unnamed>::make_stage_a_smem_desc" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
+                                                                             ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(151): warning #177-D: function "<unnamed>::make_sw128_major_mn_smem_desc" was declared but never referenced
+  make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(162): warning #177-D: function "<unnamed>::make_bf16_idesc" was declared but never referenced
+  __attribute__((host)) __attribute__((device)) __inline__ __attribute__((always_inline)) uint32_t make_bf16_idesc() {
+                                                                                                   ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(298): warning #177-D: function "<unnamed>::tcgen05_alloc_512cols" was declared but never referenced
+  tcgen05_alloc_512cols(uint32_t *smem_out_taddr) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(318): warning #177-D: function "<unnamed>::tcgen05_dealloc_512cols" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_dealloc_512cols(uint32_t taddr) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(328): warning #177-D: function "<unnamed>::tcgen05_relinquish_alloc_permit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_relinquish_alloc_permit() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(335): warning #177-D: function "<unnamed>::tcgen05_commit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_commit(uint64_t *barrier) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(346): warning #177-D: function "<unnamed>::tcgen05_fence_after_thread_sync" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_fence_after_thread_sync() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(394): warning #177-D: function "<unnamed>::tcgen05_mma_bf16_ss" was declared but never referenced
+  tcgen05_mma_bf16_ss(uint32_t d_taddr, uint64_t a_desc, uint64_t b_desc,
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu(505): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(uint32_t tmem_base,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 18 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 11.543 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 27.171 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 22.647 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.251 ms
+ptxas info    : Compiling entry function '_ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN40_GLOBAL__N__b6ae8079_8_dense_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.518 ms
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(143): warning #177-D: function "<unnamed>::make_stage_a_smem_desc" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
+                                                                             ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(151): warning #177-D: function "<unnamed>::make_sw128_major_mn_smem_desc" was declared but never referenced
+  make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(162): warning #177-D: function "<unnamed>::make_bf16_idesc" was declared but never referenced
+  __attribute__((host)) __attribute__((device)) __inline__ __attribute__((always_inline)) uint32_t make_bf16_idesc() {
+                                                                                                   ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(298): warning #177-D: function "<unnamed>::tcgen05_alloc_512cols" was declared but never referenced
+  tcgen05_alloc_512cols(uint32_t *smem_out_taddr) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(318): warning #177-D: function "<unnamed>::tcgen05_dealloc_512cols" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_dealloc_512cols(uint32_t taddr) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(328): warning #177-D: function "<unnamed>::tcgen05_relinquish_alloc_permit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_relinquish_alloc_permit() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(335): warning #177-D: function "<unnamed>::tcgen05_commit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_commit(uint64_t *barrier) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(346): warning #177-D: function "<unnamed>::tcgen05_fence_after_thread_sync" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_fence_after_thread_sync() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(394): warning #177-D: function "<unnamed>::tcgen05_mma_bf16_ss" was declared but never referenced
+  tcgen05_mma_bf16_ss(uint32_t d_taddr, uint64_t a_desc, uint64_t b_desc,
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu(505): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(uint32_t tmem_base,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 18 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 11.546 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 35 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 27.015 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 22.464 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.263 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__3fb29477_9_same_a_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.540 ms
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(143): warning #177-D: function "<unnamed>::make_stage_a_smem_desc" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
+                                                                             ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(151): warning #177-D: function "<unnamed>::make_sw128_major_mn_smem_desc" was declared but never referenced
+  make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(162): warning #177-D: function "<unnamed>::make_bf16_idesc" was declared but never referenced
+  __attribute__((host)) __attribute__((device)) __inline__ __attribute__((always_inline)) uint32_t make_bf16_idesc() {
+                                                                                                   ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(298): warning #177-D: function "<unnamed>::tcgen05_alloc_512cols" was declared but never referenced
+  tcgen05_alloc_512cols(uint32_t *smem_out_taddr) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(318): warning #177-D: function "<unnamed>::tcgen05_dealloc_512cols" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_dealloc_512cols(uint32_t taddr) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(328): warning #177-D: function "<unnamed>::tcgen05_relinquish_alloc_permit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_relinquish_alloc_permit() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(335): warning #177-D: function "<unnamed>::tcgen05_commit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_commit(uint64_t *barrier) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(346): warning #177-D: function "<unnamed>::tcgen05_fence_after_thread_sync" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_fence_after_thread_sync() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(394): warning #177-D: function "<unnamed>::tcgen05_mma_bf16_ss" was declared but never referenced
+  tcgen05_mma_bf16_ss(uint32_t d_taddr, uint64_t a_desc, uint64_t b_desc,
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu(505): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(uint32_t tmem_base,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 18 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 11.544 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 34 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 26.939 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 24 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 22.542 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.238 ms
+ptxas info    : Compiling entry function '_ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN41_GLOBAL__N__2d073b99_9_same_b_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.576 ms
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(143): warning #177-D: function "<unnamed>::make_stage_a_smem_desc" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
+                                                                             ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(151): warning #177-D: function "<unnamed>::make_sw128_major_mn_smem_desc" was declared but never referenced
+  make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(162): warning #177-D: function "<unnamed>::make_bf16_idesc" was declared but never referenced
+  __attribute__((host)) __attribute__((device)) __inline__ __attribute__((always_inline)) uint32_t make_bf16_idesc() {
+                                                                                                   ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(298): warning #177-D: function "<unnamed>::tcgen05_alloc_512cols" was declared but never referenced
+  tcgen05_alloc_512cols(uint32_t *smem_out_taddr) {
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(318): warning #177-D: function "<unnamed>::tcgen05_dealloc_512cols" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_dealloc_512cols(uint32_t taddr) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(328): warning #177-D: function "<unnamed>::tcgen05_relinquish_alloc_permit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_relinquish_alloc_permit() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(335): warning #177-D: function "<unnamed>::tcgen05_commit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_commit(uint64_t *barrier) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(346): warning #177-D: function "<unnamed>::tcgen05_fence_after_thread_sync" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_fence_after_thread_sync() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(394): warning #177-D: function "<unnamed>::tcgen05_mma_bf16_ss" was declared but never referenced
+  tcgen05_mma_bf16_ss(uint32_t d_taddr, uint64_t a_desc, uint64_t b_desc,
+  ^
+
+/workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu(505): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(uint32_t tmem_base,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 18 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 11.454 ms
+ptxas info    : Compiling entry function '_ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 33 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 26.691 ms
+ptxas info    : Compiling entry function '_ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 24 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 22.274 ms
+ptxas info    : Compiling entry function '_ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.236 ms
+ptxas info    : Compiling entry function '_ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN39_GLOBAL__N__01314091_7_same_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.554 ms
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+eb90e11322c3af9adba08ed6262fe585bd0b37c9ba2fb1750c802e393c6b6dc2  /workspace/benchmark_6014916_git/5.GEMM/baseline/gemm256_bf16_16k.cu
+10677d6a4efbff7f07c34f8147901dd96456a1843b761206e8118d154d1ba6c5  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/dense.cu
+517dac99c4271d510683383d1da20b9c473468730daab680be5e8953ce4e018d  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_a.cu
+7bd1e076d8fab825262a5494ab2bce7d083c884f7896a842e5526f5cc8ee9d08  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same_b.cu
+b2b0bf84a776f1d3815155bbfd6d3fc339383e7380ba8580acd4701467699b79  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/source/same.cu
+3e86f9e6282a81d7505cd7f9ab96174c90255a000bd191208b35213a7b086431  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/bin/dense
+762129daaba85741469dca0f25b6504f492d2389bdbc37fb91830de4943aa1c0  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/bin/same
+de263938ffbd15a8d7817fe32c8d9535eea60db8872e8a3177cae4234114d86b  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/bin/same_a
+b9fa925f1ba8d4562780dadf117f17b424b728bd185406d4ffb328949032274f  /workspace/gemm_nsplit_tma_locality_20260728_cfd6790/bin/same_b
+cfd6790056da21113cc1ec48fbcfef8dc58b5178
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.623328 wall_ms=2.635761 event_TFLOPS=3353.028 wall_TFLOPS=3337.212 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.507072 wall_ms=2.520298 event_TFLOPS=3508.512 wall_TFLOPS=3490.100 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.481792 wall_ms=2.494721 event_TFLOPS=3544.251 wall_TFLOPS=3525.882 checksum=00000000
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.414976 wall_ms=2.426815 event_TFLOPS=3642.311 wall_TFLOPS=3624.542 checksum=00000000
+PROTOCOL size=16384 payload=64GiB warmup=1 timed=5 processes=4
+BEGIN input=random address=dense pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.617165 wall_ms=2.619544 event_TFLOPS=3360.924 wall_TFLOPS=3357.872 checksum=00000000
+END input=random address=dense pass=1
+BEGIN input=random address=same_a pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.494144 wall_ms=2.496536 event_TFLOPS=3526.698 wall_TFLOPS=3523.320 checksum=00000000
+END input=random address=same_a pass=1
+BEGIN input=random address=same_b pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.497319 wall_ms=2.499725 event_TFLOPS=3522.215 wall_TFLOPS=3518.824 checksum=00000000
+END input=random address=same_b pass=1
+BEGIN input=random address=same pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.373830 wall_ms=2.376111 event_TFLOPS=3705.443 wall_TFLOPS=3701.887 checksum=00000000
+END input=random address=same pass=1
+BEGIN input=random-signed8 address=dense pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.605978 wall_ms=2.608135 event_TFLOPS=3375.352 wall_TFLOPS=3372.561 checksum=00000000
+END input=random-signed8 address=dense pass=1
+BEGIN input=random-signed8 address=same_a pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.494176 wall_ms=2.496515 event_TFLOPS=3526.653 wall_TFLOPS=3523.349 checksum=00000000
+END input=random-signed8 address=same_a pass=1
+BEGIN input=random-signed8 address=same_b pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.507853 wall_ms=2.510108 event_TFLOPS=3507.420 wall_TFLOPS=3504.269 checksum=00000000
+END input=random-signed8 address=same_b pass=1
+BEGIN input=random-signed8 address=same pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.368371 wall_ms=2.370766 event_TFLOPS=3713.984 wall_TFLOPS=3710.232 checksum=00000000
+END input=random-signed8 address=same pass=1
+BEGIN input=random-signed8 address=same pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.372896 wall_ms=2.375249 event_TFLOPS=3706.902 wall_TFLOPS=3703.229 checksum=00000000
+END input=random-signed8 address=same pass=2
+BEGIN input=random-signed8 address=same_b pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.505171 wall_ms=2.507481 event_TFLOPS=3511.174 wall_TFLOPS=3507.939 checksum=00000000
+END input=random-signed8 address=same_b pass=2
+BEGIN input=random-signed8 address=same_a pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.494733 wall_ms=2.497052 event_TFLOPS=3525.866 wall_TFLOPS=3522.591 checksum=00000000
+END input=random-signed8 address=same_a pass=2
+BEGIN input=random-signed8 address=dense pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.614784 wall_ms=2.617135 event_TFLOPS=3363.985 wall_TFLOPS=3360.963 checksum=00000000
+END input=random-signed8 address=dense pass=2
+BEGIN input=random address=same pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.418150 wall_ms=2.420436 event_TFLOPS=3637.529 wall_TFLOPS=3634.094 checksum=00000000
+END input=random address=same pass=2
+BEGIN input=random address=same_b pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.496576 wall_ms=2.498882 event_TFLOPS=3523.263 wall_TFLOPS=3520.012 checksum=00000000
+END input=random address=same_b pass=2
+BEGIN input=random address=same_a pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.495034 wall_ms=2.497207 event_TFLOPS=3525.441 wall_TFLOPS=3522.373 checksum=00000000
+END input=random address=same_a pass=2
+BEGIN input=random address=dense pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.606810 wall_ms=2.609233 event_TFLOPS=3374.275 wall_TFLOPS=3371.142 checksum=00000000
+END input=random address=dense pass=2
+BEGIN input=random-signed8 address=same_a pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.493306 wall_ms=2.495697 event_TFLOPS=3527.884 wall_TFLOPS=3524.503 checksum=00000000
+END input=random-signed8 address=same_a pass=3
+BEGIN input=random-signed8 address=dense pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.611814 wall_ms=2.614168 event_TFLOPS=3367.809 wall_TFLOPS=3364.777 checksum=00000000
+END input=random-signed8 address=dense pass=3
+BEGIN input=random-signed8 address=same pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.377395 wall_ms=2.379646 event_TFLOPS=3699.887 wall_TFLOPS=3696.387 checksum=00000000
+END input=random-signed8 address=same pass=3
+BEGIN input=random-signed8 address=same_b pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.491712 wall_ms=2.494076 event_TFLOPS=3530.140 wall_TFLOPS=3526.794 checksum=00000000
+END input=random-signed8 address=same_b pass=3
+BEGIN input=random address=same_a pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.495181 wall_ms=2.497571 event_TFLOPS=3525.233 wall_TFLOPS=3521.858 checksum=00000000
+END input=random address=same_a pass=3
+BEGIN input=random address=dense pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.613101 wall_ms=2.615414 event_TFLOPS=3366.151 wall_TFLOPS=3363.175 checksum=00000000
+END input=random address=dense pass=3
+BEGIN input=random address=same pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.364051 wall_ms=2.366365 event_TFLOPS=3720.771 wall_TFLOPS=3717.133 checksum=00000000
+END input=random address=same pass=3
+BEGIN input=random address=same_b pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.491680 wall_ms=2.494038 event_TFLOPS=3530.186 wall_TFLOPS=3526.847 checksum=00000000
+END input=random address=same_b pass=3
+BEGIN input=random address=same_b pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.524986 wall_ms=2.527330 event_TFLOPS=3483.621 wall_TFLOPS=3480.389 checksum=00000000
+END input=random address=same_b pass=4
+BEGIN input=random address=same pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.404122 wall_ms=2.406414 event_TFLOPS=3658.755 wall_TFLOPS=3655.270 checksum=00000000
+END input=random address=same pass=4
+BEGIN input=random address=dense pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.610278 wall_ms=2.612653 event_TFLOPS=3369.791 wall_TFLOPS=3366.729 checksum=00000000
+END input=random address=dense pass=4
+BEGIN input=random address=same_a pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=2.495360 wall_ms=2.497759 event_TFLOPS=3524.980 wall_TFLOPS=3521.593 checksum=00000000
+END input=random address=same_a pass=4
+BEGIN input=random-signed8 address=same_b pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-b phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.497958 wall_ms=2.500278 event_TFLOPS=3521.313 wall_TFLOPS=3518.046 checksum=00000000
+END input=random-signed8 address=same_b pass=4
+BEGIN input=random-signed8 address=same pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.416838 wall_ms=2.418936 event_TFLOPS=3639.504 wall_TFLOPS=3636.348 checksum=00000000
+END input=random-signed8 address=same pass=4
+BEGIN input=random-signed8 address=dense pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=dense phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.608198 wall_ms=2.610517 event_TFLOPS=3372.479 wall_TFLOPS=3369.483 checksum=00000000
+END input=random-signed8 address=dense pass=4
+BEGIN input=random-signed8 address=same_a pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast mode=tma_load_only address=same-a phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=2.493728 wall_ms=2.496210 event_TFLOPS=3527.286 wall_TFLOPS=3523.779 checksum=00000000
+END input=random-signed8 address=same_a pass=4
+# 16K TMA-only address-locality ablation
+
+All modes issue the same 64 GiB logical A/B payload. Mean +/- sample
+SD across four independent W1/I5 processes; method order is fully
+position-balanced.
+
+| input | address mode | ms | logical TB/s | speedup vs dense |
+|---|---|---:|---:|---:|
+| `[0,1)` | `dense` | 2.611839 +/- 0.004385 | 26.311 | 1.0000x |
+| `[0,1)` | `same_a` | 2.494930 +/- 0.000541 | 27.544 | 1.0469x |
+| `[0,1)` | `same_b` | 2.502640 +/- 0.015106 | 27.459 | 1.0436x |
+| `[0,1)` | `same` | 2.390038 +/- 0.025342 | 28.752 | 1.0928x |
+| `[-8,8)` | `dense` | 2.610193 +/- 0.003892 | 26.327 | 1.0000x |
+| `[-8,8)` | `same_a` | 2.493986 +/- 0.000612 | 27.554 | 1.0466x |
+| `[-8,8)` | `same_b` | 2.500673 +/- 0.007291 | 27.480 | 1.0438x |
+| `[-8,8)` | `same` | 2.383875 +/- 0.022282 | 28.827 | 1.0949x |
+

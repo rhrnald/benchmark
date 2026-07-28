@@ -1,0 +1,72 @@
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(58): warning #177-D: variable "<unnamed>::kMBlocks" was declared but never referenced
+  static constexpr int kMBlocks = 2;
+                       ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(143): warning #177-D: function "<unnamed>::make_stage_a_smem_desc" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) uint64_t make_stage_a_smem_desc(uint32_t *a_smem,
+                                                                             ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(151): warning #177-D: function "<unnamed>::make_sw128_major_mn_smem_desc" was declared but never referenced
+  make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
+  ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(162): warning #177-D: function "<unnamed>::make_bf16_idesc" was declared but never referenced
+  __attribute__((host)) __attribute__((device)) __inline__ __attribute__((always_inline)) uint32_t make_bf16_idesc() {
+                                                                                                   ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(298): warning #177-D: function "<unnamed>::tcgen05_alloc_512cols" was declared but never referenced
+  tcgen05_alloc_512cols(uint32_t *smem_out_taddr) {
+  ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(318): warning #177-D: function "<unnamed>::tcgen05_dealloc_512cols" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_dealloc_512cols(uint32_t taddr) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(328): warning #177-D: function "<unnamed>::tcgen05_relinquish_alloc_permit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_relinquish_alloc_permit() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(335): warning #177-D: function "<unnamed>::tcgen05_commit" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_commit(uint64_t *barrier) {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(346): warning #177-D: function "<unnamed>::tcgen05_fence_after_thread_sync" was declared but never referenced
+  __attribute__((device)) __inline__ __attribute__((always_inline)) void tcgen05_fence_after_thread_sync() {
+                                                                         ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(394): warning #177-D: function "<unnamed>::tcgen05_mma_bf16_ss" was declared but never referenced
+  tcgen05_mma_bf16_ss(uint32_t d_taddr, uint64_t a_desc, uint64_t b_desc,
+  ^
+
+/workspace/gemm_nsplit_tma_only_20260728_f04052e/source/tma_only.cu(505): warning #177-D: function "<unnamed>::store_256x256_float_tile_tma" was declared but never referenced
+  store_256x256_float_tile_tma(uint32_t tmem_base,
+  ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef020tma_load_only_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 18 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 11.279 ms
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef020tma_load_only_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 36 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 26.995 ms
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef020tma_load_only_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 26 registers, used 1 barriers, 80 bytes smem
+ptxas info    : Compile time = 22.653 ms
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.219 ms
+ptxas info    : Compiling entry function '_ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN44_GLOBAL__N__5b438d9a_11_tma_only_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.568 ms
