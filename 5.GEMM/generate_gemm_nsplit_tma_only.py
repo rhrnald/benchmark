@@ -140,6 +140,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--address-mode",
+        choices=("dense", "same-a", "same-b", "same"),
+        default="dense",
+    )
     args = parser.parse_args()
 
     text = Path(args.base).read_text()
@@ -151,10 +156,39 @@ def main() -> None:
     start = text.index(marker)
     end = text.index("\nvoid encode_a_row_major_sw128_tma_map", start)
     text = text[:start] + KERNEL + text[end:]
+    load_m = "actual_tile_m"
+    load_n = "actual_tile_n"
+    if args.address_mode in ("same-a", "same"):
+        load_m = "0"
+    if args.address_mode in ("same-b", "same"):
+        load_n = "0"
+    text = text.replace(
+        """    const int tile_m = macro_m * persistent_macro_m + local_m;
+    const int tile_n = macro_n * persistent_macro_n + local_n;
+    if (tile_m >= mtile_count || tile_n >= ntile_count) {
+      __syncthreads();
+      continue;
+    }
+
+    const int stage_epoch_base = tile_iter * ktiles;
+""",
+        f"""    const int actual_tile_m = macro_m * persistent_macro_m + local_m;
+    const int actual_tile_n = macro_n * persistent_macro_n + local_n;
+    if (actual_tile_m >= mtile_count || actual_tile_n >= ntile_count) {{
+      __syncthreads();
+      continue;
+    }}
+    const int tile_m = {load_m};
+    const int tile_n = {load_n};
+
+    const int stage_epoch_base = tile_iter * ktiles;
+""",
+        1,
+    )
     text = text.replace("gemm256_bf16_16k_kernel", "tma_load_only_kernel")
     text = text.replace(
         "scheduler=static_%dx%d_mfast overhead=fixed_sink ",
-        "scheduler=static_%dx%d_mfast mode=tma_load_only ",
+        f"scheduler=static_%dx%d_mfast mode=tma_load_only address={args.address_mode} ",
     )
     Path(args.output).write_text(text)
 
