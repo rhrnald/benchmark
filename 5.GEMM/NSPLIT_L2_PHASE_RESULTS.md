@@ -77,9 +77,57 @@ explain the current cuBLAS gap.
 Artifact:
 [`gemm_nsplit_l2_phase_4dd4c4c_phase1a`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase1a/)
 
+## Phase 1B — wave-preserving persistent ownership
+
+All variants preserve the exact set of up to 148 logical output tiles in each
+wave.  Only the task-to-CTA assignment inside a wave changes.  The
+`table_identity` control separates the constant-memory task-table lookup from
+the actual ownership permutation.
+
+Offline scheduler metrics:
+
+| variant | same-A transitions | same-B transitions | mean Manhattan distance |
+|---|---:|---:|---:|
+| direct / table identity | 0 | 0 | 30.599 |
+| `wave_a` | 2860 | 0 | 24.258 |
+| `wave_b` | 2782 | 52 | 24.222 |
+| `wave_balanced` | 2825 | 52 | 24.246 |
+
+There are 3948 per-CTA transitions.  Every mapping is a permutation of all
+4096 output tiles, preserves the baseline 27/28-tile CTA load balance and
+preserves each wave's unique A/B panel counts.  All generated kernels pass
+both 512 validation patterns and compile to 162 registers without
+stack/local/spill.
+
+Each performance cell is five independent W1/I5 processes in a 5x5 Latin
+order, so each variant occupies every execution position exactly once.
+
+| variant | `[0,1)` TFLOP/s | paired vs direct | `[-8,8)` TFLOP/s | paired vs direct |
+|---|---:|---:|---:|---:|
+| direct | 1833.406 | reference | 1622.780 | reference |
+| `table_identity` | 1824.633 | -0.478% [-0.677,-0.280] | 1621.205 | -0.096% [-0.587,+0.395] |
+| `wave_a` | 1821.603 | -0.644% [-0.772,-0.515] | 1613.665 | -0.561% [-0.960,-0.162] |
+| `wave_b` | 1804.659 | -1.568% [-1.720,-1.416] | 1590.501 | -1.988% [-2.513,-1.463] |
+| `wave_balanced` | 1806.498 | -1.468% [-1.652,-1.283] | 1597.699 | -1.545% [-1.964,-1.125] |
+
+The lookup itself costs up to about 0.48%, but it does not explain the whole
+regression of the stronger B/balanced permutations.  Increasing immediate
+per-SM panel reuse while preserving the wave footprint is not sufficient and
+is actively harmful here.  A likely interpretation is that the original
+CTA-to-task relationship interacts better with physical SM/L2 slices and
+cross-CTA phase, but hardware counters are unavailable to distinguish these
+effects.
+
+All table/permutation candidates are rejected.  Formula-encoding them would
+remove some lookup cost but cannot recover the observed 1.5--2.0% B/balanced
+regression.  A broad serpentine sweep is therefore not promoted from the
+offline gate.
+
+Artifact:
+[`gemm_nsplit_l2_phase_4dd4c4c_phase1b`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase1b/)
+
 ## Pending
 
-- Phase 1B: wave-preserving persistent ownership
 - Phase 2: B0/A issue order and early-B0 dependency split
 - Phase 3: explicit 3-stage ring
 - winner combination and 8K/32K extension
