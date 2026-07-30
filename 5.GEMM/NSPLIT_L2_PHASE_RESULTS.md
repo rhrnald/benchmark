@@ -54,9 +54,31 @@ Other diagnostic means over the eight core stages:
 Artifact:
 [`gemm_nsplit_l2_phase_4dd4c4c_phase0`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase0/)
 
+## Phase 1A — C-store evict-first
+
+The only change is the cache policy of the existing FP32 C TMA store.
+A/B loads, output tile order, arithmetic, TMA-store byte count and store wait
+sequence are unchanged.  Both binaries use 164 registers with no
+stack/local/spill, and both full-C validation patterns pass bit-exactly.
+
+Each cell is four independent W1/I5 processes.  ABBA/BAAB order gives both
+variants two first and two second positions.
+
+| input | baseline TFLOP/s | C `evict_first` TFLOP/s | paired change | paired 95% CI |
+|---|---:|---:|---:|---:|
+| `[0,1)` | 1833.422 | 1831.824 | -0.0870% | [-0.4138%, +0.2397%] |
+| `[-8,8)` | 1622.508 | 1622.931 | +0.0261% | [-0.1668%, +0.2191%] |
+
+The effect is statistically neutral and far below the `+0.5%` adoption gate.
+The C-store hint is rejected and will not be included in winner combinations.
+This also means that C streaming-write cache pollution by itself does not
+explain the current cuBLAS gap.
+
+Artifact:
+[`gemm_nsplit_l2_phase_4dd4c4c_phase1a`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase1a/)
+
 ## Pending
 
-- Phase 1A: C-store `evict_first`
 - Phase 1B: wave-preserving persistent ownership
 - Phase 2: B0/A issue order and early-B0 dependency split
 - Phase 3: explicit 3-stage ring
