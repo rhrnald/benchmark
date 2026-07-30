@@ -51,6 +51,35 @@ Other diagnostic means over the eight core stages:
 | consumer 1 MMA issue span | 616.5 |
 | full epilogue | 12664 |
 
+Pipeline figure:
+[`nsplit_tma_mma_pipeline.svg`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase0/nsplit_tma_mma_pipeline.svg)
+
+The figure separates synchronous instruction-issue spans from asynchronous
+completion.  A TMA issue bar is only the producer instruction span; it is not
+the data-transfer duration.  Likewise, the MMA bar is the tcgen05 instruction
+issue span, while completion is observed later when the corresponding
+`mma_done` barrier allows a 3-stage ring slot to be reused.
+
+In the sampled steady-state window:
+
+- A and B1 issue starts are effectively simultaneous: B1 starts a median
+  38.5 cycles before A because it has an independent producer warp.
+- B0 starts a median 92 cycles after A because warp 0 issues A then B0.
+- A issue start leads pipe-0 MMA start by a median 1745.5 cycles and pipe-1
+  MMA start by 2041.5 cycles.
+- B0 issue completion leads pipe-0 MMA by 1575.5 cycles; B1 issue completion
+  leads pipe-1 MMA by 1986.5 cycles.
+- Producer issue and consumer MMA stage intervals are roughly 1.0--1.1K
+  cycles.  Thus the observed lead is about 1.5--2 pipeline stages.
+- Operationally, TMA for K stage `i+2` is commonly issued while the consumers
+  are issuing MMA for stage `i`.  The three shared-memory buffers provide the
+  ring capacity and are released by the completion of stage `i-1`.
+
+Therefore A is prefetched well before its same-stage MMA, but it is not
+prefetched substantially earlier than B0/B1.  The asymmetry is ownership:
+A is shared by both consumers and cannot reuse its buffer until both pipes
+finish, B0 depends only on pipe 0, and B1 depends only on pipe 1.
+
 Artifact:
 [`gemm_nsplit_l2_phase_4dd4c4c_phase0`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase0/)
 
