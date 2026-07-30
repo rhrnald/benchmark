@@ -22,6 +22,7 @@ VARIANTS = (
     "wave_balanced",
     "issue_b0_first",
     "early_b0",
+    "stage_ring_state",
 )
 
 
@@ -284,6 +285,111 @@ def apply_early_b0(text: str) -> str:
     return replace_once(text, loop_anchor, loop_new, "early B0 dependency split")
 
 
+def apply_stage_ring_state(text: str) -> str:
+    loop_start = """      for (int kt = 0; kt < ktiles; ++kt) {
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = stage_epoch % kStages;
+"""
+    producer_start = """      int ring_stage = stage_epoch_base % kStages;
+      uint32_t ring_phase =
+          static_cast<uint32_t>((stage_epoch_base / kStages) & 1);
+      for (int kt = 0; kt < ktiles; ++kt) {
+        const int stage_epoch = stage_epoch_base + kt;
+        const int stage = ring_stage;
+"""
+    # The same loop prologue appears once in each producer and once in the
+    # consumer block.
+    if text.count(loop_start) != 3:
+        raise RuntimeError(
+            f"stage ring loop prologue: expected three anchors, "
+            f"found {text.count(loop_start)}"
+        )
+    text = text.replace(loop_start, producer_start)
+    reuse_anchor = """          const uint32_t reuse_phase =
+              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
+"""
+    if text.count(reuse_anchor) != 1:
+        raise RuntimeError("stage ring warp-0 reuse phase anchor mismatch")
+    text = text.replace(
+        reuse_anchor,
+        """          const uint32_t reuse_phase = ring_phase ^ 1u;
+""",
+        1,
+    )
+    warp1_reuse_anchor = """              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1));
+"""
+    text = replace_once(
+        text,
+        warp1_reuse_anchor,
+        """              ring_phase ^ 1u);
+""",
+        "stage ring warp-1 reuse phase",
+    )
+    consumer_phase_anchor = """        const uint32_t tma_phase =
+            static_cast<uint32_t>((stage_epoch / kStages) & 1);
+"""
+    text = replace_once(
+        text,
+        consumer_phase_anchor,
+        """        const uint32_t tma_phase = ring_phase;
+""",
+        "stage ring consumer phase",
+    )
+
+    producer0_end = """        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n, kt,
+                               0);
+      }
+    }
+
+    if (warp_id == 1 && lane0) {"""
+    producer0_end_new = """        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[0][stage], tile_n, kt,
+                               0);
+        if (++ring_stage == kStages) {
+          ring_stage = 0;
+          ring_phase ^= 1u;
+        }
+      }
+    }
+
+    if (warp_id == 1 && lane0) {"""
+    text = replace_once(
+        text, producer0_end, producer0_end_new, "stage ring producer 0 update"
+    )
+    producer1_end = """        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n, kt,
+                               1);
+      }
+    }
+
+    if ((warp_id == 2 || warp_id == 3) && lane0) {"""
+    producer1_end_new = """        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n, kt,
+                               1);
+        if (++ring_stage == kStages) {
+          ring_stage = 0;
+          ring_phase ^= 1u;
+        }
+      }
+    }
+
+    if ((warp_id == 2 || warp_id == 3) && lane0) {"""
+    text = replace_once(
+        text, producer1_end, producer1_end_new, "stage ring producer 1 update"
+    )
+    consumer_end = """        tcgen05_commit(&mma_done[pipe][stage]);
+      }
+      const int last_stage_epoch"""
+    consumer_end_new = """        tcgen05_commit(&mma_done[pipe][stage]);
+        if (++ring_stage == kStages) {
+          ring_stage = 0;
+          ring_phase ^= 1u;
+        }
+      }
+      const int last_stage_epoch"""
+    text = replace_once(
+        text, consumer_end, consumer_end_new, "stage ring consumer update"
+    )
+    return text
+
+
 def set_banner(text: str, variant: str) -> str:
     anchor = (
         '"stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast '
@@ -310,6 +416,8 @@ def generate(source: str, variant: str) -> tuple[str, dict[str, object] | None]:
         text = apply_issue_b0_first(text)
     elif variant == "early_b0":
         text = apply_early_b0(text)
+    elif variant == "stage_ring_state":
+        text = apply_stage_ring_state(text)
     else:
         raise ValueError(variant)
     text = set_banner(text, variant)
