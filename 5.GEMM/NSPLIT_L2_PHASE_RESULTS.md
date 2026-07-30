@@ -126,8 +126,57 @@ offline gate.
 Artifact:
 [`gemm_nsplit_l2_phase_4dd4c4c_phase1b`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase1b/)
 
+## Phase 2 — structural B0 phase shift
+
+The clock64 trace showed a 221--524-cycle interval after pipe 0 completion
+while warp 0 was still waiting for pipe 1.  Two variants tested whether that
+interval can be used:
+
+```text
+baseline:
+  wait p0 -> wait p1 -> issue A -> issue B0
+
+issue_b0_first:
+  wait p0 -> wait p1 -> issue B0 -> issue A
+
+early_b0:
+  wait p0 -> issue B0 -> wait p1 -> issue A
+```
+
+All variants pass both 512 full-C validation patterns.  Baseline and
+`issue_b0_first` use 164 registers; `early_b0` uses 166.  None has
+stack/local/spill and tcgen05 already limits residency to one CTA per SM.
+
+Each cell is six independent W1/I5 processes in a balanced six-order design;
+each variant occupies each execution position twice.
+
+| variant | `[0,1)` TFLOP/s | paired vs baseline | `[-8,8)` TFLOP/s | paired vs baseline |
+|---|---:|---:|---:|---:|
+| baseline | 1833.118 | reference | 1621.291 | reference |
+| `issue_b0_first` | 1819.487 | -0.743% [-0.887,-0.600] | 1614.013 | -0.449% [-0.622,-0.275] |
+| `early_b0` | 1814.207 | -1.032% [-1.171,-0.892] | 1607.838 | -0.830% [-1.025,-0.634] |
+
+The available dependency window is real, but filling it with B0 TMA makes the
+whole kernel slower.  Even the issue-order-only control regresses, so this is
+not explained solely by the two extra registers in `early_b0`.  The likely
+cause is that an earlier B0 request increases TMA/memory-system contention or
+causes a less favorable A/B arrival order for the consumers.  Both phase
+variants are rejected.
+
+The original Vast host became unavailable while the artifact was being
+downloaded.  The six-pass values above were recovered from the live run
+stdout; the local artifact currently contains only the raw files transferred
+before the connection closed.  The remaining remote files should be fetched
+if instance `45481495` becomes available again.
+
+Partial artifact:
+[`gemm_nsplit_l2_phase_4dd4c4c_phase2`](../results/gemm_nsplit_l2_phase_4dd4c4c_phase2/)
+
 ## Pending
 
-- Phase 2: B0/A issue order and early-B0 dependency split
 - Phase 3: explicit 3-stage ring
 - winner combination and 8K/32K extension
+
+Phase 3 is defined by commit `08e5d62`.  Measurement is waiting for B200
+access: the existing Vast instance could not be restarted and creation of a
+replacement B200 was rejected with `account lacks credit`.

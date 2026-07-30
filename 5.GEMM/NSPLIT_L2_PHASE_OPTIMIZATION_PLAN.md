@@ -342,7 +342,7 @@ tile-order/C-store 실험 이후 제한된 panel window 후보로만 검토한�
 | Phase 1A C-store hint | `4dd4c4c` | `gemm_nsplit_l2_phase_4dd4c4c_phase1a` | -0.0870% / +0.0261% | 미채택 |
 | Phase 1B wave mapping | `4dd4c4c` | `gemm_nsplit_l2_phase_4dd4c4c_phase1b` | best `wave_a`도 -0.644% / -0.561% | 전부 미채택 |
 | Phase 1C serpentine gate | `4dd4c4c` | Phase 1B offline/GPU gate | stronger locality가 모두 regression | GPU sweep 미진행 |
-| Phase 2 structural phase | pending | pending | pending | pending |
-| Phase 3 stage control | pending | pending | pending | pending |
+| Phase 2 structural phase | `4dd4c4c` | `gemm_nsplit_l2_phase_4dd4c4c_phase2` (partial raw) | `issue first` -0.743%/-0.449%; `early` -1.032%/-0.830% | 전부 미채택 |
+| Phase 3 stage control | `08e5d62` | pending | B200/credit 대기 | pending |
 | Phase 4 combined winner | pending | pending | pending | pending |
 | Phase 5 8K/32K | pending | pending | pending | pending |
