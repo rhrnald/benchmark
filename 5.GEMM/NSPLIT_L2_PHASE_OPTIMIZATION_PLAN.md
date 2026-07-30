@@ -338,7 +338,7 @@ tile-order/C-store 실험 이후 제한된 panel window 후보로만 검토한�
 
 | 단계 | commit | artifact | 결과 | 결정 |
 |---|---|---|---|---|
-| Phase 0 baseline/trace | pending | pending | pending | pending |
+| Phase 0 baseline/trace | `4dd4c4c` | `gemm_nsplit_l2_phase_4dd4c4c_phase0` | warp 0의 추가 pipe-1 wait 221--524 cycles | `early_B0` 측정 진행 |
 | Phase 1A C-store hint | pending | pending | pending | pending |
 | Phase 1B wave mapping | pending | pending | pending | pending |
 | Phase 1C serpentine gate | pending | pending | pending | pending |

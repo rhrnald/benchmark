@@ -379,6 +379,8 @@ make validate
 - non-multicast L2 scheduler ledger: [`NON_MULTICAST_L2_EXPERIMENT_PLAN.md`](NON_MULTICAST_L2_EXPERIMENT_PLAN.md)
 - current N-split L2/phase 실행 계획:
   [`NSPLIT_L2_PHASE_OPTIMIZATION_PLAN.md`](NSPLIT_L2_PHASE_OPTIMIZATION_PLAN.md)
+- current N-split L2/phase 결과:
+  [`NSPLIT_L2_PHASE_RESULTS.md`](NSPLIT_L2_PHASE_RESULTS.md)
 - E7a 전용 phase redesign: [`E7A_PHASE_REDESIGN.md`](E7A_PHASE_REDESIGN.md)
 - N-split cross-tile kt0 prefetch:
   [`NSPLIT_CROSS_TILE_PREFETCH.md`](NSPLIT_CROSS_TILE_PREFETCH.md)
