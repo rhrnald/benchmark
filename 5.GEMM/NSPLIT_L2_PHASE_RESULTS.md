@@ -209,3 +209,25 @@ Partial artifact:
 Phase 3 is defined by commit `08e5d62`.  Measurement is waiting for B200
 access: the existing Vast instance could not be restarted and creation of a
 replacement B200 was rejected with `account lacks credit`.
+
+## Focused B1-only phase shift
+
+The earlier direct N-split sweep measured:
+
+| variant | `[0,1)` vs `b1_gap0` | `[-8,8)` vs `b1_gap0` |
+|---|---:|---:|
+| B1 delay 32 cycles | -0.3137% | -0.3949% |
+| B1 delay 64 cycles | +0.0926% | +0.0681% |
+
+The 64-cycle result is directionally positive but far below the adoption gate
+and was measured with only three processes.  The new clock64 trace explains
+why that delay is worth a focused confirmation: B1 currently starts a median
+38.5 cycles before A, while B0 starts about 92 cycles after A.
+
+The latest canonical therefore defines `b1_delay0/48/64/80/96/128`.  This
+range moves B1 from just before A through the A-to-B0 issue window and slightly
+beyond it.  `delay0` is the matched instruction-site control.  Addresses,
+barrier dependencies, A/B0 timing and consumer timing are unchanged.
+
+Definition is prepared locally; B200 measurement is pending the same Vast
+credit/access blocker as Phase 3.

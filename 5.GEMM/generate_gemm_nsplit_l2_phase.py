@@ -23,6 +23,12 @@ VARIANTS = (
     "issue_b0_first",
     "early_b0",
     "stage_ring_state",
+    "b1_delay0",
+    "b1_delay48",
+    "b1_delay64",
+    "b1_delay80",
+    "b1_delay96",
+    "b1_delay128",
 )
 
 
@@ -390,6 +396,19 @@ def apply_stage_ring_state(text: str) -> str:
     return text
 
 
+def apply_b1_delay(text: str, cycles: int) -> str:
+    issue_anchor = """        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n, kt,
+                               1);
+"""
+    issue_new = f"""        // Focused B1-only phase shift.  This changes neither the B1
+        // address nor its dependency; it delays only the producer issue site.
+        asm volatile("nanosleep.u32 {cycles};");
+        issue_b_pipe_stage_tma(&b_map, b_smem, &b_ready[1][stage], tile_n, kt,
+                               1);
+"""
+    return replace_once(text, issue_anchor, issue_new, "focused B1 delay")
+
+
 def set_banner(text: str, variant: str) -> str:
     anchor = (
         '"stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast '
@@ -418,6 +437,8 @@ def generate(source: str, variant: str) -> tuple[str, dict[str, object] | None]:
         text = apply_early_b0(text)
     elif variant == "stage_ring_state":
         text = apply_stage_ring_state(text)
+    elif variant.startswith("b1_delay"):
+        text = apply_b1_delay(text, int(variant.removeprefix("b1_delay")))
     else:
         raise ValueError(variant)
     text = set_banner(text, variant)
