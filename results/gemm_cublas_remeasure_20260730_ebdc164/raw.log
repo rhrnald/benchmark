@@ -1,0 +1,500 @@
+/workspace/gemm_cublas_remeasure_20260730_ebdc164/source/ours_8192.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=128, MTiles=32, NTiles=32]" at line 1001
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 53.223 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 67.137 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023gemm256_bf16_16k_kernelILi128ELi32ELi32EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023gemm256_bf16_16k_kernelILi128ELi32ELi32EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 58.879 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.059 ms
+ptxas info    : Compiling entry function '_ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN45_GLOBAL__N__8de40ce0_12_ours_8192_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.665 ms
+/workspace/gemm_cublas_remeasure_20260730_ebdc164/source/ours_16384.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=256, MTiles=64, NTiles=64]" at line 1001
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 53.224 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 67.067 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 58.861 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.072 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__38576e97_13_ours_16384_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.671 ms
+/workspace/gemm_cublas_remeasure_20260730_ebdc164/source/ours_32768.cu(651): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=512, MTiles=128, NTiles=128]" at line 1001
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 53.397 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 166 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 66.960 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023gemm256_bf16_16k_kernelILi512ELi128ELi128EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023gemm256_bf16_16k_kernelILi512ELi128ELi128EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 164 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 58.711 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.073 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__e04a0e36_13_ours_32768_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.678 ms
+nvcc warning : Support for offline compilation for architectures prior to '<compute/sm/lto>_75' will be removed in a future release (Use -Wno-deprecated-gpu-targets to suppress warning).
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Tue_May_27_02:21:03_PDT_2025
+Cuda compilation tools, release 12.9, V12.9.86
+Build cuda_12.9.r12.9/compiler.36037853_0
+eb90e11322c3af9adba08ed6262fe585bd0b37c9ba2fb1750c802e393c6b6dc2  /workspace/benchmark_ebdc164/5.GEMM/baseline/gemm256_bf16_16k.cu
+156f1ddd97047d4808fe17f0c9238b93cf5c3cc55d3498567e4eb7f6f8c52b34  /workspace/benchmark_ebdc164/5.GEMM/generate_gemm_nsplit_size_port.py
+cc325a29d8f0dfd4c0a2a8fa2a9b0501949c4c6e6714eccba34d36f49ba74dfb  /workspace/benchmark_ebdc164/6.cuBLAS/cublas_gemm_bench.cu
+eb90e11322c3af9adba08ed6262fe585bd0b37c9ba2fb1750c802e393c6b6dc2  /workspace/gemm_cublas_remeasure_20260730_ebdc164/source/ours_16384.cu
+a358ea58f2697898c029dc594bd3c71f26727e44e2f812868b51be69d770c0f1  /workspace/gemm_cublas_remeasure_20260730_ebdc164/source/ours_32768.cu
+a6a3926fafe1d4c4125548394de0f121a3b5b6b9de3824ddd19d24287453d291  /workspace/gemm_cublas_remeasure_20260730_ebdc164/source/ours_8192.cu
+b8f59413345905457661f61a704904c68f878f4c801beaf32636c110e5af840b  /workspace/gemm_cublas_remeasure_20260730_ebdc164/bin/cublas
+f0ce2e640502bd060a38691c502546b336fd7dd2536ca7445a413562e843b33c  /workspace/gemm_cublas_remeasure_20260730_ebdc164/bin/ours_16384
+6c3eceaa52edb48c02d5820af807bb2e82c07e989f283ef73fc3761e43896540  /workspace/gemm_cublas_remeasure_20260730_ebdc164/bin/ours_32768
+df828a0b9264975085c29f7a9baa637dd4b3348cc3a432578c61cef69df303c5  /workspace/gemm_cublas_remeasure_20260730_ebdc164/bin/ours_8192
+ebdc164b27b454ada509c693885f5a4609eca871
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+PROTOCOL sizes=8192,16384,32768 inputs=unit,signed8 methods=ours,cublas
+PROTOCOL one_case_per_process=true warmup=1 timed=5 processes=4
+BEGIN size=8192 input=unit method=ours pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random event_ms=0.622125 wall_ms=0.624370 event_TFLOPS=1767.349 wall_TFLOPS=1760.994 checksum=00000000
+END size=8192 input=unit method=ours pass=1
+BEGIN size=8192 input=unit method=cublas pass=1
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.048 event_avg_ms=0.609549 event_TFLOPS=1803.812
+wall_total_ms=3.059 wall_avg_ms=0.611818 wall_TFLOPS=1797.122
+csv,bf16fp32,8192,8192,8192,5,1,0.609549,1803.812,0.611818,1797.122,NVIDIA B200
+END size=8192 input=unit method=cublas pass=1
+BEGIN size=8192 input=signed8 method=ours pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random-signed8 event_ms=0.689971 wall_ms=0.692041 event_TFLOPS=1593.562 wall_TFLOPS=1588.796 checksum=00000000
+END size=8192 input=signed8 method=ours pass=1
+BEGIN size=8192 input=signed8 method=cublas pass=1
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.415 event_avg_ms=0.683085 event_TFLOPS=1609.627
+wall_total_ms=3.427 wall_avg_ms=0.685374 wall_TFLOPS=1604.251
+csv,bf16fp32,8192,8192,8192,5,1,0.683085,1609.627,0.685374,1604.251,NVIDIA B200
+END size=8192 input=signed8 method=cublas pass=1
+BEGIN size=16384 input=unit method=ours pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.801555 wall_ms=4.803761 event_TFLOPS=1831.926 wall_TFLOPS=1831.085 checksum=00000000
+END size=16384 input=unit method=ours pass=1
+BEGIN size=16384 input=unit method=cublas pass=1
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=23.219 event_avg_ms=4.643808 event_TFLOPS=1894.155
+wall_total_ms=23.231 wall_avg_ms=4.646103 wall_TFLOPS=1893.220
+csv,bf16fp32,16384,16384,16384,5,1,4.643808,1894.155,4.646103,1893.220,NVIDIA B200
+END size=16384 input=unit method=cublas pass=1
+BEGIN size=16384 input=signed8 method=ours pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.438464 wall_ms=5.440678 event_TFLOPS=1617.386 wall_TFLOPS=1616.727 checksum=00000000
+END size=16384 input=signed8 method=ours pass=1
+BEGIN size=16384 input=signed8 method=cublas pass=1
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=26.185 event_avg_ms=5.236954 event_TFLOPS=1679.620
+wall_total_ms=26.196 wall_avg_ms=5.239261 wall_TFLOPS=1678.880
+csv,bf16fp32,16384,16384,16384,5,1,5.236954,1679.620,5.239261,1678.880,NVIDIA B200
+END size=16384 input=signed8 method=cublas pass=1
+BEGIN size=32768 input=unit method=ours pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random event_ms=44.565197 wall_ms=44.567867 event_TFLOPS=1579.007 wall_TFLOPS=1578.912 checksum=00000000
+END size=32768 input=unit method=ours pass=1
+BEGIN size=32768 input=unit method=cublas pass=1
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=220.193 event_avg_ms=44.038611 event_TFLOPS=1597.887
+wall_total_ms=220.206 wall_avg_ms=44.041137 wall_TFLOPS=1597.796
+csv,bf16fp32,32768,32768,32768,5,1,44.038611,1597.887,44.041137,1597.796,NVIDIA B200
+END size=32768 input=unit method=cublas pass=1
+BEGIN size=32768 input=signed8 method=ours pass=1
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random-signed8 event_ms=51.099648 wall_ms=51.104411 event_TFLOPS=1377.089 wall_TFLOPS=1376.960 checksum=00000000
+END size=32768 input=signed8 method=ours pass=1
+BEGIN size=32768 input=signed8 method=cublas pass=1
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=248.826 event_avg_ms=49.765140 event_TFLOPS=1414.017
+wall_total_ms=248.839 wall_avg_ms=49.767750 wall_TFLOPS=1413.943
+csv,bf16fp32,32768,32768,32768,5,1,49.765140,1414.017,49.767750,1413.943,NVIDIA B200
+END size=32768 input=signed8 method=cublas pass=1
+BEGIN size=32768 input=signed8 method=cublas pass=2
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=250.807 event_avg_ms=50.161383 event_TFLOPS=1402.847
+wall_total_ms=250.820 wall_avg_ms=50.164031 wall_TFLOPS=1402.773
+csv,bf16fp32,32768,32768,32768,5,1,50.161383,1402.847,50.164031,1402.773,NVIDIA B200
+END size=32768 input=signed8 method=cublas pass=2
+BEGIN size=32768 input=signed8 method=ours pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random-signed8 event_ms=51.439186 wall_ms=51.443518 event_TFLOPS=1367.999 wall_TFLOPS=1367.884 checksum=00000000
+END size=32768 input=signed8 method=ours pass=2
+BEGIN size=32768 input=unit method=cublas pass=2
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=217.094 event_avg_ms=43.418848 event_TFLOPS=1620.696
+wall_total_ms=217.107 wall_avg_ms=43.421388 wall_TFLOPS=1620.601
+csv,bf16fp32,32768,32768,32768,5,1,43.418848,1620.696,43.421388,1620.601,NVIDIA B200
+END size=32768 input=unit method=cublas pass=2
+BEGIN size=32768 input=unit method=ours pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random event_ms=44.529011 wall_ms=44.533215 event_TFLOPS=1580.290 wall_TFLOPS=1580.141 checksum=00000000
+END size=32768 input=unit method=ours pass=2
+BEGIN size=16384 input=signed8 method=cublas pass=2
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=26.223 event_avg_ms=5.244640 event_TFLOPS=1677.159
+wall_total_ms=26.236 wall_avg_ms=5.247114 wall_TFLOPS=1676.368
+csv,bf16fp32,16384,16384,16384,5,1,5.244640,1677.159,5.247114,1676.368,NVIDIA B200
+END size=16384 input=signed8 method=cublas pass=2
+BEGIN size=16384 input=signed8 method=ours pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.422400 wall_ms=5.424725 event_TFLOPS=1622.177 wall_TFLOPS=1621.482 checksum=00000000
+END size=16384 input=signed8 method=ours pass=2
+BEGIN size=16384 input=unit method=cublas pass=2
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=23.237 event_avg_ms=4.647411 event_TFLOPS=1892.687
+wall_total_ms=23.249 wall_avg_ms=4.649808 wall_TFLOPS=1891.711
+csv,bf16fp32,16384,16384,16384,5,1,4.647411,1892.687,4.649808,1891.711,NVIDIA B200
+END size=16384 input=unit method=cublas pass=2
+BEGIN size=16384 input=unit method=ours pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.818496 wall_ms=4.820683 event_TFLOPS=1825.485 wall_TFLOPS=1824.657 checksum=00000000
+END size=16384 input=unit method=ours pass=2
+BEGIN size=8192 input=signed8 method=cublas pass=2
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.415 event_avg_ms=0.683091 event_TFLOPS=1609.612
+wall_total_ms=3.427 wall_avg_ms=0.685496 wall_TFLOPS=1603.966
+csv,bf16fp32,8192,8192,8192,5,1,0.683091,1609.612,0.685496,1603.966,NVIDIA B200
+END size=8192 input=signed8 method=cublas pass=2
+BEGIN size=8192 input=signed8 method=ours pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random-signed8 event_ms=0.691347 wall_ms=0.693616 event_TFLOPS=1590.390 wall_TFLOPS=1585.188 checksum=00000000
+END size=8192 input=signed8 method=ours pass=2
+BEGIN size=8192 input=unit method=cublas pass=2
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.057 event_avg_ms=0.611494 event_TFLOPS=1798.073
+wall_total_ms=3.070 wall_avg_ms=0.613921 wall_TFLOPS=1790.967
+csv,bf16fp32,8192,8192,8192,5,1,0.611494,1798.073,0.613921,1790.967,NVIDIA B200
+END size=8192 input=unit method=cublas pass=2
+BEGIN size=8192 input=unit method=ours pass=2
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random event_ms=0.622330 wall_ms=0.624566 event_TFLOPS=1766.767 wall_TFLOPS=1760.441 checksum=00000000
+END size=8192 input=unit method=ours pass=2
+BEGIN size=16384 input=signed8 method=ours pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.415859 wall_ms=5.418159 event_TFLOPS=1624.136 wall_TFLOPS=1623.447 checksum=00000000
+END size=16384 input=signed8 method=ours pass=3
+BEGIN size=16384 input=signed8 method=cublas pass=3
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=26.134 event_avg_ms=5.226790 event_TFLOPS=1682.886
+wall_total_ms=26.145 wall_avg_ms=5.229065 wall_TFLOPS=1682.154
+csv,bf16fp32,16384,16384,16384,5,1,5.226790,1682.886,5.229065,1682.154,NVIDIA B200
+END size=16384 input=signed8 method=cublas pass=3
+BEGIN size=16384 input=unit method=ours pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.810291 wall_ms=4.812523 event_TFLOPS=1828.599 wall_TFLOPS=1827.751 checksum=00000000
+END size=16384 input=unit method=ours pass=3
+BEGIN size=16384 input=unit method=cublas pass=3
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=23.227 event_avg_ms=4.645465 event_TFLOPS=1893.479
+wall_total_ms=23.240 wall_avg_ms=4.647920 wall_TFLOPS=1892.479
+csv,bf16fp32,16384,16384,16384,5,1,4.645465,1893.479,4.647920,1892.479,NVIDIA B200
+END size=16384 input=unit method=cublas pass=3
+BEGIN size=8192 input=signed8 method=ours pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random-signed8 event_ms=0.692179 wall_ms=0.694394 event_TFLOPS=1588.478 wall_TFLOPS=1583.412 checksum=00000000
+END size=8192 input=signed8 method=ours pass=3
+BEGIN size=8192 input=signed8 method=cublas pass=3
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.414 event_avg_ms=0.682893 event_TFLOPS=1610.079
+wall_total_ms=3.426 wall_avg_ms=0.685282 wall_TFLOPS=1604.466
+csv,bf16fp32,8192,8192,8192,5,1,0.682893,1610.079,0.685282,1604.466,NVIDIA B200
+END size=8192 input=signed8 method=cublas pass=3
+BEGIN size=8192 input=unit method=ours pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random event_ms=0.622003 wall_ms=0.624387 event_TFLOPS=1767.694 wall_TFLOPS=1760.945 checksum=00000000
+END size=8192 input=unit method=ours pass=3
+BEGIN size=8192 input=unit method=cublas pass=3
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.052 event_avg_ms=0.610342 event_TFLOPS=1801.467
+wall_total_ms=3.063 wall_avg_ms=0.612549 wall_TFLOPS=1794.979
+csv,bf16fp32,8192,8192,8192,5,1,0.610342,1801.467,0.612549,1794.979,NVIDIA B200
+END size=8192 input=unit method=cublas pass=3
+BEGIN size=32768 input=signed8 method=ours pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random-signed8 event_ms=51.223682 wall_ms=51.226458 event_TFLOPS=1373.754 wall_TFLOPS=1373.680 checksum=00000000
+END size=32768 input=signed8 method=ours pass=3
+BEGIN size=32768 input=signed8 method=cublas pass=3
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=247.903 event_avg_ms=49.580646 event_TFLOPS=1419.278
+wall_total_ms=247.916 wall_avg_ms=49.583255 wall_TFLOPS=1419.204
+csv,bf16fp32,32768,32768,32768,5,1,49.580646,1419.278,49.583255,1419.204,NVIDIA B200
+END size=32768 input=signed8 method=cublas pass=3
+BEGIN size=32768 input=unit method=ours pass=3
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random event_ms=44.842644 wall_ms=44.847141 event_TFLOPS=1569.237 wall_TFLOPS=1569.080 checksum=00000000
+END size=32768 input=unit method=ours pass=3
+BEGIN size=32768 input=unit method=cublas pass=3
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=220.127 event_avg_ms=44.025323 event_TFLOPS=1598.370
+wall_total_ms=220.140 wall_avg_ms=44.027914 wall_TFLOPS=1598.276
+csv,bf16fp32,32768,32768,32768,5,1,44.025323,1598.370,44.027914,1598.276,NVIDIA B200
+END size=32768 input=unit method=cublas pass=3
+BEGIN size=32768 input=unit method=cublas pass=4
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=220.508 event_avg_ms=44.101599 event_TFLOPS=1595.605
+wall_total_ms=220.521 wall_avg_ms=44.104270 wall_TFLOPS=1595.509
+csv,bf16fp32,32768,32768,32768,5,1,44.101599,1595.605,44.104270,1595.509,NVIDIA B200
+END size=32768 input=unit method=cublas pass=4
+BEGIN size=32768 input=unit method=ours pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random event_ms=44.214874 wall_ms=44.219461 event_TFLOPS=1591.517 wall_TFLOPS=1591.352 checksum=00000000
+END size=32768 input=unit method=ours pass=4
+BEGIN size=32768 input=signed8 method=cublas pass=4
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=32768 n=32768 k=32768 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=8.00 GiB
+event_total_ms=245.102 event_avg_ms=49.020300 event_TFLOPS=1435.502
+wall_total_ms=245.115 wall_avg_ms=49.022966 wall_TFLOPS=1435.424
+csv,bf16fp32,32768,32768,32768,5,1,49.020300,1435.502,49.022966,1435.424,NVIDIA B200
+END size=32768 input=signed8 method=cublas pass=4
+BEGIN size=32768 input=signed8 method=ours pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=32768 mtile=128 ntile=128 ktiles=512 ctas=16384 launch_ctas=148 input_init=random-signed8 event_ms=51.434010 wall_ms=51.436590 event_TFLOPS=1368.136 wall_TFLOPS=1368.068 checksum=00000000
+END size=32768 input=signed8 method=ours pass=4
+BEGIN size=8192 input=unit method=cublas pass=4
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.063 event_avg_ms=0.612678 event_TFLOPS=1794.598
+wall_total_ms=3.076 wall_avg_ms=0.615177 wall_TFLOPS=1787.309
+csv,bf16fp32,8192,8192,8192,5,1,0.612678,1794.598,0.615177,1787.309,NVIDIA B200
+END size=8192 input=unit method=cublas pass=4
+BEGIN size=8192 input=unit method=ours pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random event_ms=0.622886 wall_ms=0.625240 event_TFLOPS=1765.188 wall_TFLOPS=1758.543 checksum=00000000
+END size=8192 input=unit method=ours pass=4
+BEGIN size=8192 input=signed8 method=cublas pass=4
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=8192 n=8192 k=8192 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=0.50 GiB
+event_total_ms=3.420 event_avg_ms=0.684070 event_TFLOPS=1607.308
+wall_total_ms=3.432 wall_avg_ms=0.686379 wall_TFLOPS=1601.902
+csv,bf16fp32,8192,8192,8192,5,1,0.684070,1607.308,0.686379,1601.902,NVIDIA B200
+END size=8192 input=signed8 method=cublas pass=4
+BEGIN size=8192 input=signed8 method=ours pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=8192 mtile=32 ntile=32 ktiles=128 ctas=1024 launch_ctas=148 input_init=random-signed8 event_ms=0.692198 wall_ms=0.694445 event_TFLOPS=1588.434 wall_TFLOPS=1583.295 checksum=00000000
+END size=8192 input=signed8 method=ours pass=4
+BEGIN size=16384 input=unit method=cublas pass=4
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [0,1), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=23.214 event_avg_ms=4.642759 event_TFLOPS=1894.583
+wall_total_ms=23.226 wall_avg_ms=4.645199 wall_TFLOPS=1893.588
+csv,bf16fp32,16384,16384,16384,5,1,4.642759,1894.583,4.645199,1893.588,NVIDIA B200
+END size=16384 input=unit method=cublas pass=4
+BEGIN size=16384 input=unit method=ours pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=4.803258 wall_ms=4.805574 event_TFLOPS=1831.276 wall_TFLOPS=1830.394 checksum=00000000
+END size=16384 input=unit method=ours pass=4
+BEGIN size=16384 input=signed8 method=cublas pass=4
+device=0 name="NVIDIA B200" cc=10.0
+cublas_version=120901 cuda_runtime_version=12090 cuda_driver_version=13000 cuda_compile_version=12090
+mode=bf16fp32 (BF16 input, FP32 output, FP32 accumulate)
+input=BF16 uniform [-8,8), exact 5.GEMM seeds; layout=row-major C=A*B
+m=16384 n=16384 k=16384 repeat=5 warmup=1
+a_type=bf16 b_type=bf16 c_type=fp32 compute_type=68 memory=2.00 GiB
+event_total_ms=26.150 event_avg_ms=5.230042 event_TFLOPS=1681.840
+wall_total_ms=26.162 wall_avg_ms=5.232452 wall_TFLOPS=1681.065
+csv,bf16fp32,16384,16384,16384,5,1,5.230042,1681.840,5.232452,1681.065,NVIDIA B200
+END size=16384 input=signed8 method=cublas pass=4
+BEGIN size=16384 input=signed8 method=ours pass=4
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random-signed8 event_ms=5.433779 wall_ms=5.435965 event_TFLOPS=1618.780 wall_TFLOPS=1618.129 checksum=00000000
+END size=16384 input=signed8 method=ours pass=4
+# BF16 GEMM ours vs cuBLAS remeasurement
+
+Square row-major `C=A*B`, BF16 A/B, FP32 accumulation/output.
+Each cell is mean +/- sample SD across four independent processes;
+each process uses one warmup and five timed launches. The two methods
+occupy the first and second positions exactly twice per cell.
+
+| size | input | ours (static `8x16`) | cuBLAS | ours/cuBLAS |
+|---:|---|---:|---:|---:|
+| 8K | `[0,1)` | 1766.749 +/- 1.109 | 1799.487 +/- 4.022 | 98.181% |
+| 8K | `[-8,8)` | 1590.216 +/- 2.410 | 1609.157 +/- 1.251 | 98.823% |
+| 16K | `[0,1)` | 1829.322 +/- 2.935 | 1893.726 +/- 0.828 | 96.599% |
+| 16K | `[-8,8)` | 1620.620 +/- 3.089 | 1680.376 +/- 2.541 | 96.444% |
+| 32K | `[0,1)` | 1580.013 +/- 9.121 | 1603.139 +/- 11.766 | 98.557% |
+| 32K | `[-8,8)` | 1371.745 +/- 4.459 | 1417.911 +/- 13.582 | 96.744% |
+

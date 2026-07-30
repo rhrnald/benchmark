@@ -195,6 +195,28 @@ one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
 
 ## Library comparison
 
+### 2026-07-30 ours/cuBLAS 재측정
+
+현재 canonical static `8x16` N-split과 cuBLAS만 같은 B200 세션에서
+재측정했다. 각 cell은 W1/I5 독립 프로세스 4개의 평균이며, 두 방법은
+각 cell에서 first/second position을 정확히 두 번씩 차지한다. 모든
+size-port는 512 pattern/ones full-C validation을 bit-exact로 통과했다.
+
+| size | input | ours | cuBLAS | ours/cuBLAS |
+|---:|---|---:|---:|---:|
+| 8K | `[0,1)` | 1766.749 +/- 1.109 | 1799.487 +/- 4.022 | 98.181% |
+| 8K | `[-8,8)` | 1590.216 +/- 2.410 | 1609.157 +/- 1.251 | 98.823% |
+| 16K | `[0,1)` | 1829.322 +/- 2.935 | 1893.726 +/- 0.828 | 96.599% |
+| 16K | `[-8,8)` | 1620.620 +/- 3.089 | 1680.376 +/- 2.541 | 96.444% |
+| 32K | `[0,1)` | 1580.013 +/- 9.121 | 1603.139 +/- 11.766 | 98.557% |
+| 32K | `[-8,8)` | 1371.745 +/- 4.459 | 1417.911 +/- 13.582 | 96.744% |
+
+측정 중 GPU 온도는 30--35 C, sampled SM clock은 1965 MHz였다. 사용한
+stack은 CUDA 12.9.86, driver 580.126.09, cuBLAS/cuBLASLt 12.9.1.4다.
+정의 커밋은 `ebdc164`, raw artifact는
+[`gemm_cublas_remeasure_20260730_ebdc164`](../results/gemm_cublas_remeasure_20260730_ebdc164/)
+에 있다.
+
 ### 현재 8K/16K/32K static `8x16` 재측정
 
 현재 sinkless/compile-time-specialized N-split을 8K/16K/32K에
