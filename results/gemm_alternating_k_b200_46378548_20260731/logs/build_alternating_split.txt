@@ -1,0 +1,60 @@
+source/gemm_alt_k.cu(72): warning #177-D: member "<unnamed>::StageLayout<StageK>::kABytes [with StageK=64]" was declared but never referenced
+    static constexpr int kABytes = kAWords * static_cast<int>(sizeof(uint32_t));
+                         ^
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+source/gemm_alt_k.cu(79): warning #177-D: variable "<unnamed>::kLongStageWords" was declared but never referenced
+  static constexpr int kLongStageWords = StageLayout<kLongStageK>::kWords;
+                       ^
+
+source/gemm_alt_k.cu(84): warning #177-D: variable "<unnamed>::kAStageWords" was declared but never referenced
+  static constexpr int kAStageWords = StageLayout<kLongStageK>::kAWords;
+                       ^
+
+source/gemm_alt_k.cu(87): warning #177-D: variable "<unnamed>::kStageWords" was declared but never referenced
+  static constexpr int kStageWords = StageLayout<kLongStageK>::kWords;
+                       ^
+
+source/gemm_alt_k.cu(88): warning #177-D: variable "<unnamed>::kAStageBytes" was declared but never referenced
+  static constexpr int kAStageBytes = StageLayout<kLongStageK>::kABytes;
+                       ^
+
+source/gemm_alt_k.cu(89): warning #177-D: variable "<unnamed>::kBPipeBytes" was declared but never referenced
+  static constexpr int kBPipeBytes = StageLayout<kLongStageK>::kBPipeBytes;
+                       ^
+
+source/gemm_alt_k.cu(90): warning #177-D: variable "<unnamed>::kStageBytes" was declared but never referenced
+  static constexpr int kStageBytes = StageLayout<kLongStageK>::kBytes;
+                       ^
+
+source/gemm_alt_k.cu(107): warning #177-D: variable "<unnamed>::kHalfTileWords" was declared but never referenced
+  static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
+                       ^
+
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_S1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023gemm256_bf16_16k_kernelILi4ELi1ELi1EEEv14CUtensorMap_stS1_S1_S1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 112 bytes smem
+ptxas info    : Compile time = 59.964 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_S1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023gemm256_bf16_16k_kernelILi8ELi2ELi2EEEv14CUtensorMap_stS1_S1_S1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 1 barriers, 112 bytes smem
+ptxas info    : Compile time = 55.134 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_S1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023gemm256_bf16_16k_kernelILi256ELi64ELi64EEEv14CUtensorMap_stS1_S1_S1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 168 registers, used 1 barriers, 112 bytes smem
+ptxas info    : Compile time = 51.925 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 1.889 ms
+ptxas info    : Compiling entry function '_ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN46_GLOBAL__N__61e039a0_13_gemm_alt_k_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 2.043 ms

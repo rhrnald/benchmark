@@ -57,3 +57,10 @@ K64 group's issue depth while retaining one logical K128 buffer lifetime.
 Do not replace the canonical kernel unless correctness passes and the
 candidate produces a repeatable improvement outside ordinary run-to-run
 noise. Preserve negative results as an ablation.
+
+## Outcome
+
+Both candidates passed full-C validation, but the best alternating result was
+1411.446 TFLOP/s versus 1853.878 TFLOP/s for the canonical kernel on uniform
+`[0,1)` input. The canonical kernel remains unchanged. See
+`results/gemm_alternating_k_b200_46378548_20260731/RESULTS.md`.
