@@ -1,0 +1,205 @@
+#!/usr/bin/env python3
+"""Compare actual A-first and B-first N-split clock64 traces."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+
+
+COLORS = {
+    "reuse": "#CBD5E1",
+    "wait_a": "#FBBF24",
+    "wait_b": "#60A5FA",
+    "a": "#22C55E",
+    "b0": "#06B6D4",
+    "b1": "#14B8A6",
+    "mma0": "#2563EB",
+    "mma1": "#7C3AED",
+    "commit": "#EC4899",
+}
+LANES = {
+    "W0 · A + B0 producer": 3,
+    "W1 · B1 producer": 2,
+    "W2 · C[:, 0:128] MMA": 1,
+    "W3 · C[:, 128:256] MMA": 0,
+}
+
+
+def read_trace(path: Path) -> dict[tuple[int, str], tuple[int, int]]:
+    rows: dict[tuple[int, str], tuple[int, int]] = {}
+    with path.open(newline="") as stream:
+        for row in csv.DictReader(stream):
+            kt = int(row["kt"])
+            if kt >= 0:
+                rows[(kt, row["event"])] = (
+                    int(row["start_cycle"]),
+                    int(row["end_cycle"]),
+                )
+    return rows
+
+
+def bar(
+    ax,
+    y: float,
+    start: float,
+    end: float,
+    color: str,
+    label: str = "",
+) -> None:
+    width = max(1, end - start)
+    ax.broken_barh(
+        [(start, width)],
+        (y - 0.31, 0.62),
+        facecolor=color,
+        edgecolor="#334155",
+        linewidth=0.55,
+        zorder=3,
+    )
+    if label and width >= 92:
+        ax.text(
+            start + width / 2,
+            y,
+            label,
+            ha="center",
+            va="center",
+            fontsize=6.5,
+            color="#1E293B" if color in {COLORS["wait_a"], COLORS["wait_b"]} else "white",
+            fontweight="bold",
+            clip_on=True,
+            zorder=4,
+        )
+
+
+def draw_trace(
+    ax,
+    trace: dict[tuple[int, str], tuple[int, int]],
+    kts: range,
+    title: str,
+    order_label: str,
+) -> float:
+    first = min(
+        trace[(kt, event)][0]
+        for kt in kts
+        for event in ("p0_wait_pipe0", "p1_wait_pipe1")
+    )
+    last = max(
+        trace[(kt, event)][1]
+        for kt in kts
+        for event in ("c2_commit", "c3_commit")
+    )
+    for kt in kts:
+        stage = kt - kts.start
+        w00, _ = trace[(kt, "p0_wait_pipe0")]
+        _, w02 = trace[(kt, "p0_wait_pipe1")]
+        a0, a1 = trace[(kt, "p0_issue_a")]
+        b00, b01 = trace[(kt, "p0_issue_b0")]
+        p10, p11 = trace[(kt, "p1_wait_pipe1")]
+        b10, b11 = trace[(kt, "p1_issue_b1")]
+
+        bar(ax, 3, w00 - first, w02 - first, COLORS["reuse"])
+        bar(ax, 3, a0 - first, a1 - first, COLORS["a"], f"A {stage}")
+        bar(ax, 3, b00 - first, b01 - first, COLORS["b0"])
+        bar(ax, 2, p10 - first, p11 - first, COLORS["reuse"])
+        bar(ax, 2, b10 - first, b11 - first, COLORS["b1"], f"B1 {stage}")
+
+        for y, a_event, b_event, mma_event, commit_event, mma_color in (
+            (1, "c2_wait_a", "c2_wait_b0", "c2_mma", "c2_commit", COLORS["mma0"]),
+            (0, "c3_wait_a", "c3_wait_b1", "c3_mma", "c3_commit", COLORS["mma1"]),
+        ):
+            wa0, wa1 = trace[(kt, a_event)]
+            wb0, wb1 = trace[(kt, b_event)]
+            m0, m1 = trace[(kt, mma_event)]
+            c0, c1 = trace[(kt, commit_event)]
+            bar(ax, y, wa0 - first, wa1 - first, COLORS["wait_a"], "wait A")
+            bar(ax, y, wb0 - first, wb1 - first, COLORS["wait_b"], "wait B")
+            bar(ax, y, m0 - first, m1 - first, mma_color, f"MMA {stage}")
+            bar(ax, y, c0 - first, c1 - first, COLORS["commit"])
+
+    ax.set_yticks(list(LANES.values()), list(LANES.keys()))
+    ax.set_ylim(-0.55, 3.55)
+    ax.grid(axis="x", color="#E2E8F0", linewidth=0.7)
+    ax.set_xlabel("cycles relative to first observed event")
+    ax.set_title(title, loc="left", fontsize=11.5, fontweight="bold")
+    ax.text(
+        0.985,
+        0.94,
+        order_label,
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=9,
+        fontweight="bold",
+        color="#334155",
+        bbox={"facecolor": "white", "edgecolor": "#CBD5E1", "alpha": 0.94},
+    )
+    return last - first
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--a-first", required=True, type=Path)
+    parser.add_argument("--b-first", required=True, type=Path)
+    parser.add_argument("--svg", required=True, type=Path)
+    parser.add_argument("--png", type=Path)
+    args = parser.parse_args()
+
+    kts = range(56, 64)
+    fig, axes = plt.subplots(2, 1, figsize=(16, 8.0), constrained_layout=True)
+    a_end = draw_trace(
+        axes[0],
+        read_trace(args.a_first),
+        kts,
+        "A. A-first consumer wait · actual clock64 trace (pass 4)",
+        "consumer: wait A → wait B → MMA",
+    )
+    b_end = draw_trace(
+        axes[1],
+        read_trace(args.b_first),
+        kts,
+        "B. B-first consumer wait · actual clock64 trace (pass 4)",
+        "consumer: wait B → wait A → MMA",
+    )
+    xmax = max(a_end, b_end) + 120
+    for ax in axes:
+        ax.set_xlim(0, xmax)
+
+    fig.suptitle(
+        "Blackwell N-split GEMM · measured consumer wait-order trace",
+        fontsize=15,
+        fontweight="bold",
+    )
+    fig.legend(
+        handles=[
+            Patch(facecolor=COLORS["reuse"], label="stage reuse wait"),
+            Patch(facecolor=COLORS["wait_a"], label="consumer wait A"),
+            Patch(facecolor=COLORS["wait_b"], label="consumer wait B0/B1"),
+            Patch(facecolor=COLORS["a"], label="A 256×64 TMA issue"),
+            Patch(facecolor=COLORS["b0"], label="B0 64×128 TMA issue"),
+            Patch(facecolor=COLORS["b1"], label="B1 64×128 TMA issue"),
+            Patch(facecolor=COLORS["mma0"], label="W2 MMA"),
+            Patch(facecolor=COLORS["mma1"], label="W3 MMA"),
+            Patch(facecolor=COLORS["commit"], label="MMA commit"),
+        ],
+        loc="outside lower center",
+        ncol=9,
+        frameon=False,
+        fontsize=8,
+    )
+    args.svg.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(args.svg, format="svg")
+    if args.png:
+        args.png.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(args.png, dpi=150)
+    print(f"svg={args.svg}")
+
+
+if __name__ == "__main__":
+    main()

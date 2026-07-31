@@ -359,6 +359,12 @@ The useful effect is removal of the long A-first wait tail, not exposure of a
 new B bottleneck.  This is consistent with the small `[0,1)` speedup, while
 the signed-input result remains statistically inconclusive.
 
+The actual pass-4 A-first and B-first traces are plotted on the same scale in
+[`gemm_wait_order_trace_b200_46374246.svg`](../results/gemm_wait_order_trace_b200_46374246.svg).
+Consumer A and B waits use separate colors, making the A-first W3 tail and the
+stable B-first sequence directly visible.  No timing in this figure is
+inferred or throughput-derived.
+
 `wait_b_first` remains an isolated candidate rather than the canonical
 default until its sub-0.3% gain is accepted as worthwhile.
 
