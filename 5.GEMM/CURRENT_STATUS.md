@@ -201,6 +201,27 @@ one-time 4/8-cohort startup staggering, 매 K64 stage에서 A issue 뒤 B1을
 
 ## Library comparison
 
+### 2026-07-31 canonical B-first vs cuBLAS
+
+Consumer `B -> A` wait를 canonical로 승격한 뒤 8K/16K/32K와 두 입력
+분포를 같은 B200 세션에서 cuBLAS와 재측정했다. 각 cell은 독립
+W1/I5 프로세스 4개의 평균이며 두 방법은 first/second 위치를 두 번씩
+차지한다.
+
+| size | input | ours, B-first | cuBLAS | ours/cuBLAS |
+|---:|---|---:|---:|---:|
+| 8K | `[0,1)` | 1763.599 +/- 1.260 | 1822.687 +/- 3.414 | 96.758% |
+| 8K | `[-8,8)` | 1592.419 +/- 3.685 | 1619.840 +/- 6.199 | 98.307% |
+| 16K | `[0,1)` | 1854.043 +/- 1.457 | 1924.352 +/- 1.688 | 96.346% |
+| 16K | `[-8,8)` | 1648.123 +/- 3.490 | 1708.077 +/- 2.013 | 96.490% |
+| 32K | `[0,1)` | 1666.094 +/- 12.326 | 1698.081 +/- 10.980 | 98.116% |
+| 32K | `[-8,8)` | 1435.286 +/- 15.128 | 1466.391 +/- 1.892 | 97.879% |
+
+환경은 driver 595.71.05, CUDA 12.9, cuBLAS 12.9.1이며 상세 protocol과
+artifact는
+[`NSPLIT_BFIRST_CUBLAS_COMPARE.md`](NSPLIT_BFIRST_CUBLAS_COMPARE.md)에
+있다.
+
 ### 2026-07-30 ours/cuBLAS 재측정
 
 현재 canonical static `8x16` N-split과 cuBLAS만 같은 B200 세션에서
