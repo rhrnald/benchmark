@@ -1,0 +1,5 @@
+input,variant,mean_tflops,paired_delta_percent,paired_ci95_percent,n_processes,warmup,iters
+random,baseline,1849.9017,0.0000,0.0000,10,1,5
+random,wait_b_first,1854.4975,0.2485,0.0548,10,1,5
+random-signed8,baseline,1644.3099,0.0000,0.0000,10,1,5
+random-signed8,wait_b_first,1646.0613,0.1069,0.1687,10,1,5

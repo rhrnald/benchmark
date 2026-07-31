@@ -328,3 +328,40 @@ Addresses, producer issue order, barriers, MMA order, scheduler, and epilogue
 are unchanged.  Performance uses balanced independent W1/I5 processes for
 both input distributions.  A dedicated `clock64` trace records the B-first
 and following A wait intervals separately.
+
+### B200 result (instance 46374246)
+
+Both kernels pass the 512 full-C `pattern` and `ones` validations.  They use
+164 registers, one barrier, 128 bytes static shared memory, and have no
+stack/local/spill.  Performance is ten paired independent W1/I5 processes per
+input with alternating AB/BA execution order.
+
+| wait order | `[0,1)` TFLOP/s | paired delta | `[-8,8)` TFLOP/s | paired delta |
+|---|---:|---:|---:|---:|
+| A then B | 1849.902 | reference | 1644.310 | reference |
+| B then A | **1854.498** | **+0.248% ±0.055%** | **1646.061** | **+0.107% ±0.169%** |
+
+Five alternating trace processes per order provide 40 measured stages for
+each consumer:
+
+| order / consumer | A wait median | B wait median | total wait median | total wait mean | total >250 cycles |
+|---|---:|---:|---:|---:|---:|
+| A-first W2 | 107.5 | 77.0 | 187.5 | 221.1 | 5/40 |
+| A-first W3 | 105.5 | 76.0 | 182.5 | 218.9 | 8/40 |
+| B-first W2 | 115.0 | 80.0 | 196.0 | 196.6 | 0/40 |
+| B-first W3 | 120.0 | 80.0 | 200.0 | 199.6 | 0/40 |
+
+The reversed trace changes the earlier interpretation: the first B wait is
+already at its observed floor, and the following A wait is also at a stable
+floor.  Therefore the consumer normally arrives after both transfers have
+completed; this experiment still does not identify which TMA completed first.
+The useful effect is removal of the long A-first wait tail, not exposure of a
+new B bottleneck.  This is consistent with the small `[0,1)` speedup, while
+the signed-input result remains statistically inconclusive.
+
+`wait_b_first` remains an isolated candidate rather than the canonical
+default until its sub-0.3% gain is accepted as worthwhile.
+
+Full source, binaries, validation logs, SASS, 40 performance CSVs, and ten
+pipeline traces are archived in
+[`gemm_wait_b_first_62bc7c9_b200_46374246.tar.gz`](../results/gemm_wait_b_first_62bc7c9_b200_46374246.tar.gz).
