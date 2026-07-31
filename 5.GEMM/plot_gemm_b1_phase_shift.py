@@ -122,6 +122,45 @@ def draw_measured(
         bar(ax, 0, m30 - first, m31 - first, COLORS["mma1"], f"MMA {stage}")
         bar(ax, 0, cm30 - first, cm31 - first, COLORS["commit"])
 
+    # Show only one representative stage so the steady-state pipeline remains
+    # readable. TMA completion is not directly traced; the arrow head is the
+    # observed consumer wait completion / MMA start.
+    dep_kt = kts.start + 3
+    a_end = trace[(dep_kt, "p0_issue_a")][1] - first
+    b0_end = trace[(dep_kt, "p0_issue_b0")][1] - first
+    b1_end = trace[(dep_kt, "p1_issue_b1")][1] - first
+    w2_ready = trace[(dep_kt, "c2_mma")][0] - first
+    w3_ready = trace[(dep_kt, "c3_mma")][0] - first
+    for start, start_y, end, end_y, color, radius in (
+        (a_end, 2.68, w2_ready, 1.31, COLORS["a"], 0.14),
+        (b0_end, 2.68, w2_ready, 1.31, COLORS["b0"], -0.10),
+        (b1_end, 1.68, w3_ready, 0.31, COLORS["b1"], 0.12),
+    ):
+        ax.annotate(
+            "",
+            xy=(end, end_y),
+            xytext=(start, start_y),
+            arrowprops={
+                "arrowstyle": "->",
+                "color": color,
+                "linewidth": 1.35,
+                "linestyle": "--",
+                "connectionstyle": f"arc3,rad={radius}",
+            },
+            zorder=5,
+        )
+    ax.text(
+        (b0_end + w2_ready) / 2,
+        2.18,
+        "representative data-ready dependencies (stage 3)",
+        ha="center",
+        va="center",
+        fontsize=7.5,
+        color="#475569",
+        bbox={"facecolor": "white", "edgecolor": "none", "alpha": 0.82, "pad": 1.5},
+        zorder=6,
+    )
+
     setup_axis(
         ax,
         "A. Baseline · measured clock64 trace, eight consecutive K64 stages",
