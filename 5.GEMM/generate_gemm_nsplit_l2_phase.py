@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 EXPECTED_SOURCE_SHA256 = (
-    "eb90e11322c3af9adba08ed6262fe585bd0b37c9ba2fb1750c802e393c6b6dc2"
+    "c0395009e00fcdd2f0a5266ee3cc79e308b51e35e7510ad671683ec7dcd67107"
 )
 TASK_COUNT = 64 * 64
 PERSISTENT_CTAS = 148
@@ -23,7 +23,7 @@ VARIANTS = (
     "issue_b0_first",
     "early_b0",
     "stage_ring_state",
-    "wait_b_first",
+    "wait_a_first",
     "b1_delay0",
     "b1_delay48",
     "b1_delay64",
@@ -419,23 +419,23 @@ def apply_b1_delay(text: str, cycles: int) -> str:
     return replace_once(text, issue_anchor, issue_new, "focused B1 delay")
 
 
-def apply_wait_b_first(text: str) -> str:
-    wait_anchor = """        mbarrier_wait(&a_ready[stage], tma_phase);
-        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
-"""
-    wait_new = """        // B is half the A transfer size. Probe it first so the second
-        // wait reveals whether A, rather than B, is the consumer dependency.
-        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+def apply_wait_a_first(text: str) -> str:
+    wait_anchor = """        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
         mbarrier_wait(&a_ready[stage], tma_phase);
 """
-    return replace_once(text, wait_anchor, wait_new, "B-first consumer wait")
+    wait_new = """        // Recover the former canonical order for controlled ablation.
+        mbarrier_wait(&a_ready[stage], tma_phase);
+        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+"""
+    return replace_once(text, wait_anchor, wait_new, "A-first consumer wait")
 
 
 def set_banner(text: str, variant: str) -> str:
     anchor = (
         '"stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast '
         'overhead=fixed_sink "\n'
-        '      "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "'
+        '      "phase=0/0 consumer_wait=b_then_a '
+        'c_store=tma_fp32_sw128 l2_promotion=none "'
     )
     replacement = (
         '"stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast '
@@ -459,8 +459,8 @@ def generate(source: str, variant: str) -> tuple[str, dict[str, object] | None]:
         text = apply_early_b0(text)
     elif variant == "stage_ring_state":
         text = apply_stage_ring_state(text)
-    elif variant == "wait_b_first":
-        text = apply_wait_b_first(text)
+    elif variant == "wait_a_first":
+        text = apply_wait_a_first(text)
     elif variant.startswith("b1_delay"):
         text = apply_b1_delay(text, int(variant.removeprefix("b1_delay")))
     else:

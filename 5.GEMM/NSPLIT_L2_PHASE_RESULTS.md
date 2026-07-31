@@ -371,8 +371,10 @@ observed `tcgen05.commit` issue; it represents the asynchronous completion
 barrier dependency rather than claiming that commit issue is the exact MMA
 completion timestamp.
 
-`wait_b_first` remains an isolated candidate rather than the canonical
-default until its sub-0.3% gain is accepted as worthwhile.
+By explicit engineering decision, `wait_b_first` is promoted to the canonical
+baseline despite its sub-0.3% gain.  The generator now exposes
+`wait_a_first` as the controlled ablation, and the runtime configuration
+banner reports `consumer_wait=b_then_a`.
 
 Full source, binaries, validation logs, SASS, 40 performance CSVs, and ten
 pipeline traces are archived in

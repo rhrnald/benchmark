@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 EXPECTED_SOURCE_SHA256 = (
-    "eb90e11322c3af9adba08ed6262fe585bd0b37c9ba2fb1750c802e393c6b6dc2"
+    "c0395009e00fcdd2f0a5266ee3cc79e308b51e35e7510ad671683ec7dcd67107"
 )
 
 
@@ -252,8 +252,8 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void *ptr) {"""
         text, producer1_anchor, producer1_new, "producer 1 trace"
     )
 
-    consumer_wait_anchor = """        mbarrier_wait(&a_ready[stage], tma_phase);
-        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+    consumer_wait_anchor = """        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+        mbarrier_wait(&a_ready[stage], tma_phase);
 
 #pragma unroll
 """
@@ -454,7 +454,8 @@ uint16_t float_to_bf16_bits_host(float value) {"""
     text = replace_once(text, main_anchor, main_new, "trace main output")
 
     banner_anchor = (
-        '"phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "'
+        '"phase=0/0 consumer_wait=b_then_a '
+        'c_store=tma_fp32_sw128 l2_promotion=none "'
     )
     text = replace_once(
         text,

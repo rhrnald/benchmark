@@ -699,8 +699,8 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         uint32_t *a_smem = stage_smem;
         uint32_t *b_smem = stage_smem + kAStageWords + pipe * kBPipeWords;
 
-        mbarrier_wait(&a_ready[stage], tma_phase);
         mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+        mbarrier_wait(&a_ready[stage], tma_phase);
 
 #pragma unroll
         for (int kk = 0; kk < kStageK / kMmaK; ++kk) {
@@ -1333,7 +1333,7 @@ int main(int argc, char **argv) {
   std::printf(
       "device=%d name=\"%s\" cc=%d.%d cta=256x256 stage_k=64 "
       "stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast overhead=fixed_sink "
-      "phase=0/0 c_store=tma_fp32_sw128 l2_promotion=none "
+      "phase=0/0 consumer_wait=b_then_a c_store=tma_fp32_sw128 l2_promotion=none "
       "dynamic_smem=%d\n",
       args.device, prop.name, prop.major, prop.minor, kPersistentCtas,
       kPersistentMacroM, kPersistentMacroN, kDynamicSmemBytes);

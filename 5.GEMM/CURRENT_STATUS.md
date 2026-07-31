@@ -1,6 +1,6 @@
 # GEMM current status
 
-Last updated: 2026-07-27
+Last updated: 2026-07-31
 
 ## 요약
 
@@ -8,6 +8,12 @@ Last updated: 2026-07-27
   [`baseline/gemm256_bf16_16k.cu`](baseline/gemm256_bf16_16k.cu)의
   **E2a N-split** 커널이다. A `256x64`를 두 consumer가 공유하고,
   B0/B1은 각각 `64x128`, 두 warp는 각각 `256x128` C를 누적한다.
+- Consumer wait 순서는 2026-07-31부터 `B0/B1 -> A`가 canonical이다.
+  동일-resource 10-process paired 측정에서 기존 `A -> B` 대비
+  `[0,1)` **+0.248% ±0.055%**, `[-8,8)` **+0.107% ±0.169%**였고,
+  clock64 trace의 250-cycle 초과 wait tail이 13/80회에서 0/80회로
+  사라졌다. 기존 순서는 generator의 `wait_a_first` ablation으로
+  재생성할 수 있다.
 - 현재까지 source-backed 성능 최선은 직전 **E7a dual-wide**이며 exact
   source는 결과 artifact와 Git 이력에 보존돼 있다. N-split을 다시
   최적화하되 같은-session E7a exact를 성능 reference로 함께 측정한다.
