@@ -29,6 +29,15 @@ VARIANTS = (
     "b1_delay80",
     "b1_delay96",
     "b1_delay128",
+    "b1_delay192",
+    "b1_delay256",
+    "b1_delay384",
+    "b1_delay448",
+    "b1_delay512",
+    "b1_delay576",
+    "b1_delay640",
+    "b1_delay768",
+    "b1_delay1024",
 )
 
 

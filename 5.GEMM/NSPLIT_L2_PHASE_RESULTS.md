@@ -231,3 +231,25 @@ barrier dependencies, A/B0 timing and consumer timing are unchanged.
 
 Definition is prepared locally; B200 measurement is pending the same Vast
 credit/access blocker as Phase 3.
+
+### Broad-delay extension
+
+The measured pipeline cadence is approximately 1050 cycles, while B1 issue
+completion leads the same-stage pipe-1 MMA by a median 1986.5 cycles.
+Therefore the focused range is extended to include half-stage and full-stage
+phase shifts:
+
+```text
+0, 64, 128, 256, 384, 512, 768, 1024 cycles
+```
+
+The coarse run uses all eight cyclic Latin rotations for each input, making
+every candidate occupy every execution position once.  Each cell remains one
+process with warmup 1 and five timed launches.  The coarse winner is then
+confirmed against `delay0` and its nearest defined neighbors; additional
+`448/576/640` variants are available for a peak near 512 cycles.
+
+This remains a per-stage B1 producer delay rather than a one-time CTA startup
+delay.  At steady state some or all of the inserted sleep may replace an
+existing downstream barrier wait, producing a phase change instead of adding
+the nominal delay directly to the stage period.
