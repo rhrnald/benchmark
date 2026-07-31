@@ -21,14 +21,16 @@ to two:
 
 | K interval | canonical 3 x K64 | alternating K64/K128 |
 |---|---:|---:|
-| TMA transactions (A/B0/B1) | 9 | 6 |
+| TMA transactions (A/B0/B1) | 9 | 7 |
 | producer commits | 3 | 2 |
 | consumer wait/commit groups per pipe | 3 | 2 |
 | shared-memory reuse distance | K192 | K192 |
 
-The K128 A transfer is represented as a rank-3 tensor with two 128-byte K
-segments so that it remains compatible with SW128 TMA swizzling. The K128 MMA
-stage executes eight K16 instructions per N128 pipe instead of four.
+The K128 A slot is composed from two K64 TMA transfers attached to one
+completion barrier. This preserves the kernel's validated SW128 A layout.
+B0 and B1 each use one K128 TMA transfer, so the long stage needs four TMA
+transactions rather than six. The K128 MMA stage executes eight K16
+instructions per N128 pipe instead of four.
 
 ## Controlled comparison
 

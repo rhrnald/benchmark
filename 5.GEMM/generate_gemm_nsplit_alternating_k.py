@@ -91,9 +91,16 @@ static constexpr int kStageBytes = StageLayout<kLongStageK>::kBytes;
     descriptor_new = """template <int StageK>
 __device__ __forceinline__ uint64_t make_stage_a_smem_desc(
     uint32_t *a_smem, int mblock, int mma) {
-  constexpr int kMBlockWords = kMmaM * StageK / 2;
-  uint32_t *matrix = a_smem + mblock * kMBlockWords;
-  return make_sw128_major_k_smem_desc(smem_ptr_u32(matrix), mma);
+  // A K128 is physically two adjacent, independently SW128-swizzled K64
+  // slabs. This preserves the audited K64 TMA/MMA layout.
+  constexpr int kMmasPerK64 = kShortStageK / kMmaK;
+  const int k64_slab = mma / kMmasPerK64;
+  const int mma_in_slab = mma - k64_slab * kMmasPerK64;
+  constexpr int kK64SlabWords = kCtaM * kShortStageK / 2;
+  constexpr int kMBlockWords = kMmaM * kShortStageK / 2;
+  uint32_t *matrix =
+      a_smem + k64_slab * kK64SlabWords + mblock * kMBlockWords;
+  return make_sw128_major_k_smem_desc(smem_ptr_u32(matrix), mma_in_slab);
 }
 
 __host__ __device__ __forceinline__ uint64_t
@@ -119,35 +126,19 @@ make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
 
     kernel_start = """__device__ __forceinline__ void issue_a_stage_tma"""
     kernel_end = """void encode_a_row_major_sw128_tma_map"""
-    kernel_new = r"""__device__ __forceinline__ void tma_load_a_3d(
-    const CUtensorMap *map, uint32_t dst_smem, uint64_t *barrier, int c0,
-    int c1, int c2) {
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 1000)
-  const uint32_t bar = smem_ptr_u32(barrier);
-  asm volatile(
-      "cp.async.bulk.tensor.3d.shared::cluster.global.mbarrier::complete_tx::"
-      "bytes [%0], [%1, {%2, %3, %4}], [%5];"
-      :
-      : "r"(dst_smem), "l"(map), "r"(c0), "r"(c1), "r"(c2), "r"(bar)
-      : "memory");
-#else
-  (void)map;
-  (void)dst_smem;
-  (void)barrier;
-  (void)c0;
-  (void)c1;
-  (void)c2;
-#endif
-}
-
-template <int StageK>
+    kernel_new = r"""template <int StageK>
 __device__ __forceinline__ void issue_a_stage_tma(
     const CUtensorMap *a_map, uint32_t *a_smem, uint64_t *ready, int tile_m,
     int k64_cursor) {
   mbarrier_expect_tx(ready, StageLayout<StageK>::kABytes);
   const int a_row = tile_m * kCtaM;
-  tma_load_a_3d(
-      a_map, smem_ptr_u32(a_smem), ready, 0, k64_cursor, a_row);
+  const int a_col_words = k64_cursor * (kShortStageK / 2);
+  tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
+  if constexpr (StageK == kLongStageK) {
+    constexpr int kK64SlabWords = kCtaM * kShortStageK / 2;
+    tma_load_2d(a_map, smem_ptr_u32(a_smem + kK64SlabWords), ready,
+                a_col_words + kShortStageK / 2, a_row);
+  }
 }
 
 template <int StageK>
@@ -434,19 +425,18 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
     CUtensorMap *map, void *base, uint64_t rows, uint64_t cols_bf16,
     int box_stage_k) {
   const cuuint64_t cols_words = cols_bf16 / 2;
-  const cuuint64_t global_dim[3] = {32, cols_words / 32, rows};
-  const cuuint64_t global_stride[2] = {
-      32 * sizeof(uint32_t), cols_words * sizeof(uint32_t)};
-  const cuuint32_t box_dim[3] = {
-      32, static_cast<cuuint32_t>(box_stage_k / kShortStageK), kCtaM};
-  const cuuint32_t elem_stride[3] = {1, 1, 1};
+  const cuuint64_t global_dim[2] = {cols_words, rows};
+  const cuuint64_t global_stride[1] = {cols_words * sizeof(uint32_t)};
+  const cuuint32_t box_dim[2] = {kShortStageK / 2, kCtaM};
+  const cuuint32_t elem_stride[2] = {1, 1};
   driver_check(cuTensorMapEncodeTiled(
-                   map, CU_TENSOR_MAP_DATA_TYPE_UINT32, 3, base, global_dim,
+                   map, CU_TENSOR_MAP_DATA_TYPE_UINT32, 2, base, global_dim,
                    global_stride, box_dim, elem_stride,
                    CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_128B,
                    CU_TENSOR_MAP_L2_PROMOTION_NONE,
                    CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
-               "cuTensorMapEncodeTiled(a_row_major_sw128_k64_subtiles)");
+               "cuTensorMapEncodeTiled(a_row_major_sw128)");
+  (void)box_stage_k;
 }
 
 """
@@ -455,7 +445,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         a_encoder_start,
         a_encoder_end,
         a_encoder_new,
-        "A rank-3 variable box",
+        "A K64 slab map",
     )
     text = text.replace(
         """void encode_b_row_major_sw128_k16_tma_map(CUtensorMap *map, void *base,
