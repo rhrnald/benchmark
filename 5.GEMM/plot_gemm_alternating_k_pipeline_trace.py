@@ -139,7 +139,8 @@ def main() -> None:
     first = min(start for start, _ in events.values())
     last = max(end for _, end in events.values())
 
-    fig, ax = plt.subplots(figsize=(17, 6.7), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(17, 7.4))
+    fig.subplots_adjust(left=0.17, right=0.99, top=0.91, bottom=0.25)
 
     for logical in logicals:
         meta = metadata[logical]
@@ -290,14 +291,15 @@ def main() -> None:
                 label="MMA commit → slot-reuse issue",
             ),
         ],
-        loc="outside lower center",
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.065),
         ncol=7,
         frameon=False,
         fontsize=8,
     )
     fig.text(
         0.5,
-        0.015,
+        0.022,
         "clock64 brackets instruction issue and blocking waits. A wait end is "
         "the first observed TMA-completion point; commit marks barrier issue, "
         "not tensor-core completion.",
