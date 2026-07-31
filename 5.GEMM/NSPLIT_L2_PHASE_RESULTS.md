@@ -298,6 +298,12 @@ No nonzero delay clears the predeclared +0.5% gate on both input
 distributions, and the apparent best delay changes from 96 to 80 cycles.
 Therefore no B1 delay is promoted to the canonical kernel.
 
+The measured baseline stage and the inferred steady-state cadence for
+0/96/512-cycle shifts are visualized in
+[`gemm_b1_phase_shift_pipeline_20260731.svg`](../results/gemm_b1_phase_shift_pipeline_20260731.svg).
+The first panel is a clock64 measurement; the shifted panels are explicitly
+marked as schematics because a second delayed-kernel trace was not collected.
+
 Full source, binaries, validation output, SASS, and all 226 raw performance
 CSVs are archived in
 [`gemm_b1_broad_df2d44e_b200_46370394.tar.gz`](../results/gemm_b1_broad_df2d44e_b200_46370394.tar.gz).
