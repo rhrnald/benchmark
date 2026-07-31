@@ -61,3 +61,14 @@ Promote only a candidate that improves both distributions by at least 0.5%
 against `direct` without correctness or code-generation regressions. Results
 below that threshold are treated as noise or an insufficient engineering
 tradeoff, even if their point estimate is positive.
+
+## Outcome
+
+All Morton/Hilbert candidates regressed and are rejected. Against the direct
+canonical decode, Hilbert variants lost 0.28--0.37% on `[0,1)` and 0.58--0.80%
+on `[-8,8)`. Against the matched identity-table code shape, their losses were
+0.51--0.60% and 0.91--1.14%, respectively. The direct static `8x16` M-fast
+order remains canonical.
+
+Full results and raw artifacts:
+[`RESULTS.md`](../results/gemm_spatial_order_b200_46383692_20260731/RESULTS.md).

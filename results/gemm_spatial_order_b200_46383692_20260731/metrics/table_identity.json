@@ -1,0 +1,158 @@
+{
+  "tasks": 4096,
+  "transitions": 3948,
+  "same_a": 0,
+  "same_b": 0,
+  "same_a_fraction": 0.0,
+  "same_b_fraction": 0.0,
+  "mean_manhattan": 30.598784194528875,
+  "max_manhattan": 58,
+  "wave_panels": [
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 19
+    },
+    {
+      "tasks": 100,
+      "unique_a": 8,
+      "unique_b": 13
+    }
+  ],
+  "variant": "table_identity",
+  "wave_count": 28,
+  "mean_unique_a": 10.0,
+  "mean_unique_b": 18.785714285714285,
+  "mean_unique_panels": 28.785714285714285,
+  "max_unique_panels": 35
+}

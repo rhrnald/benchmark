@@ -1,0 +1,158 @@
+{
+  "tasks": 4096,
+  "transitions": 3948,
+  "same_a": 100,
+  "same_b": 64,
+  "same_a_fraction": 0.025329280648429583,
+  "same_b_fraction": 0.016210739614994935,
+  "mean_manhattan": 17.99392097264438,
+  "max_manhattan": 24,
+  "wave_panels": [
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 20,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 12,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 12,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 14,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 8,
+      "unique_b": 20
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 12,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 14,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 14,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 12,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 10,
+      "unique_b": 20
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 12,
+      "unique_b": 18
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 100,
+      "unique_a": 16,
+      "unique_b": 8
+    }
+  ],
+  "variant": "hilbert_transpose",
+  "wave_count": 28,
+  "mean_unique_a": 14.714285714285714,
+  "mean_unique_b": 14.571428571428571,
+  "mean_unique_panels": 29.285714285714285,
+  "max_unique_panels": 32
+}

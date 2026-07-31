@@ -1,0 +1,158 @@
+{
+  "tasks": 4096,
+  "transitions": 3948,
+  "same_a": 0,
+  "same_b": 0,
+  "same_a_fraction": 0.0,
+  "same_b_fraction": 0.0,
+  "mean_manhattan": 20.968591691995947,
+  "max_manhattan": 76,
+  "wave_panels": [
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 22,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 20,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 20,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 22,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 18,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 16
+    },
+    {
+      "tasks": 148,
+      "unique_a": 24,
+      "unique_b": 12
+    },
+    {
+      "tasks": 148,
+      "unique_a": 20,
+      "unique_b": 14
+    },
+    {
+      "tasks": 148,
+      "unique_a": 16,
+      "unique_b": 12
+    },
+    {
+      "tasks": 100,
+      "unique_a": 16,
+      "unique_b": 8
+    }
+  ],
+  "variant": "morton",
+  "wave_count": 28,
+  "mean_unique_a": 19.5,
+  "mean_unique_b": 14.214285714285714,
+  "mean_unique_panels": 33.714285714285715,
+  "max_unique_panels": 40
+}
