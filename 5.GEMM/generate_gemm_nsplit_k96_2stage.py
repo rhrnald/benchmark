@@ -52,7 +52,19 @@ static constexpr int kASlabs = kStageK / kASlabK;""",
         """__host__ __device__ __forceinline__ uint64_t
 make_sw128_major_mn_smem_desc"""
     )
-    descriptor_new = """__device__ __forceinline__ uint64_t
+    descriptor_new = """__host__ __device__ __forceinline__ uint64_t
+make_sw64_major_k_smem_desc(uint32_t matrix_start_addr, int mma) {
+  constexpr uint64_t desc_base =
+      (static_cast<uint64_t>(1u) << 16) |
+      (static_cast<uint64_t>(32u) << 32) |
+      (static_cast<uint64_t>(1u) << 46) |
+      (static_cast<uint64_t>(4u) << 61);
+  const uint32_t addr16 = ((matrix_start_addr & ~0xFu) >> 4) +
+                          static_cast<uint32_t>(mma) * (32u >> 4);
+  return desc_base | static_cast<uint64_t>(addr16 & 0x3fffu);
+}
+
+__device__ __forceinline__ uint64_t
 make_stage_a_smem_desc(uint32_t *a_smem, int mblock, int mma) {
   constexpr int kMmasPerSlab = kASlabK / kMmaK;
   constexpr int kSlabWords = kCtaM * kASlabK / 2;
@@ -61,7 +73,7 @@ make_stage_a_smem_desc(uint32_t *a_smem, int mblock, int mma) {
   const int mma_in_slab = mma - slab * kMmasPerSlab;
   uint32_t *matrix =
       a_smem + slab * kSlabWords + mblock * kMBlockWords;
-  return make_sw128_major_k_smem_desc(
+  return make_sw64_major_k_smem_desc(
       smem_ptr_u32(matrix), mma_in_slab);
 }
 
@@ -146,6 +158,18 @@ issue_b_pipe_stage_tma"""
         """  const cuuint32_t box_dim[2] = {kStageK / 2, kCtaM};""",
         """  const cuuint32_t box_dim[2] = {kASlabK / 2, kCtaM};""",
         "A K32 tensor map",
+    )
+    text = replace_once(
+        text,
+        """                   CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_128B,
+                   CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                   CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(a_row_major_sw128)");""",
+        """                   CU_TENSOR_MAP_INTERLEAVE_NONE, CU_TENSOR_MAP_SWIZZLE_64B,
+                   CU_TENSOR_MAP_L2_PROMOTION_NONE,
+                   CU_TENSOR_MAP_FLOAT_OOB_FILL_NONE),
+               "cuTensorMapEncodeTiled(a_row_major_sw64_k32)");""",
+        "A SW64 tensor map",
     )
 
     text = replace_once(

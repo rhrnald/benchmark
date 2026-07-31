@@ -17,7 +17,7 @@ slices times two M128 blocks.
 ## TMA representation
 
 A 192-byte row is wider than one SW128 span. A is therefore stored as three
-independently SW128-swizzled `256 x 32` slabs with three ready barriers.
+independently SW64-swizzled `256 x 32` slabs with three ready barriers.
 B0 and B1 each use one K96 TMA transaction.
 
 ## K tail
