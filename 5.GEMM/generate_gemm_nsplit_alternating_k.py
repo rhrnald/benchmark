@@ -164,8 +164,8 @@ template <int StageK>
 __device__ __forceinline__ void consume_pipe_stage(
     uint32_t tmem_base, uint32_t idesc, uint32_t *a_smem,
     uint32_t *b_smem, uint64_t *a_ready, uint64_t *b_ready,
-    uint64_t *a_ready_long, uint64_t *mma_done, uint64_t *mma_done_long,
-    uint32_t tma_phase, int stage, int pipe, int k64_cursor) {
+    uint64_t *a_ready_long, uint64_t *mma_done, uint32_t tma_phase,
+    int stage, int pipe, int k64_cursor) {
   mbarrier_wait(b_ready, tma_phase);
   mbarrier_wait(a_ready, tma_phase);
   if (stage == 1)
@@ -183,18 +183,8 @@ __device__ __forceinline__ void consume_pipe_stage(
       tcgen05_mma_bf16_ss(tmem_base + c_tile * kTmemTileStride, a_desc,
                           b_desc, idesc, input_d);
     }
-    if constexpr (StageK == kLongStageK) {
-      if (kk == kShortStageK / kMmaK - 1)
-        tcgen05_commit(mma_done);
-    }
   }
-  if constexpr (StageK == kLongStageK) {
-    tcgen05_commit(mma_done_long);
-  } else {
-    tcgen05_commit(mma_done);
-    if (stage == 1)
-      tcgen05_commit(mma_done_long);
-  }
+  tcgen05_commit(mma_done);
 }
 
 __device__ __forceinline__ uint32_t *alternating_stage_smem(
@@ -230,7 +220,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   __shared__ uint64_t a_ready_long;
   __shared__ uint64_t b_ready[kPipes][kStages];
   __shared__ uint64_t mma_done[kPipes][kStages];
-  __shared__ uint64_t mma_done_long[kPipes];
   __shared__ uint32_t tmem_smem;
   __shared__ uint32_t tmem_base_shared;
 
@@ -248,7 +237,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 #pragma unroll
       for (int s = 0; s < kStages; ++s)
         mbarrier_init(&mma_done[p][s], 1);
-      mbarrier_init(&mma_done_long[p], 1);
     }
     asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
   }
@@ -324,8 +312,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
 #pragma unroll
           for (int p = 0; p < kPipes; ++p) {
             mbarrier_wait(&mma_done[p][stage], reuse_phase);
-            if (stage == 1)
-              mbarrier_wait(&mma_done_long[p], reuse_phase);
           }
         }
         if (use_k128) {
@@ -364,8 +350,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           const uint32_t reuse_phase = static_cast<uint32_t>(
               ((stage_epoch - kStages) / kStages) & 1);
           mbarrier_wait(&mma_done[1][stage], reuse_phase);
-          if (stage == 1)
-            mbarrier_wait(&mma_done_long[1], reuse_phase);
         }
         if (use_k128) {
           uint32_t *b_smem =
@@ -408,7 +392,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           consume_pipe_stage<kLongStageK>(
               tmem_base, idesc, a_smem, b_smem, &a_ready[stage],
               &b_ready[pipe][stage], &a_ready_long, &mma_done[pipe][stage],
-              &mma_done_long[pipe], tma_phase, stage, pipe, k64_cursor);
+              tma_phase, stage, pipe, k64_cursor);
           k64_cursor += 2;
         } else {
           uint32_t *b_smem =
@@ -420,7 +404,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           consume_pipe_stage<kShortStageK>(
               tmem_base, idesc, a_smem, b_smem, &a_ready[stage],
               &b_ready[pipe][stage], &a_ready_long, &mma_done[pipe][stage],
-              &mma_done_long[pipe], tma_phase, stage, pipe, k64_cursor);
+              tma_phase, stage, pipe, k64_cursor);
           ++k64_cursor;
         }
         last_stage_epoch = stage_epoch;
@@ -436,8 +420,6 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           const uint32_t last_phase = static_cast<uint32_t>(
               (last_epoch_for_slot / kStages) & 1);
           mbarrier_wait(&mma_done[pipe][s], last_phase);
-          if (s == 1)
-            mbarrier_wait(&mma_done_long[pipe], last_phase);
         }
       }
     }

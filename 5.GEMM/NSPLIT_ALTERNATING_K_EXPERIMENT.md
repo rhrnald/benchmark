@@ -35,10 +35,6 @@ B0 and B1 each use one K128 TMA transfer, so the long stage needs four TMA
 transactions rather than six. The K128 MMA stage executes eight K16
 instructions per N128 pipe instead of four.
 
-Because that produces 16 `tcgen05.mma` issues across the two M128 blocks, the
-K128 stage uses two eight-issue completion groups. This matches the canonical
-K64 group's issue depth while retaining one logical K128 buffer lifetime.
-
 ## Controlled comparison
 
 - GPU: one NVIDIA B200.
