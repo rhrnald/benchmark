@@ -229,9 +229,6 @@ range moves B1 from just before A through the A-to-B0 issue window and slightly
 beyond it.  `delay0` is the matched instruction-site control.  Addresses,
 barrier dependencies, A/B0 timing and consumer timing are unchanged.
 
-Definition is prepared locally; B200 measurement is pending the same Vast
-credit/access blocker as Phase 3.
-
 ### Broad-delay extension
 
 The measured pipeline cadence is approximately 1050 cycles, while B1 issue
@@ -253,3 +250,54 @@ This remains a per-stage B1 producer delay rather than a one-time CTA startup
 delay.  At steady state some or all of the inserted sleep may replace an
 existing downstream barrier wait, producing a phase change instead of adding
 the nominal delay directly to the stage period.
+
+### B200 result (instance 46370394)
+
+The broad sweep used eight cyclic Latin passes per input.  Values below are
+means of eight independent W1/I5 processes.  Confidence intervals are paired
+95% intervals against the matched `delay0` control.
+
+| nominal B1 delay | `[0,1)` TFLOP/s | paired vs delay0 | `[-8,8)` TFLOP/s | paired vs delay0 |
+|---:|---:|---:|---:|---:|
+| 0 | 1856.453 | reference | 1645.838 | reference |
+| 64 | **1859.687** | **+0.174% ±0.071%** | **1647.403** | **+0.096% ±0.384%** |
+| 128 | 1847.676 | -0.473% ±0.093% | 1645.448 | -0.023% ±0.277% |
+| 256 | 1819.197 | -2.007% ±0.085% | 1640.198 | -0.342% ±0.296% |
+| 384 | 1819.306 | -2.001% ±0.131% | 1642.224 | -0.219% ±0.298% |
+| 512 | 1170.017 | -36.976% ±0.037% | 1169.932 | -28.915% ±0.209% |
+| 768 | 1170.004 | -36.976% ±0.034% | 1169.899 | -28.917% ±0.207% |
+| 1024 | 592.099 | -68.106% ±0.019% | 592.088 | -64.025% ±0.106% |
+
+The 500-cycle hypothesis is rejected.  Since the sleep is inserted before
+every unrolled B1 TMA issue, 512 cycles is paid repeatedly rather than once per
+CTA.  The identical 512/768 throughput plateau also shows that nominal
+`NANOSLEEP` immediates do not translate linearly into a useful B1 phase once
+the producer falls off the existing overlap window.
+
+The follow-up sweep used seven cyclic Latin passes and included the untouched
+baseline, the zero-delay instruction-site control, and delays
+48/64/80/96/128:
+
+| variant | `[0,1)` TFLOP/s | paired vs delay0 | `[-8,8)` TFLOP/s | paired vs delay0 |
+|---|---:|---:|---:|---:|
+| untouched baseline | 1849.522 | -0.367% ±0.147% | 1643.505 | -0.228% ±0.154% |
+| delay 0 | 1856.335 | reference | 1647.265 | reference |
+| delay 48 | 1857.672 | +0.072% ±0.118% | 1647.299 | +0.002% ±0.162% |
+| delay 64 | 1859.738 | +0.183% ±0.151% | 1647.590 | +0.020% ±0.278% |
+| delay 80 | 1859.283 | **+0.159% ±0.072%** | **1650.574** | **+0.201% ±0.256%** |
+| delay 96 | **1860.958** | **+0.249% ±0.188%** | 1648.261 | +0.061% ±0.221% |
+| delay 128 | 1848.244 | -0.436% ±0.058% | 1648.374 | +0.068% ±0.242% |
+
+SASS contains twenty injected `NANOSLEEP` instructions: `RZ` for delay 0 and
+the requested immediate for nonzero delays.  Thus even `delay0` is not
+instruction-identical to the untouched baseline; its roughly 0.2--0.4%
+advantage may be a warp-yield/code-layout effect and must not be attributed to
+a nonzero phase shift.
+
+No nonzero delay clears the predeclared +0.5% gate on both input
+distributions, and the apparent best delay changes from 96 to 80 cycles.
+Therefore no B1 delay is promoted to the canonical kernel.
+
+Full source, binaries, validation output, SASS, and all 226 raw performance
+CSVs are archived in
+[`gemm_b1_broad_df2d44e_b200_46370394.tar.gz`](../results/gemm_b1_broad_df2d44e_b200_46370394.tar.gz).
