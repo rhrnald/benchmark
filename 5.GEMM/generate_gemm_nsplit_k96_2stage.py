@@ -213,6 +213,14 @@ issue_b_pipe_stage_tma"""
         """"ablation=k96_2stage phase=0/0 consumer_wait=b_then_a c_store=tma_fp32_sw128 l2_promotion=none """,
         "banner",
     )
+    text = replace_once(
+        text,
+        """"device=%d name=\\"%s\\" cc=%d.%d cta=256x256 stage_k=64 "
+      "stages=3 pipes=2 persistent_ctas=%d""",
+        """"device=%d name=\\"%s\\" cc=%d.%d cta=256x256 stage_k=96 "
+      "stages=2 pipes=2 persistent_ctas=%d""",
+        "banner stage shape",
+    )
     return text
 
 

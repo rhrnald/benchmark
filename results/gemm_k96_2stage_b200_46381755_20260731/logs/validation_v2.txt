@@ -1,0 +1,8 @@
+RUN:size=256:pattern=pattern
+validation size=256 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+RUN:size=256:pattern=ones
+validation size=256 pattern=ones status=ok max_abs=0 max_rel=0 bad=0
+RUN:size=512:pattern=pattern
+validation size=512 pattern=pattern status=ok max_abs=0 max_rel=0 bad=0
+RUN:size=512:pattern=ones
+validation size=512 pattern=ones status=ok max_abs=0 max_rel=0 bad=0

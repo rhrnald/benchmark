@@ -1,0 +1,12 @@
+RUN:size=256:pattern=pattern
+validation size=256 pattern=pattern status=fail max_abs=2.78503 max_rel=7312 bad=53248
+first_bad row=0 col=0 got=-1.54239 ref=-1.66983
+RUN:size=256:pattern=ones
+validation size=256 pattern=ones status=fail max_abs=32 max_rel=0.125 bad=15872
+first_bad row=192 col=0 got=224 ref=256
+RUN:size=512:pattern=pattern
+validation size=512 pattern=pattern status=fail max_abs=5.53198 max_rel=2440.87 bad=178577
+first_bad row=0 col=0 got=-1.91165 ref=-3.34502
+RUN:size=512:pattern=ones
+validation size=512 pattern=ones status=fail max_abs=32 max_rel=0.0625 bad=65536
+first_bad row=192 col=0 got=480 ref=512

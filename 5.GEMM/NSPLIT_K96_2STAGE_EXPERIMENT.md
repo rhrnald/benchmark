@@ -34,3 +34,10 @@ K=512 exercises K64 and K32 tails respectively.
 - One warmup and five timed iterations per process.
 - Five AB/BA-interleaved processes against the canonical 3xK64 kernel.
 - Preserve compiler resources and SASS in the result archive.
+
+## Outcome
+
+The implementation passed bit-exact full-C validation. At 16K it reached
+1568.677 TFLOP/s on `[0,1)` and 1429.819 TFLOP/s on `[-8,8)`, corresponding
+to 88.52% and 91.34% of the canonical 3xK64 kernel measured in the same
+interleaved run. The canonical kernel remains unchanged.
