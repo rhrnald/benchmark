@@ -54,7 +54,11 @@ nvidia-smi -q >"$out_dir/logs/nvidia_smi_q_before.txt"
     "$out_dir"/source/ours_*.cu
   sha256sum "$out_dir"/bin/*
 } | tee "$out_dir/SHA256SUMS"
-git -C "$repo_dir" rev-parse HEAD | tee "$out_dir/definition_commit.txt"
+if [[ -n "${DEFINITION_COMMIT:-}" ]]; then
+  printf '%s\n' "$DEFINITION_COMMIT" | tee "$out_dir/definition_commit.txt"
+else
+  git -C "$repo_dir" rev-parse HEAD | tee "$out_dir/definition_commit.txt"
+fi
 
 for size in 8192 16384 32768; do
   for pattern in pattern ones; do
