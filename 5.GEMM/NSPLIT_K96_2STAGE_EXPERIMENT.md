@@ -41,3 +41,7 @@ The implementation passed bit-exact full-C validation. At 16K it reached
 1568.677 TFLOP/s on `[0,1)` and 1429.819 TFLOP/s on `[-8,8)`, corresponding
 to 88.52% and 91.34% of the canonical 3xK64 kernel measured in the same
 interleaved run. The canonical kernel remains unchanged.
+
+The measured `clock64` pipeline comparison against the canonical three-stage
+K64 implementation is in
+[`RESULTS.md`](../results/gemm_k64_k96_pipeline_trace_b200_46382599_20260731/RESULTS.md).

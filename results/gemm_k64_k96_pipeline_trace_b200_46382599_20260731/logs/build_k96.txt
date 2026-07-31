@@ -1,0 +1,45 @@
+gemm_k96_trace.cu(788): warning #177-D: variable "ntile" was declared but never referenced
+      const int ntile = ntile_count;
+                ^
+          detected during instantiation of "void <unnamed>::set_one_gemm_kernel_attribute<KTiles,MTiles,NTiles>() [with KTiles=171, MTiles=64, NTiles=64]" at line 1217
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+gemm_k96_trace.cu(69): warning #177-D: variable "<unnamed>::kAStageBytes" was declared but never referenced
+  static constexpr int kAStageBytes =
+                       ^
+
+gemm_k96_trace.cu(92): warning #177-D: variable "<unnamed>::kHalfTileWords" was declared but never referenced
+  static constexpr int kHalfTileWords = kMmaM * kStageK / 2;
+                       ^
+
+gemm_k96_trace.cu(224): warning #177-D: function "<unnamed>::make_sw128_major_k_smem_desc" was declared but never referenced
+  make_sw128_major_k_smem_desc(uint32_t matrix_start_addr, int mma) {
+  ^
+
+ptxas info    : 2320 bytes gmem
+ptxas info    : Compiling entry function '_ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023gemm256_bf16_16k_kernelILi3ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023gemm256_bf16_16k_kernelILi3ELi1ELi1EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 154 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 48.726 ms
+ptxas info    : Compiling entry function '_ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023gemm256_bf16_16k_kernelILi6ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023gemm256_bf16_16k_kernelILi6ELi2ELi2EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 184 registers, used 1 barriers, 128 bytes smem
+ptxas info    : Compile time = 60.685 ms
+ptxas info    : Compiling entry function '_ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023gemm256_bf16_16k_kernelILi171ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj' for 'sm_100a'
+ptxas info    : Function properties for _ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023gemm256_bf16_16k_kernelILi171ELi64ELi64EEEv14CUtensorMap_stS1_S1_Pj
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 190 registers, used 1 barriers, 2448 bytes smem
+ptxas info    : Compile time = 184.658 ms
+ptxas info    : Compiling entry function '_ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef022init_random_bf16_wordsEPjmjff' for 'sm_100a'
+ptxas info    : Function properties for _ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef022init_random_bf16_wordsEPjmjff
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 12 registers, used 0 barriers
+ptxas info    : Compile time = 2.915 ms
+ptxas info    : Compiling entry function '_ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023init_formula_bf16_wordsEPjmmf' for 'sm_100a'
+ptxas info    : Function properties for _ZN50_GLOBAL__N__e4235c9b_17_gemm_k96_trace_cu_a2175ef023init_formula_bf16_wordsEPjmmf
+    0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 22 registers, used 0 barriers
+ptxas info    : Compile time = 3.667 ms

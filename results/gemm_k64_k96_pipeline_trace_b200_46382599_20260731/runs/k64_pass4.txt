@@ -1,0 +1,3 @@
+device=0 name="NVIDIA B200" cc=10.0 cta=256x256 stage_k=64 stages=3 pipes=2 persistent_ctas=148 scheduler=static_8x16_mfast overhead=fixed_sink trace=clock64_nsplit wait_order=b-first c_store=tma_fp32_sw128 l2_promotion=none dynamic_smem=197632
+size=16384 mtile=64 ntile=64 ktiles=256 ctas=4096 launch_ctas=148 input_init=random event_ms=5.051616 wall_ms=5.065242 event_TFLOPS=1741.243 wall_TFLOPS=1736.559 checksum=00000000
+pipeline_trace=nsplit_pipeline_trace.csv block=0 sm=142 tile_iter=8 tile=(16,20)
