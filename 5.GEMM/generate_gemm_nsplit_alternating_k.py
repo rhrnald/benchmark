@@ -128,16 +128,25 @@ make_sw128_major_mn_smem_desc(uint32_t matrix_start_addr, int mma) {
     kernel_end = """void encode_a_row_major_sw128_tma_map"""
     kernel_new = r"""template <int StageK>
 __device__ __forceinline__ void issue_a_stage_tma(
-    const CUtensorMap *a_map, uint32_t *a_smem, uint64_t *ready, int tile_m,
-    int k64_cursor) {
-  mbarrier_expect_tx(ready, StageLayout<StageK>::kABytes);
+    const CUtensorMap *a_map, uint32_t *a_smem, uint64_t *ready,
+    uint64_t *ready_long, int stage, int tile_m, int k64_cursor) {
   const int a_row = tile_m * kCtaM;
   const int a_col_words = k64_cursor * (kShortStageK / 2);
+  constexpr int kK64SlabBytes = kCtaM * kShortStageK * sizeof(uint16_t);
+  mbarrier_expect_tx(ready, kK64SlabBytes);
   tma_load_2d(a_map, smem_ptr_u32(a_smem), ready, a_col_words, a_row);
   if constexpr (StageK == kLongStageK) {
     constexpr int kK64SlabWords = kCtaM * kShortStageK / 2;
-    tma_load_2d(a_map, smem_ptr_u32(a_smem + kK64SlabWords), ready,
+    mbarrier_expect_tx(ready_long, kK64SlabBytes);
+    tma_load_2d(a_map, smem_ptr_u32(a_smem + kK64SlabWords), ready_long,
                 a_col_words + kShortStageK / 2, a_row);
+  } else if (stage == 1) {
+    // Keep the long-slot barrier epoch aligned for a K64 tail. The duplicate
+    // slab is unused by MMA.
+    constexpr int kK64SlabWords = kCtaM * kShortStageK / 2;
+    mbarrier_expect_tx(ready_long, kK64SlabBytes);
+    tma_load_2d(a_map, smem_ptr_u32(a_smem + kK64SlabWords), ready_long,
+                a_col_words, a_row);
   }
 }
 
@@ -155,9 +164,12 @@ template <int StageK>
 __device__ __forceinline__ void consume_pipe_stage(
     uint32_t tmem_base, uint32_t idesc, uint32_t *a_smem,
     uint32_t *b_smem, uint64_t *a_ready, uint64_t *b_ready,
-    uint64_t *mma_done, uint32_t tma_phase, int pipe, int k64_cursor) {
+    uint64_t *a_ready_long, uint64_t *mma_done, uint32_t tma_phase,
+    int stage, int pipe, int k64_cursor) {
   mbarrier_wait(b_ready, tma_phase);
   mbarrier_wait(a_ready, tma_phase);
+  if (stage == 1)
+    mbarrier_wait(a_ready_long, tma_phase);
 #pragma unroll
   for (int kk = 0; kk < StageK / kMmaK; ++kk) {
     const uint64_t b_desc =
@@ -205,6 +217,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
   uint32_t *c_store_smem = smem;
 
   __shared__ uint64_t a_ready[kStages];
+  __shared__ uint64_t a_ready_long;
   __shared__ uint64_t b_ready[kPipes][kStages];
   __shared__ uint64_t mma_done[kPipes][kStages];
   __shared__ uint32_t tmem_smem;
@@ -218,6 +231,7 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
       for (int p = 0; p < kPipes; ++p)
         mbarrier_init(&b_ready[p][s], 1);
     }
+    mbarrier_init(&a_ready_long, 1);
 #pragma unroll
     for (int p = 0; p < kPipes; ++p) {
 #pragma unroll
@@ -296,22 +310,27 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           const uint32_t reuse_phase =
               static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1);
 #pragma unroll
-          for (int p = 0; p < kPipes; ++p)
+          for (int p = 0; p < kPipes; ++p) {
             mbarrier_wait(&mma_done[p][stage], reuse_phase);
+          }
         }
         if (use_k128) {
           uint32_t *b_smem =
               stage_smem + StageLayout<kLongStageK>::kAWords;
           issue_a_stage_tma<kLongStageK>(
-              &a128_map, a_smem, &a_ready[stage], tile_m, k64_cursor);
+              &a128_map, a_smem, &a_ready[stage], &a_ready_long, stage, tile_m,
+              k64_cursor);
           issue_b_pipe_stage_tma<kLongStageK>(
               &b128_map, b_smem, &b_ready[0][stage], tile_n, k64_cursor, 0);
           k64_cursor += 2;
         } else {
           uint32_t *b_smem =
-              stage_smem + StageLayout<kShortStageK>::kAWords;
+              stage_smem +
+              (stage == 1 ? StageLayout<kLongStageK>::kAWords
+                          : StageLayout<kShortStageK>::kAWords);
           issue_a_stage_tma<kShortStageK>(
-              &a64_map, a_smem, &a_ready[stage], tile_m, k64_cursor);
+              &a64_map, a_smem, &a_ready[stage], &a_ready_long, stage, tile_m,
+              k64_cursor);
           issue_b_pipe_stage_tma<kShortStageK>(
               &b64_map, b_smem, &b_ready[0][stage], tile_n, k64_cursor, 0);
           ++k64_cursor;
@@ -328,9 +347,9 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
         const bool use_k128 = stage == 1 && remaining >= 2;
         uint32_t *stage_smem = alternating_stage_smem(smem, stage);
         if (stage_epoch >= kStages) {
-          mbarrier_wait(
-              &mma_done[1][stage],
-              static_cast<uint32_t>(((stage_epoch - kStages) / kStages) & 1));
+          const uint32_t reuse_phase = static_cast<uint32_t>(
+              ((stage_epoch - kStages) / kStages) & 1);
+          mbarrier_wait(&mma_done[1][stage], reuse_phase);
         }
         if (use_k128) {
           uint32_t *b_smem =
@@ -341,8 +360,11 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
           k64_cursor += 2;
         } else {
           uint32_t *b_smem =
-              stage_smem + StageLayout<kShortStageK>::kAWords +
-              StageLayout<kShortStageK>::kBPipeWords;
+              stage_smem +
+              (stage == 1 ? StageLayout<kLongStageK>::kAWords +
+                                StageLayout<kLongStageK>::kBPipeWords
+                          : StageLayout<kShortStageK>::kAWords +
+                                StageLayout<kShortStageK>::kBPipeWords);
           issue_b_pipe_stage_tma<kShortStageK>(
               &b64_map, b_smem, &b_ready[1][stage], tile_n, k64_cursor, 1);
           ++k64_cursor;
@@ -369,25 +391,37 @@ __global__ __launch_bounds__(kThreads, 1) void gemm256_bf16_16k_kernel(
               pipe * StageLayout<kLongStageK>::kBPipeWords;
           consume_pipe_stage<kLongStageK>(
               tmem_base, idesc, a_smem, b_smem, &a_ready[stage],
-              &b_ready[pipe][stage], &mma_done[pipe][stage], tma_phase, pipe,
-              k64_cursor);
+              &b_ready[pipe][stage], &a_ready_long, &mma_done[pipe][stage],
+              tma_phase, stage, pipe, k64_cursor);
           k64_cursor += 2;
         } else {
           uint32_t *b_smem =
-              stage_smem + StageLayout<kShortStageK>::kAWords +
-              pipe * StageLayout<kShortStageK>::kBPipeWords;
+              stage_smem +
+              (stage == 1 ? StageLayout<kLongStageK>::kAWords +
+                                pipe * StageLayout<kLongStageK>::kBPipeWords
+                          : StageLayout<kShortStageK>::kAWords +
+                                pipe * StageLayout<kShortStageK>::kBPipeWords);
           consume_pipe_stage<kShortStageK>(
               tmem_base, idesc, a_smem, b_smem, &a_ready[stage],
-              &b_ready[pipe][stage], &mma_done[pipe][stage], tma_phase, pipe,
-              k64_cursor);
+              &b_ready[pipe][stage], &a_ready_long, &mma_done[pipe][stage],
+              tma_phase, stage, pipe, k64_cursor);
           ++k64_cursor;
         }
         last_stage_epoch = stage_epoch;
       }
-      const int last_stage = last_stage_epoch & 1;
-      const uint32_t last_phase =
-          static_cast<uint32_t>((last_stage_epoch / kStages) & 1);
-      mbarrier_wait(&mma_done[pipe][last_stage], last_phase);
+      // A K128 group contains twice as many MMA issues. Completion groups from
+      // the two slots are not assumed to retire in slot order, so make both
+      // slots safe before the epilogue reuses the mainloop SMEM.
+#pragma unroll
+      for (int s = 0; s < kStages; ++s) {
+        const int delta = (last_stage_epoch - s) & 1;
+        const int last_epoch_for_slot = last_stage_epoch - delta;
+        if (last_epoch_for_slot >= stage_epoch_base) {
+          const uint32_t last_phase = static_cast<uint32_t>(
+              (last_epoch_for_slot / kStages) & 1);
+          mbarrier_wait(&mma_done[pipe][s], last_phase);
+        }
+      }
     }
     __syncthreads();
 
