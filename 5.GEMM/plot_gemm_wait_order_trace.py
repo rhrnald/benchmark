@@ -11,6 +11,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 
@@ -24,6 +25,7 @@ COLORS = {
     "mma0": "#2563EB",
     "mma1": "#7C3AED",
     "commit": "#EC4899",
+    "reuse_dep": "#DC2626",
 }
 LANES = {
     "W0 · A + B0 producer": 3,
@@ -123,6 +125,63 @@ def draw_trace(
             bar(ax, y, m0 - first, m1 - first, mma_color, f"MMA {stage}")
             bar(ax, y, c0 - first, c1 - first, COLORS["commit"])
 
+    # Representative stage-3 dependencies. Stage 3 reuses the three-stage
+    # ring storage last consumed by stage 0.
+    dep_kt = kts.start + 3
+    prev_kt = dep_kt - 3
+    a_end = trace[(dep_kt, "p0_issue_a")][1] - first
+    b0_end = trace[(dep_kt, "p0_issue_b0")][1] - first
+    b1_end = trace[(dep_kt, "p1_issue_b1")][1] - first
+    w2_start = trace[(dep_kt, "c2_mma")][0] - first
+    w3_start = trace[(dep_kt, "c3_mma")][0] - first
+
+    # TMA-ready dependencies into the two MMA consumers.
+    for start, start_y, end, end_y, color, radius in (
+        (a_end, 3.28, w2_start, 1.30, COLORS["a"], 0.10),
+        (b0_end, 3.28, w2_start, 1.30, COLORS["b0"], -0.08),
+        (a_end, 2.70, w3_start, 0.30, COLORS["a"], 0.18),
+        (b1_end, 2.30, w3_start, 0.30, COLORS["b1"], -0.08),
+    ):
+        ax.annotate(
+            "",
+            xy=(end, end_y),
+            xytext=(start, start_y),
+            arrowprops={
+                "arrowstyle": "->",
+                "color": color,
+                "linewidth": 1.15,
+                "linestyle": "--",
+                "connectionstyle": f"arc3,rad={radius}",
+            },
+            zorder=5,
+        )
+
+    # SMEM ring-reuse dependencies. W0 must observe both stage-0 MMA barriers
+    # before overwriting A/B0 with stage 3; W1 needs only the W3 barrier before
+    # overwriting B1. tcgen05 commit arms the completion barrier, so these
+    # arrows describe the dependency rather than an exact completion cycle.
+    w2_commit = trace[(prev_kt, "c2_commit")][1] - first
+    w3_commit = trace[(prev_kt, "c3_commit")][1] - first
+    a3_start = trace[(dep_kt, "p0_issue_a")][0] - first
+    b13_start = trace[(dep_kt, "p1_issue_b1")][0] - first
+    for start, start_y, end, end_y, radius in (
+        (w2_commit, 1.30, a3_start, 2.70, -0.13),
+        (w3_commit, 0.30, a3_start, 2.70, 0.13),
+        (w3_commit, 0.30, b13_start, 1.70, -0.16),
+    ):
+        ax.annotate(
+            "",
+            xy=(end, end_y),
+            xytext=(start, start_y),
+            arrowprops={
+                "arrowstyle": "->",
+                "color": COLORS["reuse_dep"],
+                "linewidth": 1.2,
+                "connectionstyle": f"arc3,rad={radius}",
+            },
+            zorder=5,
+        )
+
     ax.set_yticks(list(LANES.values()), list(LANES.keys()))
     ax.set_ylim(-0.55, 3.55)
     ax.grid(axis="x", color="#E2E8F0", linewidth=0.7)
@@ -187,9 +246,22 @@ def main() -> None:
             Patch(facecolor=COLORS["mma0"], label="W2 MMA"),
             Patch(facecolor=COLORS["mma1"], label="W3 MMA"),
             Patch(facecolor=COLORS["commit"], label="MMA commit"),
+            Line2D(
+                [0],
+                [0],
+                color="#0F766E",
+                linestyle="--",
+                label="TMA ready → MMA",
+            ),
+            Line2D(
+                [0],
+                [0],
+                color=COLORS["reuse_dep"],
+                label="MMA done → stage-reuse TMA",
+            ),
         ],
         loc="outside lower center",
-        ncol=9,
+        ncol=6,
         frameon=False,
         fontsize=8,
     )

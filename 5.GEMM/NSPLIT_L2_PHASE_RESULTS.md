@@ -363,7 +363,13 @@ The actual pass-4 A-first and B-first traces are plotted on the same scale in
 [`gemm_wait_order_trace_b200_46374246.svg`](../results/gemm_wait_order_trace_b200_46374246.svg).
 Consumer A and B waits use separate colors, making the A-first W3 tail and the
 stable B-first sequence directly visible.  No timing in this figure is
-inferred or throughput-derived.
+inferred or throughput-derived.  Dashed arrows show representative stage-3
+TMA-ready dependencies into MMA.  Red arrows show the three-stage ring reuse:
+W0 cannot overwrite stage 0 with stage-3 A/B0 until both W2 and W3 completion
+barriers arrive, while W1 B1 waits only for W3.  The red arrow starts at the
+observed `tcgen05.commit` issue; it represents the asynchronous completion
+barrier dependency rather than claiming that commit issue is the exact MMA
+completion timestamp.
 
 `wait_b_first` remains an isolated candidate rather than the canonical
 default until its sub-0.3% gain is accepted as worthwhile.
