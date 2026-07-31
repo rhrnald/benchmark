@@ -23,6 +23,7 @@ VARIANTS = (
     "issue_b0_first",
     "early_b0",
     "stage_ring_state",
+    "wait_b_first",
     "b1_delay0",
     "b1_delay48",
     "b1_delay64",
@@ -418,6 +419,18 @@ def apply_b1_delay(text: str, cycles: int) -> str:
     return replace_once(text, issue_anchor, issue_new, "focused B1 delay")
 
 
+def apply_wait_b_first(text: str) -> str:
+    wait_anchor = """        mbarrier_wait(&a_ready[stage], tma_phase);
+        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+"""
+    wait_new = """        // B is half the A transfer size. Probe it first so the second
+        // wait reveals whether A, rather than B, is the consumer dependency.
+        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+        mbarrier_wait(&a_ready[stage], tma_phase);
+"""
+    return replace_once(text, wait_anchor, wait_new, "B-first consumer wait")
+
+
 def set_banner(text: str, variant: str) -> str:
     anchor = (
         '"stages=3 pipes=2 persistent_ctas=%d scheduler=static_%dx%d_mfast '
@@ -446,6 +459,8 @@ def generate(source: str, variant: str) -> tuple[str, dict[str, object] | None]:
         text = apply_early_b0(text)
     elif variant == "stage_ring_state":
         text = apply_stage_ring_state(text)
+    elif variant == "wait_b_first":
+        text = apply_wait_b_first(text)
     elif variant.startswith("b1_delay"):
         text = apply_b1_delay(text, int(variant.removeprefix("b1_delay")))
     else:

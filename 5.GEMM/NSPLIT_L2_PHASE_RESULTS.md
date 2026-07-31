@@ -307,3 +307,24 @@ marked as schematics because a second delayed-kernel trace was not collected.
 Full source, binaries, validation output, SASS, and all 226 raw performance
 CSVs are archived in
 [`gemm_b1_broad_df2d44e_b200_46370394.tar.gz`](../results/gemm_b1_broad_df2d44e_b200_46370394.tar.gz).
+
+## Consumer wait-order probe
+
+The canonical consumer order is `wait A -> wait B`.  In the baseline trace,
+W2's A wait took 104--275 cycles and W3's A wait took 104--108 cycles, while
+the following B0/B1 waits were always at their 76--81-cycle observed floor.
+This is consistent with B already being ready when A completes, but sequential
+polling cannot reveal the exact completion order.
+
+The audited `wait_b_first` variant reverses only these two waits for both
+consumer warps:
+
+```text
+W2: wait B0 -> wait A -> MMA
+W3: wait B1 -> wait A -> MMA
+```
+
+Addresses, producer issue order, barriers, MMA order, scheduler, and epilogue
+are unchanged.  Performance uses balanced independent W1/I5 processes for
+both input distributions.  A dedicated `clock64` trace records the B-first
+and following A wait intervals separately.

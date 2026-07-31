@@ -25,7 +25,7 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
     return text.replace(old, new, 1)
 
 
-def generate(source: str) -> str:
+def generate(source: str, wait_order: str) -> str:
     text = source
     constants_anchor = """static constexpr int kTmemTileStride = 128;
 
@@ -257,7 +257,8 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void *ptr) {"""
 
 #pragma unroll
 """
-    consumer_wait_new = """        const bool trace_core =
+    if wait_order == "a-first":
+        consumer_wait_new = """        const bool trace_core =
             trace_tile && kt >= kTraceKStart &&
             kt < kTraceKStart + kTraceCoreKCount;
         const int event_base =
@@ -273,6 +274,26 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void *ptr) {"""
 
 #pragma unroll
 """
+        mma_start_name = "wait_b_end"
+    else:
+        consumer_wait_new = """        const bool trace_core =
+            trace_tile && kt >= kTraceKStart &&
+            kt < kTraceKStart + kTraceCoreKCount;
+        const int event_base =
+            pipe == 0 ? kTraceC2WaitA : kTraceC3WaitA;
+        const unsigned long long wait_b_start =
+            trace_core ? trace_clock64() : 0;
+        mbarrier_wait(&b_ready[pipe][stage], tma_phase);
+        const unsigned long long wait_b_end =
+            trace_core ? trace_clock64() : 0;
+        const unsigned long long wait_a_start = wait_b_end;
+        mbarrier_wait(&a_ready[stage], tma_phase);
+        const unsigned long long wait_a_end =
+            trace_core ? trace_clock64() : 0;
+
+#pragma unroll
+"""
+        mma_start_name = "wait_a_end"
     text = replace_once(
         text, consumer_wait_anchor, consumer_wait_new, "consumer wait trace"
     )
@@ -280,25 +301,34 @@ __device__ __forceinline__ uint32_t smem_ptr_u32(const void *ptr) {"""
     consumer_commit_anchor = """        tcgen05_commit(&mma_done[pipe][stage]);
       }
 """
+    if wait_order == "a-first":
+        wait_store = """        trace_store(trace_records, trace_core,
+                    trace_slot(kt, event_base + 0),
+                    wait_a_start, wait_a_end);
+        trace_store(trace_records, trace_core,
+                    trace_slot(kt, event_base + 1),
+                    wait_a_end, wait_b_end);"""
+    else:
+        wait_store = """        trace_store(trace_records, trace_core,
+                    trace_slot(kt, event_base + 0),
+                    wait_a_start, wait_a_end);
+        trace_store(trace_records, trace_core,
+                    trace_slot(kt, event_base + 1),
+                    wait_b_start, wait_b_end);"""
     consumer_commit_new = """        const unsigned long long mma_end =
             trace_core ? trace_clock64() : 0;
         tcgen05_commit(&mma_done[pipe][stage]);
         const unsigned long long commit_end =
             trace_core ? trace_clock64() : 0;
-        trace_store(trace_records, trace_core,
-                    trace_slot(kt, event_base + 0),
-                    wait_a_start, wait_a_end);
-        trace_store(trace_records, trace_core,
-                    trace_slot(kt, event_base + 1),
-                    wait_a_end, wait_b_end);
+__WAIT_STORE__
         trace_store(trace_records, trace_core,
                     trace_slot(kt, event_base + 2),
-                    wait_b_end, mma_end);
+                    __MMA_START__, mma_end);
         trace_store(trace_records, trace_core,
                     trace_slot(kt, event_base + 3),
                     mma_end, commit_end);
       }
-"""
+""".replace("__WAIT_STORE__", wait_store).replace("__MMA_START__", mma_start_name)
     text = replace_once(
         text, consumer_commit_anchor, consumer_commit_new, "consumer commit trace"
     )
@@ -429,7 +459,8 @@ uint16_t float_to_bf16_bits_host(float value) {"""
     text = replace_once(
         text,
         banner_anchor,
-        '"trace=clock64_nsplit c_store=tma_fp32_sw128 l2_promotion=none "',
+        f'"trace=clock64_nsplit wait_order={wait_order} '
+        'c_store=tma_fp32_sw128 l2_promotion=none "',
         "trace banner",
     )
     return text
@@ -445,6 +476,9 @@ def main() -> None:
         / "gemm256_bf16_16k.cu",
     )
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--wait-order", choices=("a-first", "b-first"), default="a-first"
+    )
     args = parser.parse_args()
     source_bytes = args.source.read_bytes()
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
@@ -453,7 +487,7 @@ def main() -> None:
             "refusing unaudited source: "
             f"expected {EXPECTED_SOURCE_SHA256}, got {source_sha256}"
         )
-    generated = generate(source_bytes.decode())
+    generated = generate(source_bytes.decode(), args.wait_order)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(generated)
     print(
